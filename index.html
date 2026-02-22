@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko" translate="no">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Mr. O</title>
+
+    <!-- ✅ PWA manifest & theme-color 추가 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+
+    <!-- ✅ 크롬 번역 팝업 차단 -->
+    <meta name="google" content="notranslate" />
+  </head>
+  <body class="bg-white text-black">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- ✅ 초기 언어/부트 스크립트 -->
+    <script type="module">
+      // 1) 크롬 자동번역 억제 & html lang 지정
+      (function(){
+        const cand = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+        document.documentElement.setAttribute('lang', (cand||'en').toLowerCase());
+        document.documentElement.setAttribute('translate','no');
+        window.__PREF_LANG__ = cand; // socket.js에서 사용
+      })();
+
+      // 2) 소켓 부트 (role/room 자동 등록)
+      import('/src/socket.js').then(mod => {
+        mod.bootRoomAndRegister();
+      });
+    </script>
+  </body>
+</html>
+

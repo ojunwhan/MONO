@@ -1,0 +1,14 @@
+# 서버
+
+
+pwsh ./scan_all.ps1 -Out ".\mro_c2c_audio_snapshot.json"
+
+
+npm run build
+$env:PORT="3174"; node server.js
+cloudflared tunnel --config C:\Users\USER\.cloudflared\config.yml run 7590e315-f780-491a-85d2-668f9939fed5
+
+
+
+
+

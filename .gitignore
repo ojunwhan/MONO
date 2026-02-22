@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+*.log
+.tmp-*
+uploads/
+tmp/
+monitor_logs/
+state/
+server/fcm-service-key.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+

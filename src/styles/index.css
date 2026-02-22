@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont,
+              "Segoe UI", Roboto, "Noto Sans", "Noto Sans CJK KR",
+              "Noto Sans JP", "Noto Sans Arabic", "Noto Sans Devanagari",
+              "Noto Sans Thai", "Noto Sans Hebrew", Arial, sans-serif;
+  font-size: 14px;
+  color: #111111;
+  background: #F5F5F5;
+}
+
+:root {
+  --mono-bg: #f3f4f6;
+  --mono-card: #ffffff;
+  --mono-ink: #111111;
+  --mono-sub: #5b6470;
+  --mono-line: #d1d5db;
+  --mono-primary: #111111;
+  --mono-danger: #ef4444;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.mono-shell {
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+}
+
+.mono-card {
+  background: var(--mono-card);
+  border: 1.5px solid var(--mono-line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.mono-input {
+  border: 1.5px solid #c7ccd3;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.mono-input:focus {
+  border-color: #111;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+}
+
+.mono-btn {
+  border-radius: 10px;
+  min-height: 44px;
+}
+
+.mono-chip {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.mono-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.mono-scroll::-webkit-scrollbar-thumb {
+  background: #c9ced6;
+  border-radius: 999px;
+}
+.mono-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 드롭다운 글자 안 보이는 이슈 고정 */
+select,
+select option {
+  color: #111 !important;     /* 글자색 강제 */
+  background: #fff !important; /* 옵션 배경 흰색 */
+}
+
+/* 브라우저 기본 드롭다운으로 표시(커스텀 스타일 꼬임 방지) */
+select {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  -moz-appearance: menulist;
+}
+textarea { caret-color:#111; }
+/* 마이크 라이브 받아쓰기(고스트 텍스트) 가독성 */
+.input-ghost {
+  position: absolute; inset: 6px 8px auto 12px;
+  color: #9ca3af; pointer-events: none;
+  white-space: pre-wrap; overflow: hidden;
+}
+
+@keyframes micPulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 14px rgba(255, 59, 48, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+}
+
+.mic-pulse {
+  animation: micPulse 1.5s infinite;
+}
+
+img.flag {
+  width: 24px;
+  height: 17px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}

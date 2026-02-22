@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Mr. O</title>
+    <script>
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // PWA 설치 기본 이벤트를 막습니다.
+        e.preventDefault();
+        // 나중에 사용하기 위해 이벤트를 저장합니다.
+        const deferredPrompt = e;
+        
+        // '홈 화면에 추가' 버튼을 동적으로 생성합니다.
+        const btn = document.createElement('button');
+        btn.innerText = '홈 화면에 추가';
+        btn.style.position = 'fixed';
+        btn.style.bottom = '30px';
+        btn.style.left = '50%';
+        btn.style.transform = 'translateX(-50%)';
+        btn.style.background = '#2D5BFF';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '12px';
+        btn.style.padding = '12px 24px';
+        btn.style.fontSize = '16px';
+        btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        btn.style.zIndex = '9999';
+        btn.style.cursor = 'pointer';
+        document.body.appendChild(btn);
+
+        // 버튼 클릭 시 설치 프롬프트를 띄웁니다.
+        btn.addEventListener('click', () => {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choice) => {
+            // 사용자가 '추가'를 선택하면 버튼을 제거합니다.
+            if (choice.outcome === 'accepted') {
+              btn.remove();
+            }
+          });
+        });
+      });
+    </script>
+  </head>
+  <body class="bg-white text-black">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
