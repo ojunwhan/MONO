@@ -18,6 +18,7 @@ import {
 } from "../audio/browserTts";
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
+import { loadSessionMessages, saveSessionMessages } from "../utils/ChatStorage";
 
 // ─── Dedup utilities ───
 function dedupeRepeatTokens(s) {
@@ -180,6 +181,7 @@ export default function ChatScreen() {
   const seenIdsRef = useRef(new Set());
   const wakeLockRef = useRef(null);
   const joinedRef = useRef(false);
+  const historyLoadedRef = useRef(false);
 
   // Stable refs
   const participantIdRef = useRef(participantId);
@@ -195,6 +197,7 @@ export default function ChatScreen() {
   const myShortRef = useRef(myShort);
   const partnerShortRef = useRef(partnerShort);
   // myCallSign stored internally for server communication, not displayed
+  const lastPingAtRef = useRef(0);
 
   useEffect(() => {
     roomTypeRef.current = roomType;
@@ -219,6 +222,35 @@ export default function ChatScreen() {
   useEffect(() => {
     partnerShortRef.current = partnerShort;
   }, [partnerShort]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("mono_session", JSON.stringify({
+        roomId: roomIdRef.current || "",
+        userId: participantIdRef.current || "",
+        language: fromLangRef.current || "",
+        isHost: roleHintRef.current === "owner",
+        isInChat: true,
+      }));
+    } catch {}
+  }, [roomId, participantId, fromLang, roleHint]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    const prevMessages = loadSessionMessages(roomId);
+    if (prevMessages.length > 0) {
+      setMessages(prevMessages);
+      prevMessages.forEach((m) => {
+        if (m?.id) seenIdsRef.current.add(m.id);
+      });
+    }
+    historyLoadedRef.current = true;
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || !historyLoadedRef.current) return;
+    saveSessionMessages(roomId, messages);
+  }, [roomId, messages]);
 
   useEffect(() => {
     if (!peerInfo) return;
@@ -426,6 +458,7 @@ export default function ChatScreen() {
         text: "참가자 입장",
         system: true,
       }]);
+      console.log(`[HOST] Socket state: ${socket.connected}, Room: ${roomIdRef.current}, Peer: connected`);
     };
 
     const onNotify = (p) => {
@@ -589,6 +622,12 @@ export default function ChatScreen() {
       if (now - lastJoinTsRef.current < 3000) return;
       lastJoinTsRef.current = now;
       console.log("[MONO] rejoin →", rid, reason);
+      socket.emit("rejoin-room", {
+        roomId: rid,
+        userId: pid,
+        language: fromLangRef.current,
+        isHost: roleHintRef.current === "owner",
+      });
       socket.emit("join", {
         roomId: rid,
         fromLang: fromLangRef.current,
@@ -638,15 +677,29 @@ export default function ChatScreen() {
     };
     const onDisconnect = () => scheduleReconnect();
     const onConnectError = () => scheduleReconnect();
+    const onReconnectAttempt = (attemptNumber) => {
+      console.log("[MONO] 🔄 Reconnecting... attempt", attemptNumber);
+    };
+    const onReconnect = (attemptNumber) => {
+      console.log("[MONO] ✅ Reconnected after", attemptNumber, "attempts");
+    };
     const onOnline = () => {
       reconnectAttemptsRef.current = 0;
       if (!socket.connected) socket.connect();
+      else if (roomIdRef.current && participantIdRef.current) {
+        socket.emit("check-room", {
+          roomId: roomIdRef.current,
+          userId: participantIdRef.current,
+        });
+      }
     };
     const onOffline = () => setReconnectState("disconnected");
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
+    socket.on("reconnect_attempt", onReconnectAttempt);
+    socket.on("reconnect", onReconnect);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
 
@@ -654,6 +707,8 @@ export default function ChatScreen() {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
+      socket.off("reconnect_attempt", onReconnectAttempt);
+      socket.off("reconnect", onReconnect);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       clearRetryTimer();
@@ -679,9 +734,52 @@ export default function ChatScreen() {
         localName: localNameRef.current || "",
         roleHint: roleHintRef.current,
       });
+      socket.emit("check-room", { roomId: rid, userId: pid });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  useEffect(() => {
+    const conn = navigator.connection;
+    if (!conn || !conn.addEventListener) return;
+    const onChange = () => {
+      if (socket.connected && roomIdRef.current && participantIdRef.current) {
+        socket.emit("check-room", {
+          roomId: roomIdRef.current,
+          userId: participantIdRef.current,
+        });
+      }
+    };
+    conn.addEventListener("change", onChange);
+    return () => conn.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (!socket.connected) return;
+      lastPingAtRef.current = Date.now();
+      socket.emit("mono-ping", { timestamp: lastPingAtRef.current });
+    }, 30000);
+    const onPong = (data) => {
+      const ts = Number(data?.timestamp || 0);
+      if (!ts) return;
+      const latency = Date.now() - ts;
+      console.log(`[MONO] Latency: ${latency}ms`);
+      if (latency > 3000) console.warn("[MONO] ⚠️ High latency detected:", latency, "ms");
+    };
+    const onRoomStatus = (payload) => {
+      if (payload?.status === "room-gone") {
+        setReconnectState("disconnected");
+      }
+    };
+    socket.on("mono-pong", onPong);
+    socket.on("room-status", onRoomStatus);
+    return () => {
+      clearInterval(iv);
+      socket.off("mono-pong", onPong);
+      socket.off("room-status", onRoomStatus);
+    };
   }, []);
 
   const handleLeave = () => {

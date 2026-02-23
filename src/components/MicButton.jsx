@@ -53,12 +53,19 @@ export default function MicButton({
         autoGainControl: true,
       },
     });
+    try {
+      const track = stream.getAudioTracks?.()[0];
+      console.log("[MONO] ✅ Microphone access granted");
+      console.log("[MONO] Audio tracks:", stream.getAudioTracks?.().length || 0);
+      console.log("[MONO] Track state:", track?.readyState || "unknown");
+    } catch {}
 
     processorRef.current = new AudioProcessor({
       onAudio: (pcm) => {
         if (!roomId || !participantId) return;
         hasAudioRef.current = true;
         const audio = int16ToBase64(pcm);
+        console.log("[MONO] Audio data sent, size:", audio?.length || 0);
         socket.emit("stt:audio", { roomId, participantId, lang, audio, sampleRateHz: 16000 });
       },
     });
@@ -84,11 +91,11 @@ export default function MicButton({
       hasAudioRef.current = false;
       onListeningChange?.(true);
       window.dispatchEvent(new Event("mro:mic:start"));
-      socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000 });
       try {
         await startCapture();
+        socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000 });
       } catch (e) {
-        console.warn("Audio capture error:", e?.message);
+        console.error("[MONO] ❌ Microphone access denied:", e?.name, e?.message);
         setListening(false);
         onListeningChange?.(false);
         window.dispatchEvent(new Event("mro:mic:stop"));

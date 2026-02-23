@@ -21,6 +21,15 @@ class VADProcessor extends AudioWorkletProcessor {
     const rms = Math.sqrt(sum / input.length);
     const speaking = rms >= this.threshold;
 
+    // Reliability-first: always stream PCM while recording so quiet voices
+    // or threshold misses do not result in zero STT payload.
+    const pcm = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    this.port.postMessage({ type: "audio", pcm }, [pcm.buffer]);
+
     if (speaking) {
       if (!this.inSpeech) {
         this.inSpeech = true;
@@ -30,12 +39,6 @@ class VADProcessor extends AudioWorkletProcessor {
       }
 
       this.speechSamples += input.length;
-      const pcm = new Int16Array(input.length);
-      for (let i = 0; i < input.length; i++) {
-        const s = Math.max(-1, Math.min(1, input[i]));
-        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-      }
-      this.port.postMessage({ type: "audio", pcm }, [pcm.buffer]);
     } else if (this.inSpeech) {
       this.silenceSamples += input.length;
       const minSpeechSamples = Math.floor((this.minSpeechMs / 1000) * this.sampleRate);

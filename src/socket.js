@@ -9,14 +9,20 @@ const WS_ORIGIN =
 const WS_PATH = "/socket.io";
 
 const socket = io(WS_ORIGIN, {
-  path: WS_PATH,
+  path: `${WS_PATH}/`,
   transports: ["websocket"],
+  upgrade: false,
   withCredentials: false,
   autoConnect: true,
+  forceNew: false,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
+  randomizationFactor: 0.5,
+  timeout: 20000,
+  pingInterval: 25000,
+  pingTimeout: 10000,
 });
 
 export default socket;

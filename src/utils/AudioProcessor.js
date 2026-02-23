@@ -29,6 +29,10 @@ export default class AudioProcessor {
   async start(stream) {
     if (this.audioContext) return;
     this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
+    // Mobile browsers may start AudioContext in suspended state until explicit resume.
+    if (this.audioContext.state === "suspended") {
+      try { await this.audioContext.resume(); } catch {}
+    }
     this.mediaStream = stream;
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
 
@@ -59,6 +63,9 @@ export default class AudioProcessor {
     this.silentGain = this.audioContext.createGain();
     this.silentGain.gain.value = 0;
     this.sourceNode.connect(this.processor).connect(this.silentGain).connect(this.audioContext.destination);
+    if (this.audioContext.state === "suspended") {
+      try { await this.audioContext.resume(); } catch {}
+    }
   }
 
   stop() {

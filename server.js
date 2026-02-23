@@ -460,6 +460,12 @@ const io = new Server(server, {
   },
   allowEIO3: true,
   transports: ["websocket"],
+  allowUpgrades: false,
+  pingInterval: 25000,
+  pingTimeout: 10000,
+  connectTimeout: 20000,
+  maxHttpBufferSize: 5e6,
+  path: "/socket.io/",
 });
 
 // ✅ 프록시 뒤(Cloudflared)에서 프로토콜/헤더 신뢰
@@ -1209,6 +1215,120 @@ io.on('connection', (socket) => {
     console.log(`👥 ${socket.id} joined room ${roomId}`);
   });
 
+  // Rejoin helper for unstable network transitions (Cloudflare tunnel / mobile handover)
+  socket.on("rejoin-room", ({ roomId, userId, language, isHost } = {}) => {
+    if (!roomId || !userId) {
+      socket.emit("room-status", { status: "room-gone", roomId: roomId || "" });
+      return;
+    }
+    const meta = ROOMS.get(roomId);
+    if (!meta) {
+      socket.emit("room-status", { status: "room-gone", roomId });
+      return;
+    }
+
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.data.participantId = userId;
+
+    const normalizedLang = mapLang(language || "en");
+    const existing = meta.participants?.[userId];
+    if (existing) {
+      existing.socketId = socket.id;
+      if (normalizedLang) existing.lang = normalizedLang;
+    } else if (meta.roomType === "oneToOne") {
+      meta.participants[userId] = {
+        nativeName: `참여자${Object.keys(meta.participants || {}).length + 1}`,
+        lang: normalizedLang || "en",
+        socketId: socket.id,
+        adaptedNames: {},
+      };
+    } else {
+      const role = isHost ? "Manager" : "Tech";
+      const callSign = assignCallSign(meta, role);
+      meta.participants[userId] = {
+        callSign,
+        localName: "",
+        role,
+        lang: normalizedLang || "en",
+        socketId: socket.id,
+        phoneticVariants: generateCallSignPhonetics(callSign),
+      };
+    }
+    if (isHost) meta.ownerPid = userId;
+    ROOMS.set(roomId, meta);
+    emitParticipants(roomId);
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+    console.log(`[SERVER] rejoin-room ${roomId} user=${userId} socket=${socket.id} members=${room?.size || 0}`);
+    socket.emit("room-status", { status: "rejoined", roomId });
+
+    // Re-sync peer info for 1:1 so host/guest can recover from missed event windows.
+    if (meta.roomType === "oneToOne") {
+      const peerPid = Object.keys(meta.participants || {}).find((pid) => pid !== userId);
+      if (peerPid && meta.participants[peerPid]) {
+        const peer = meta.participants[peerPid];
+        socket.emit("partner-joined", {
+          roomId,
+          peerLang: peer.lang || "en",
+          peerFlagUrl: `https://flagcdn.com/w40/${String((() => {
+            const map = {
+              ko: "kr", vi: "vn", zh: "cn", en: "us", ja: "jp", th: "th",
+              km: "kh", my: "mm", id: "id", mn: "mn", uz: "uz", ne: "np",
+            };
+            const k = String(peer.lang || "en").toLowerCase().split("-")[0];
+            return map[k] || "un";
+          })())}.png`,
+          peerLabel: String((() => {
+            const map = {
+              ko: "KOR", vi: "VNM", zh: "CHN", en: "ENG", ja: "JPN", th: "THA",
+              km: "KHM", my: "MMR", id: "IDN", mn: "MNG", uz: "UZB", ne: "NPL",
+            };
+            const k = String(peer.lang || "en").toLowerCase().split("-")[0];
+            return map[k] || k.toUpperCase();
+          })()),
+        });
+      }
+    }
+  });
+
+  socket.on("check-room", ({ roomId } = {}) => {
+    if (!roomId) return;
+    const meta = ROOMS.get(roomId);
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!meta || !room) {
+      socket.emit("room-status", { status: "room-gone", roomId });
+      return;
+    }
+    if (room.has(socket.id)) {
+      socket.emit("room-status", { status: "ok", roomId });
+      return;
+    }
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.emit("room-status", { status: "rejoined", roomId });
+  });
+
+  socket.on("who-is-in-room", ({ roomId, userId } = {}) => {
+    if (!roomId) return;
+    const meta = ROOMS.get(roomId);
+    if (!meta || !meta.participants) {
+      socket.emit("room-members", { roomId, members: [] });
+      return;
+    }
+    const members = Object.entries(meta.participants)
+      .filter(([pid, info]) => !!info && pid !== (userId || socket.data?.participantId))
+      .map(([pid, info]) => ({
+        partnerId: pid,
+        language: info.lang || "en",
+      }));
+    socket.emit("room-members", { roomId, members });
+  });
+
+  socket.on("mono-ping", (data = {}) => {
+    socket.emit("mono-pong", data);
+  });
+
   // --- join 핸들러 (call sign system, idempotent) ---
   socket.on("join", ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint }) => {
     if (!roomId || !participantId) return;
@@ -1354,6 +1474,15 @@ io.on('connection', (socket) => {
       ROOMS.set(roomId, meta);
       emitRoutes(roomId);
       emitParticipants(roomId);
+      try {
+        const room = io.sockets.adapter.rooms.get(roomId);
+        const memberCount = room?.size || 0;
+        const hostSocketId = meta.ownerPid && meta.participants?.[meta.ownerPid]?.socketId
+          ? meta.participants[meta.ownerPid].socketId
+          : null;
+        const hostInRoom = hostSocketId ? !!room?.has(hostSocketId) : false;
+        console.log(`[SERVER] Room ${roomId} — members: ${memberCount}, host socket in room: ${hostInRoom}`);
+      } catch {}
 
       socket.emit("room-context", {
         siteContext: meta.siteContext, locked: meta.locked, roomType: meta.roomType,
@@ -1361,6 +1490,7 @@ io.on('connection', (socket) => {
 
       // guest:joined
       if (serverRole === "guest") {
+        console.log(`[GUEST] Joined room: ${roomId}, Socket: ${socket.id}`);
         socket.to(roomId).emit("guest:joined", {
           roomId, socketId: socket.id, lang: fromLang || "auto",
         });
@@ -1369,6 +1499,11 @@ io.on('connection', (socket) => {
           peerLang: pLang || fromLang || "en",
           peerFlagUrl: peerFlagUrlFromLang(pLang || fromLang || "en"),
           peerLabel: peerLabelFromLang(pLang || fromLang || "en"),
+        });
+        const room = io.sockets.adapter.rooms.get(roomId);
+        socket.to(roomId).emit("sync-room-state", {
+          roomId,
+          memberCount: room?.size || 0,
         });
       }
 
@@ -1467,6 +1602,14 @@ io.on('connection', (socket) => {
       socket.emit("recent-messages", missed);
       console.log(`📩 Restored ${missed.length} msgs for ${participantId} in ${roomId}`);
     }
+  });
+
+  socket.on("heartbeat", ({ roomId, userId } = {}) => {
+    socket.emit("heartbeat-ack", {
+      roomId: roomId || socket.roomId || "",
+      userId: userId || socket.data?.participantId || "",
+      timestamp: Date.now(),
+    });
   });
 
   socket.on('register', ({ role, lang }) => {
@@ -1575,6 +1718,12 @@ io.on('connection', (socket) => {
 
     const durationSec = pcm.length / (2 * (session.sampleRateHz || 16000));
     console.log(`[stt:segment] pid=${participantId} duration=${durationSec.toFixed(2)}s bytes=${pcm.length}`);
+    socket.emit("stt:segment-received", {
+      roomId,
+      participantId,
+      bytes: pcm.length,
+      durationSec,
+    });
     if (durationSec < 0.25) { console.log("[stt:segment] ⏭ too short"); return; }
 
     let text = "";
