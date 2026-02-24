@@ -1,5 +1,6 @@
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
+const { upsertUserFromOAuth } = require('../db/users');
 
 module.exports = function attachGoogleAuth(app) {
   // JWT_SECRET 환경 변수 존재 여부 확인
@@ -15,14 +16,31 @@ module.exports = function attachGoogleAuth(app) {
     return; // JWT_SECRET이 없으면 더 이상 라우트 설정을 진행하지 않습니다.
   }
 
-  const client = new OAuth2Client({
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri: process.env.GOOGLE_CALLBACK_URL,
-  });
+  function isLocalRequest(req) {
+    const host = String(req.headers?.host || '').toLowerCase();
+    return host.includes('localhost') || host.startsWith('127.0.0.1');
+  }
+
+  function getCallbackUrl(req) {
+    const localCb = (process.env.GOOGLE_CALLBACK_URL_LOCAL || '').trim();
+    const defaultCb = (process.env.GOOGLE_CALLBACK_URL || '').trim();
+    if (isLocalRequest(req)) {
+      return localCb || 'http://localhost:3174/auth/google/callback';
+    }
+    return defaultCb || 'https://lingora.chat/auth/google/callback';
+  }
+
+  function createOAuthClient(req) {
+    return new OAuth2Client({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: getCallbackUrl(req),
+    });
+  }
 
   // 1) 구글로 리다이렉트
   app.get('/auth/google', (req, res) => {
+    const client = createOAuthClient(req);
     const next = req.query.next || '/';
     const url = client.generateAuthUrl({
       access_type: 'offline',
@@ -36,6 +54,7 @@ module.exports = function attachGoogleAuth(app) {
   // 2) 콜백 → JWT 발급 → next로 이동
   app.get('/auth/google/callback', async (req, res) => {
     try {
+      const client = createOAuthClient(req);
       const { code, state } = req.query;
       const { tokens } = await client.getToken(code);
       const idToken = tokens.id_token;
@@ -56,6 +75,19 @@ module.exports = function attachGoogleAuth(app) {
         provider: 'google',
       };
 
+      try {
+        await upsertUserFromOAuth({
+          id: profile.id,
+          email: profile.email,
+          nickname: profile.displayName,
+          avatarUrl: profile.photoURL,
+          nativeLanguage: 'en',
+        });
+      } catch (dbErr) {
+        console.error('google_user_sync_error', dbErr?.message || dbErr);
+        return res.status(500).send('GOOGLE_USER_SYNC_FAILED');
+      }
+
       // JWT 발급 (30일)
       const appJwt = jwt.sign(
         { sub: profile.id, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
@@ -64,9 +96,11 @@ module.exports = function attachGoogleAuth(app) {
       );
 
       // httpOnly 쿠키 + 로컬에서도 동작하도록 sameSite Lax
+      const secureCookie =
+        req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
       res.cookie('token', appJwt, {
         httpOnly: true,
-        secure: true,          // 프로덕션(https) 기준
+        secure: secureCookie,
         sameSite: 'lax',
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });

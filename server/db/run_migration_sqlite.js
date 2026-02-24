@@ -1,0 +1,56 @@
+const fs = require("fs");
+const path = require("path");
+const { all, exec, closeSqlite, DB_FILE_PATH } = require("./sqlite");
+
+async function main() {
+  const migrationPath = path.join(
+    __dirname,
+    "migrations",
+    "001_phase1_core_sqlite.sql"
+  );
+
+  if (!fs.existsSync(migrationPath)) {
+    throw new Error(`Migration file not found: ${migrationPath}`);
+  }
+
+  // Backfill before running migration SQL:
+  // existing DB may have users table without phone_number.
+  const userTable = await all(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+  );
+  if (userTable.length > 0) {
+    const columns = await all("PRAGMA table_info(users)");
+    const hasPhone = columns.some((c) => c?.name === "phone_number");
+    if (!hasPhone) {
+      await exec("ALTER TABLE users ADD COLUMN phone_number TEXT;");
+    }
+  }
+  const roomMembersTable = await all(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'"
+  );
+  if (roomMembersTable.length > 0) {
+    const columns = await all("PRAGMA table_info(room_members)");
+    const hasLastRead = columns.some((c) => c?.name === "last_read_message_id");
+    if (!hasLastRead) {
+      await exec("ALTER TABLE room_members ADD COLUMN last_read_message_id TEXT;");
+    }
+  }
+
+  const sql = fs.readFileSync(migrationPath, "utf8");
+  await exec(sql);
+  await exec("CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users(phone_number);");
+  console.log(`[db] SQLite migration applied: ${migrationPath}`);
+  console.log(`[db] SQLite file: ${DB_FILE_PATH}`);
+}
+
+main()
+  .then(async () => {
+    await closeSqlite();
+    process.exit(0);
+  })
+  .catch(async (error) => {
+    console.error("[db] SQLite migration failed:", error.message);
+    await closeSqlite();
+    process.exit(1);
+  });
+

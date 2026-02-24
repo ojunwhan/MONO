@@ -1,114 +1,118 @@
-# MONO 현재 상태 인계 (Claude 전달용, 최신)
+# MONO 인계 문서 (최신 덮어쓰기)
 
-## 1) 운영 컨텍스트
-- 전략: **PWA 유지**
-- 운영 방식: 사용자 PC 로컬 서버 + Cloudflare Tunnel
-  - 서버: `node server.js` (3174)
-  - 터널: `cloudflared tunnel --config C:\Users\USER\.cloudflared\config.yml run 7590e315-f780-491a-85d2-668f9939fed5`
-- 도메인: `https://lingora.chat`
+## 1. 프로젝트 현재 방향
+- 제품 방향: **PWA 유지**, 현장 실사용 안정성 우선
+- 원칙: UI/CSS 레이아웃 변경 최소, 동작 신뢰성/복구성/정합성 중심
+- 운영 URL: `https://lingora.chat`
 
-## 2) 이번 라운드 핵심 수정
-요청 원칙: UI/CSS/레이아웃 비변경, 동작 안정성만 수정.
+## 2. 최근 완료 범위 (Step 1-4 ~ Step 2-6)
 
-### A. 연결 안정성 (Cloudflare/WebSocket)
-- `src/socket.js`
-  - `transports: ["websocket"]`
-  - `upgrade: false`
-  - `path: "/socket.io/"`
-  - `timeout: 20000`
-  - `pingInterval: 25000`, `pingTimeout: 10000`
-  - `reconnectionAttempts: Infinity`
-  - `randomizationFactor: 0.5`
-  - `forceNew: false`
+### 2.1 로컬 저장소/메타데이터 강화
+- `src/db/index.js`
+  - Dexie v2 마이그레이션 추가
+  - `messages` 스토어 신설
+  - `rooms` 메타 확장(`updatedAt`, `pinned`)
+  - 메시지 API 추가:
+    - `saveMessage()`
+    - `getMessages()`
+    - `deleteMessages()`
+    - `getStorageUsage()`
+  - outbox에 `participantId` 저장하도록 수정 (중요 버그 수정)
 
-- `server.js` Socket.IO 옵션
-  - `transports: ["websocket"]`
-  - `allowUpgrades: false`
-  - `path: "/socket.io/"`
-  - `pingInterval: 25000`, `pingTimeout: 10000`
-  - `connectTimeout: 20000`
-  - `maxHttpBufferSize: 5e6`
-
-### B. 방 복구/상태 동기화 이벤트
-- `server.js` 추가
-  - `rejoin-room`
-  - `check-room`
-  - `mono-ping` / `mono-pong`
-  - `heartbeat` / `heartbeat-ack`
-  - `who-is-in-room` / `room-members`
-
-- `src/components/QRCodeBox.jsx` 반영
-  - `partner-joined`, `sync-room-state`, `room-status`, `room-members` 수신
-  - 백그라운드 복귀 시 `who-is-in-room` 발신
-  - 연결/재연결 시 `rejoin-room` 보강
-  - `mono_session` sessionStorage 저장
-
-- `src/components/ChatScreen.jsx` 반영
-  - 재연결 시 `rejoin-room` 발신
-  - visibility/online/network 변경 시 `check-room`
-  - latency 측정(`mono-ping/pong`) 로그
-  - `room-status` 수신 처리
-  - `mono_session` 저장
-
-### C. 마이크/STT 안정화
-- `src/utils/AudioProcessor.js`
-  - `AudioContext` 시작 시 `resume()` 보강 (suspended 대응)
-
-- `src/components/MicButton.jsx`
-  - 마이크 권한/트랙 상태 로그 추가
-  - 오디오 전송 크기 로그 추가
-  - `stt:open` 타이밍 정리
-
-- `src/audio/vad-processor.js`
-  - 신뢰성 우선으로 PCM 지속 전송 보강 (조용한 음성 누락 완화)
-
-- `server.js`
-  - `stt:segment-received` ACK 이벤트 추가(진단용)
-
-### D. 링크 복사 UX
-- `src/components/QRCodeBox.jsx`
-  - `navigator.clipboard.writeText()` 우선
-  - 실패 시 `execCommand("copy")` fallback
-  - 성공 시 `✅ 복사됨!` 2초 피드백
-  - `navigator.share` 사용 코드 없음(검색 확인)
-
-## 3) 검증 결과 (최신)
-- `npm run build` 성공
-- `node --check server.js` 성공
-- 서버 재기동/터널 재기동 확인
-- 자동 E2E 6시나리오 결과: **전부 PASS**
-  1. 기본 흐름 PASS
-  2. 링크 복사 공유시트 미노출 PASS
-  3. 백그라운드 복귀 감지 PASS
-  4. 텍스트 입력/번역 PASS
-  5. 마이크 입력 파이프라인 PASS (`stt:segment-received` bytes 확인)
-  6. 재연결/방 복구 PASS
-
-## 4) 현재 변경 파일
-- `server.js`
-- `src/socket.js`
-- `src/components/QRCodeBox.jsx`
+### 2.2 ChatScreen 저장 전환 및 상태 동기화
 - `src/components/ChatScreen.jsx`
-- `src/components/MicButton.jsx`
-- `src/utils/AudioProcessor.js`
-- `src/audio/vad-processor.js`
-- `src/utils/ChatStorage.js`
-- `handoff_for_claude.md`
-- (로컬 설정) `C:\Users\USER\.cloudflared\config.yml`
+  - 메시지 저장: localStorage 방식 제거, IndexedDB 사용으로 전환
+  - 메시지 상태 이벤트 반영:
+    - `message-status` 수신 시 `accepted/delivered/read` 처리
+    - 상태 반영 시 `queued:false`로 정리
+  - 읽음 전송 안정화:
+    - 메시지 업데이트 시 읽음 전송
+    - `visibilitychange -> visible`에서도 읽음 재시도
+  - room 필터 강화:
+    - 현재 방이 아닌 `payload.roomId` 이벤트 무시
+  - timestamp 정합성:
+    - `payload.timestamp || payload.at || Date.now()` 우선 사용
 
-## 5) 주의 사항
-- 터널 설정 파일(`C:\Users\USER\.cloudflared\config.yml`)은 레포 외부 파일이라 Git 커밋/푸시에 포함되지 않음.
+### 2.3 서버 API/스키마 정합성 (Step 1-5)
+- `server/routes/auth_api.js`
+  - 호환 엔드포인트 추가:
+    - `/api/users/me` (`GET`, `PUT`)
+    - `/api/friends/*` (search/list/request/accept/reject/delete)
+    - `/api/rooms` (`POST`, `GET`)
+    - `/api/rooms/:id/members`
+    - `/api/rooms/:id/read`
+  - 기존 `/api/contacts/*`는 유지 (하위 호환)
 
-## 6) GitHub에 올라간 자료 (확정)
-- 리포: `https://github.com/ojunwhan/MONO`
-- 브랜치: `main`
-- 포함된 주요 루트 자료:
-  - 앱/서버 코드: `src/`, `server/`, `public/`, `server.js`
-  - 빌드/실행 설정: `package.json`, `package-lock.json`, `vite.config.js`, `tailwind.config.js`, `postcss.config.cjs`
-  - 인계/문서: `handoff_for_claude.md`, `aws_lightsail_migration_guide.md`
-  - 참고 자료: `mono_investor_proof.csv`, `mro_c2c_audio_snapshot.json`, `monitor_simple.ps1`, `scan_all.ps1`
-- Git 미포함(로컬 전용) 대표 항목:
-  - `.env`
-  - `node_modules/`, `dist/`
-  - `state/`, `tmp/`, `uploads/`, `monitor_logs/`
-  - `server/fcm-service-key.json`
+- DB 마이그레이션
+  - `server/db/migrations/001_phase1_core_sqlite.sql`
+  - `server/db/migrations/001_phase1_core_postgres.sql`
+  - `room_members.last_read_message_id` 추가
+  - `server/db/run_migration_sqlite.js`에서 기존 DB 백필 안전 처리
+
+### 2.4 전송 신뢰성 (ACK/재시도/중복 방지)
+- `server.js`
+  - `send-message`에 ACK 콜백 지원
+  - 실패 ACK 상세 반환:
+    - `rate_limited`, `invalid_payload`, `unauthorized`, `text_too_long` 등
+  - 중복 메시지 ID면 `ok:true, duplicate:true` 반환
+  - 정상 수락 시 `ok:true, accepted:true` 즉시 반환
+
+- `src/hooks/useOutbox.js`
+  - ACK 기반 전송으로 변경
+  - ACK 실패/타임아웃 시 queue 적재
+  - flush 시 ACK 성공 메시지만 dequeue
+  - 순서 보장 위해 실패 시 flush 중단
+
+### 2.5 이벤트 스키마 일관화
+- `server.js`
+  - `receive-message`, `recent-messages` 스키마 통일
+  - 공통 필드 보장:
+    - `id`, `roomId`, `roomType`, `senderPid`
+    - `originalText`, `translatedText`, `text`
+    - `timestamp`
+  - `participants` 이벤트에 `online` 필드 추가
+  - `message-status`, `message-read` 이벤트 추가
+
+## 3. 검증 결과 (최근)
+- `npm run build`: 성공
+- lints: 신규 오류 없음
+- 서버 health: `GET /healthz` 정상
+- 자동 소켓 검증 PASS:
+  1) delivered/read 상태 전파
+  2) duplicate msgId 방지
+  3) unauthorized 전송 거절 ACK
+  4) 6개 회귀 시나리오
+     - participants
+     - delivered/read
+     - duplicate
+     - unauthorized
+     - rejoin
+     - room-members
+  5) payload 스키마 검증
+     - `receive-message`
+     - `recent-messages`
+  6) room filter edge-case 검증 (타 방 메시지 무시)
+
+## 4. 현재 핵심 변경 파일
+- `server.js`
+- `server/routes/auth_api.js`
+- `server/db/migrations/001_phase1_core_sqlite.sql`
+- `server/db/migrations/001_phase1_core_postgres.sql`
+- `server/db/run_migration_sqlite.js`
+- `src/db/index.js`
+- `src/hooks/useOutbox.js`
+- `src/components/ChatScreen.jsx`
+- `src/pages/RoomList.jsx`
+
+## 5. 다음 작업 포인트
+- Step 2-7: 이벤트 계약 문서/핸드오프 문서 최신화 (현재 문서 반영 완료)
+- Step 2-8: 브라우저 수동 QA
+  - 백그라운드 전환 후 읽음 처리
+  - 오프라인 -> 온라인 flush 순서
+  - 최근 대화 목록 시간/미리보기/unread 정합성
+- Step 2-9: 최종 운영 점검 체크리스트 확정
+
+## 6. 주의 사항
+- `.env`/키/비밀값은 문서에 기록하지 않음
+- 기존 서버 보안/소켓 가드/rate-limit 로직은 유지
+- 1:1 인원 제한 정책 유지 (테스트 시 재입장은 동일 participantId 기준으로 검증 필요)

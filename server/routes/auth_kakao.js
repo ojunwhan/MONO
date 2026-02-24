@@ -1,5 +1,6 @@
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const { upsertUserFromOAuth } = require('../db/users');
 
 module.exports = function attachKakaoAuth(app) {
   // JWT_SECRET 환경 변수 존재 여부 확인
@@ -57,8 +58,21 @@ module.exports = function attachKakaoAuth(app) {
         provider: 'kakao',
       };
 
+      try {
+        await upsertUserFromOAuth({
+          id: profile.id,
+          email: '',
+          nickname: profile.displayName,
+          avatarUrl: profile.photoURL,
+          nativeLanguage: 'ko',
+        });
+      } catch (dbErr) {
+        console.error('kakao_user_sync_error', dbErr?.message || dbErr);
+        return res.status(500).send('KAKAO_USER_SYNC_FAILED');
+      }
+
       // JWT (30일)
-      const appJwt = require('jsonwebtoken').sign(
+      const appJwt = jwt.sign(
         { sub: profile.id, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
         process.env.JWT_SECRET,
         { expiresIn: '30d' }

@@ -5,7 +5,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "db:migrate:sqlite": "node server/db/run_migration_sqlite.js"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",
@@ -33,6 +34,7 @@
     "react-router-dom": "^6.30.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
+    "sqlite3": "^5.1.7",
     "uuid": "^9.0.1",
     "web-push": "^3.6.7"
   },

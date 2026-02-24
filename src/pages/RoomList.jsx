@@ -1,29 +1,76 @@
 // src/pages/RoomList.jsx — Recent conversations + new chat
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMyIdentity, getAllRooms, upsertRoom, deleteRoom, clearUnread } from "../db";
+import {
+  getMyIdentity,
+  setMyIdentity,
+  getAllRooms,
+  getRoom,
+  upsertRoom,
+  recordRoomActivity,
+  incrementUnread,
+  deleteRoom,
+  clearUnread,
+} from "../db";
 import socket from "../socket";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import { subscribeToPush } from "../push";
+import { fetchAuthMe } from "../auth/session";
 
 export default function RoomList() {
   const navigate = useNavigate();
   const { isConnected } = useNetworkStatus();
   const [me, setMe] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [friendCandidates, setFriendCandidates] = useState([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const registeredRef = useRef(false);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+
+  const formatListTime = useCallback((ts) => {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    if (sameDay) {
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString();
+  }, []);
 
   // ── Load identity ──
   useEffect(() => {
-    getMyIdentity().then((identity) => {
-      if (!identity?.userId) {
-        navigate("/setup", { replace: true });
+    let cancelled = false;
+    async function loadIdentity() {
+      const identity = await getMyIdentity();
+      if (identity?.userId) {
+        if (!cancelled) setMe(identity);
         return;
       }
-      setMe(identity);
+      // OAuth login can set cookie before local IndexedDB identity exists.
+      // In that case, restore local identity from /api/auth/me.
+      const auth = await fetchAuthMe();
+      if (auth?.authenticated && auth?.user?.id) {
+        const restored = {
+          userId: auth.user.id,
+          canonicalName: auth.user.nickname || "MONO User",
+          lang: auth.user.nativeLanguage || "ko",
+        };
+        await setMyIdentity(restored).catch(() => {});
+        if (!cancelled) setMe(restored);
+        return;
+      }
+      if (!cancelled) navigate("/interpret", { replace: true });
+    }
+    loadIdentity().catch(() => {
+      if (!cancelled) navigate("/interpret", { replace: true });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   // ── Register with server on connect + push subscription ──
@@ -71,11 +118,36 @@ export default function RoomList() {
     };
 
     const onReceiveMessage = async (payload) => {
-      // Increment unread if not in the room
-      if (payload?.roomId) {
-        // We'll handle unread via the ChatScreen; just refresh list
-        loadRooms();
+      const targetRoomId = payload?.roomId;
+      if (!targetRoomId) return;
+      const eventTs = Number(payload?.timestamp || payload?.at || Date.now());
+      const normalizedRoomType =
+        payload?.roomType === "oneToOne" ? "1to1" : (payload?.roomType || "1to1");
+      const preview = String(
+        payload?.translatedText || payload?.originalText || payload?.text || ""
+      )
+        .trim()
+        .slice(0, 120);
+
+      const mine = payload?.senderPid && payload.senderPid === me?.userId;
+      await recordRoomActivity(targetRoomId, {
+        lastMessagePreview: preview,
+        lastMessageAt: eventTs,
+        lastMessageMine: !!mine,
+      });
+      if (!mine) await incrementUnread(targetRoomId);
+
+      const existing = await getRoom(targetRoomId);
+      if (!existing) {
+        await upsertRoom({
+          roomId: targetRoomId,
+          roomType: normalizedRoomType,
+          unreadCount: mine ? 0 : 1,
+          peerAlias: payload?.senderDisplayName || payload?.senderCallSign || "Unknown",
+          peerCanonicalName: payload?.senderDisplayName || payload?.senderCallSign || "Unknown",
+        });
       }
+      loadRooms();
     };
 
     socket.on("room-created", onRoomCreated);
@@ -84,23 +156,30 @@ export default function RoomList() {
       socket.off("room-created", onRoomCreated);
       socket.off("receive-message", onReceiveMessage);
     };
-  }, [loadRooms]);
+  }, [loadRooms, me?.userId]);
 
   // ── Request user list for new chat ──
-  const openNewChat = () => {
-    if (me?.userId) {
-      socket.emit("get-users", { userId: me.userId });
+  const openNewChat = async () => {
+    setLoadingFriends(true);
+    try {
+      const res = await fetch("/api/contacts/friends", {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFriendCandidates(Array.isArray(data?.friends) ? data.friends : []);
+      } else {
+        setFriendCandidates([]);
+      }
+    } catch {
+      setFriendCandidates([]);
+    } finally {
+      setLoadingFriends(false);
     }
     setShowNewChat(true);
   };
-
-  useEffect(() => {
-    const onUserList = (list) => {
-      if (Array.isArray(list)) setUsers(list);
-    };
-    socket.on("user-list", onUserList);
-    return () => socket.off("user-list", onUserList);
-  }, []);
 
   // ── Start 1:1 chat ──
   const startChat = (peerUserId) => {
@@ -165,7 +244,7 @@ export default function RoomList() {
                 </span>
               )}
               <button
-                onClick={() => navigate("/setup")}
+                onClick={() => navigate("/settings")}
                 className="text-[12px] text-[#555] underline"
               >
                 설정
@@ -199,13 +278,18 @@ export default function RoomList() {
                       <div className="text-[15px] font-medium truncate">
                         {room.peerAlias || room.peerCanonicalName || "Unknown"}
                       </div>
-                      <div className="text-[11px] text-[#888] truncate flex items-center gap-1">
+                      <div className="text-[12px] text-[#666] truncate">
+                        {room.lastMessagePreview
+                          ? `${room.lastMessageMine ? "나: " : ""}${room.lastMessagePreview}`
+                          : "메시지 없음"}
+                      </div>
+                      <div className="text-[11px] text-[#888] truncate flex items-center gap-1 mt-1">
                         <span className="mono-chip bg-[#eef2f7] text-[#4b5563]">
                           {room.roomType === "broadcast" ? "방송" : "1:1"}
                         </span>
-                        {room.lastActiveAt && (
+                        {(room.lastMessageAt || room.lastActiveAt) && (
                           <span className="ml-1">
-                            · {new Date(room.lastActiveAt).toLocaleDateString()}
+                            · {formatListTime(room.lastMessageAt || room.lastActiveAt)}
                           </span>
                         )}
                       </div>
@@ -254,29 +338,33 @@ export default function RoomList() {
                 </button>
               </div>
               <div className="mono-scroll flex-1 overflow-y-auto">
-                {users.length === 0 ? (
+                {loadingFriends ? (
                   <div className="px-4 py-8 text-center text-[13px] text-[#888]">
-                    접속 중인 사용자가 없습니다.
+                    친구 목록 불러오는 중...
+                  </div>
+                ) : friendCandidates.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-[13px] text-[#888]">
+                    친구가 없습니다.
                     <br />
-                    QR 코드로 초대하거나 기다려주세요.
+                    연락처 탭에서 친구를 추가해주세요.
                   </div>
                 ) : (
                   <div className="divide-y divide-[#EEE]">
-                    {users.map((u) => (
+                    {friendCandidates.map((u) => (
                       <div
-                        key={u.userId}
-                        onClick={() => startChat(u.userId)}
+                        key={u.id}
+                        onClick={() => startChat(u.id)}
                         className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#F5F5F5] active:bg-[#EEE]"
                       >
                         <div className="w-9 h-9 bg-[#111] text-white flex items-center justify-center text-[14px] font-bold flex-shrink-0">
-                          {(u.displayName || u.canonicalName || "?").charAt(0).toUpperCase()}
+                          {(u.nickname || "?").charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <div className="text-[14px] font-medium">
-                            {u.displayName || u.canonicalName}
+                            {u.nickname || "Unknown"}
                           </div>
                           <div className="text-[11px] text-[#888]">
-                            {u.online ? "🟢 온라인" : "⚪ 오프라인"}
+                            @{u.monoId || ""}
                           </div>
                         </div>
                       </div>

@@ -10,6 +10,35 @@ import { enqueueMessage, flushQueue, dequeueMessage } from "../db";
 export default function useOutbox() {
   const flushingRef = useRef(false);
 
+  const emitSendWithAck = useCallback(({ roomId, msgId, text, participantId }, timeoutMs = 3500) => {
+    return new Promise((resolve) => {
+      if (!socket.connected) {
+        resolve(false);
+        return;
+      }
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        resolve(false);
+      }, timeoutMs);
+      socket.emit(
+        "send-message",
+        {
+          roomId,
+          message: { id: msgId, text },
+          participantId,
+        },
+        (ack) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(Boolean(ack?.ok));
+        }
+      );
+    });
+  }, []);
+
   const flush = useCallback(async () => {
     if (flushingRef.current) return;
     if (!socket.connected) return;
@@ -17,19 +46,30 @@ export default function useOutbox() {
     try {
       const queued = await flushQueue();
       for (const msg of queued) {
-        socket.emit("send-message", {
+        if (!msg?.participantId) {
+          // Old malformed queue items cannot be sent safely.
+          await dequeueMessage(msg.id);
+          continue;
+        }
+        const ok = await emitSendWithAck({
           roomId: msg.roomId,
-          message: { id: msg.msgId, text: msg.text },
+          msgId: msg.msgId,
+          text: msg.text,
           participantId: msg.participantId,
         });
-        await dequeueMessage(msg.id);
+        if (ok) {
+          await dequeueMessage(msg.id);
+          continue;
+        }
+        // Keep order guarantee: stop flush and retry later.
+        break;
       }
     } catch (e) {
       console.warn("[outbox] flush error:", e);
     } finally {
       flushingRef.current = false;
     }
-  }, []);
+  }, [emitSendWithAck]);
 
   // Auto-flush on reconnect
   useEffect(() => {
@@ -47,17 +87,13 @@ export default function useOutbox() {
    * @returns {boolean} true if sent immediately, false if queued
    */
   const sendOrQueue = useCallback(async ({ roomId, msgId, text, participantId }) => {
-    if (socket.connected) {
-      socket.emit("send-message", {
-        roomId,
-        message: { id: msgId, text },
-        participantId,
-      });
-      return true;
+    if (socket.connected && participantId) {
+      const ok = await emitSendWithAck({ roomId, msgId, text, participantId });
+      if (ok) return true;
     }
     await enqueueMessage({ roomId, msgId, text, participantId });
     return false;
-  }, []);
+  }, [emitSendWithAck]);
 
   return { sendOrQueue, flush };
 }

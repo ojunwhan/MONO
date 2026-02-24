@@ -1,13 +1,34 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, redirect } from "react-router-dom";
 import Home from "./pages/Home";
 import Setup from "./pages/Setup";
 import RoomList from "./pages/RoomList";
 import ChatScreen from "./components/ChatScreen";
+import AppShell from "./layouts/AppShell";
+import Contacts from "./pages/Contacts";
+import GlobalPage from "./pages/Global";
+import SettingsPage from "./pages/Settings";
+import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
+
+async function rootRedirectLoader({ request }) {
+  const url = new URL(request.url);
+  const roomId = url.searchParams.get("roomId");
+  if (roomId) {
+    const search = url.searchParams.toString();
+    return redirect(`/interpret?${search}`);
+  }
+
+  const me = await fetchAuthMe();
+  if (me.authenticated) {
+    await syncAuthUserToLocalIdentity();
+    return redirect("/home");
+  }
+  return redirect("/interpret");
+}
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <Home />,    // Legacy QR-based join flow
+    loader: rootRedirectLoader,
   },
   {
     path: "/setup",
@@ -15,7 +36,33 @@ const router = createBrowserRouter([
   },
   {
     path: "/rooms",
-    element: <RoomList />, // Recent conversations list
+    loader: () => redirect("/home"), // Backward compatibility route
+  },
+  {
+    path: "/",
+    element: <AppShell />,
+    children: [
+      {
+        path: "home",
+        element: <RoomList />,
+      },
+      {
+        path: "contacts",
+        element: <Contacts />,
+      },
+      {
+        path: "interpret",
+        element: <Home />,
+      },
+      {
+        path: "global",
+        element: <GlobalPage />,
+      },
+      {
+        path: "settings",
+        element: <SettingsPage />,
+      },
+    ],
   },
   {
     path: "/room/:roomId",

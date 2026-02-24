@@ -21,7 +21,7 @@ export default function Setup() {
     getMyIdentity().then((me) => {
       if (me?.userId && me?.canonicalName) {
         // Already set up → go to room list
-        navigate("/rooms", { replace: true });
+        navigate("/home", { replace: true });
       }
       setLoading(false);
     });
@@ -40,7 +40,7 @@ export default function Setup() {
     socket.emit("register-user", { userId, canonicalName, lang: selectedLang });
     localStorage.setItem("myLang", selectedLang);
 
-    navigate("/rooms", { replace: true });
+    navigate("/home", { replace: true });
   };
 
   if (loading) {

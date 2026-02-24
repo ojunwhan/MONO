@@ -27,6 +27,7 @@ Ffmpeg.setFfmpegPath(ffmpegPath);
 // Google 및 Kakao 인증 라우트 모듈 불러오기
 const attachGoogleAuth = require('./server/routes/auth_google');
 const attachKakaoAuth = require('./server/routes/auth_kakao');
+const attachAuthApi = require('./server/routes/auth_api');
 
 // --- lang detect & map ---
 const LANG_ALIAS = {
@@ -329,11 +330,13 @@ function preprocessForTTS(text) {
 function emitParticipants(roomId) {
   const meta = ROOMS.get(roomId);
   if (!meta?.participants) return;
+  const isOnlineSocket = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
   const list = Object.entries(meta.participants).map(([pid, p]) => ({
     pid,
     callSign: p.callSign || "",
     nativeName: p.nativeName || "",
     lang: p.lang,
+    online: isOnlineSocket(p.socketId),
   }));
   io.to(roomId).emit("participants", list);
 }
@@ -1329,6 +1332,61 @@ io.on('connection', (socket) => {
     socket.emit("mono-pong", data);
   });
 
+  socket.on("typing-start", ({ roomId, participantId, displayName } = {}) => {
+    if (!roomId || !participantId) return;
+    socket.to(roomId).emit("typing-start", {
+      roomId,
+      participantId,
+      displayName: displayName || "",
+    });
+  });
+
+  socket.on("typing-stop", ({ roomId, participantId } = {}) => {
+    if (!roomId || !participantId) return;
+    socket.to(roomId).emit("typing-stop", {
+      roomId,
+      participantId,
+    });
+  });
+
+  // Message status sync (delivered/read) for stable 1:1 UX.
+  socket.on("message-status", ({ roomId, messageId, status, participantId } = {}) => {
+    if (!roomId || !messageId || !status || !participantId) return;
+    if (!isAuthorizedParticipant(socket, roomId, participantId)) return;
+    const meta = ROOMS.get(roomId);
+    if (!meta?.participants) return;
+    const senderPid = Object.keys(meta.participants).find((pid) => pid !== participantId);
+    if (!senderPid) return;
+    const senderSocketId = meta.participants[senderPid]?.socketId;
+    if (!senderSocketId) return;
+    io.to(senderSocketId).emit("message-status", {
+      roomId,
+      messageId,
+      participantId,
+      status,
+      at: Date.now(),
+    });
+  });
+
+  // Explicit read receipt event (maps to message-status: read).
+  socket.on("message-read", ({ roomId, messageId, participantId } = {}) => {
+    if (!roomId || !messageId || !participantId) return;
+    if (!isAuthorizedParticipant(socket, roomId, participantId)) return;
+    const meta = ROOMS.get(roomId);
+    if (!meta?.participants) return;
+    const senderPid = Object.keys(meta.participants).find((pid) => pid !== participantId);
+    if (!senderPid) return;
+    const senderSocketId = meta.participants[senderPid]?.socketId;
+    if (!senderSocketId) return;
+    io.to(senderSocketId).emit("message-status", {
+      roomId,
+      messageId,
+      participantId,
+      status: "read",
+      at: Date.now(),
+    });
+  });
+
   // --- join 핸들러 (call sign system, idempotent) ---
   socket.on("join", ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint }) => {
     if (!roomId || !participantId) return;
@@ -1599,7 +1657,21 @@ io.on('connection', (socket) => {
       (m) => m.senderPid !== participantId
     );
     if (missed.length > 0) {
-      socket.emit("recent-messages", missed);
+      socket.emit(
+        "recent-messages",
+        missed.map((m) => ({
+          id: m.id,
+          roomId,
+          roomType: meta.roomType || "oneToOne",
+          senderPid: m.senderPid,
+          senderCallSign: m.senderCallSign || "",
+          senderDisplayName: m.senderDisplayName || "",
+          originalText: m.originalText || m.text || "",
+          translatedText: m.translatedText || m.text || "",
+          text: m.text || m.translatedText || m.originalText || "",
+          timestamp: Number(m.time || Date.now()),
+        }))
+      );
       console.log(`📩 Restored ${missed.length} msgs for ${participantId} in ${roomId}`);
     }
   });
@@ -1782,12 +1854,21 @@ io.on('connection', (socket) => {
         // → Other (sender name adapted to receiver's language)
         if (otherP?.socketId) {
           io.to(otherP.socketId).emit("receive-message", {
-            id: msgId, senderPid: participantId,
+            id: msgId, roomId, roomType,
+            senderPid: participantId,
             senderDisplayName,
             senderCallSign: senderDisplayName,
             originalText: finalText, translatedText: translated,
-            isDraft: true, at: Date.now(),
+            text: translated || finalText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
+        socket.emit("message-status", {
+          roomId,
+          messageId: msgId,
+          participantId: otherPid,
+          status: "delivered",
+          at: Date.now(),
+        });
         }
         // Always send push for background/lock-screen reliability.
         // SW suppresses notification when app window is visible.
@@ -1803,10 +1884,12 @@ io.on('connection', (socket) => {
         }
         // → Sender echo
         socket.emit("receive-message", {
-          id: msgId, senderPid: participantId,
+          id: msgId, roomId, roomType,
+          senderPid: participantId,
           senderCallSign: senderP?.nativeName || "",
           originalText: finalText, translatedText: finalText,
-          isDraft: true, at: Date.now(),
+          text: finalText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
 
         // Make TTS follow the same finalized sentence shown in UI.
@@ -1858,9 +1941,11 @@ io.on('connection', (socket) => {
 
         if (targetP.socketId) {
           io.to(targetP.socketId).emit("receive-message", {
-            id: msgId, senderPid: participantId, senderCallSign,
+            id: msgId, roomId, roomType,
+            senderPid: participantId, senderCallSign,
             originalText: cleanText, translatedText: translated,
-            isDraft: true, at: Date.now(),
+            text: translated || cleanText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
         }
         sendPushToUser(csMatch.targetPid, {
@@ -1872,9 +1957,11 @@ io.on('connection', (socket) => {
         }).catch(() => {});
         // Echo to sender
         socket.emit("receive-message", {
-          id: msgId, senderPid: participantId, senderCallSign,
+          id: msgId, roomId, roomType,
+          senderPid: participantId, senderCallSign,
           originalText: cleanText, translatedText: cleanText,
-          isDraft: true, at: Date.now(),
+          text: cleanText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
 
         let finalizedForTts = translated;
@@ -1918,9 +2005,11 @@ io.on('connection', (socket) => {
           );
           if (listener.socketId) {
             io.to(listener.socketId).emit("receive-message", {
-              id: msgId, senderPid: participantId, senderCallSign,
+              id: msgId, roomId, roomType,
+              senderPid: participantId, senderCallSign,
               originalText: finalText, translatedText: translated,
-              isDraft: true, at: Date.now(),
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
             });
           }
           if (listenerPid) {
@@ -1960,9 +2049,11 @@ io.on('connection', (socket) => {
 
       // Echo to sender
       socket.emit("receive-message", {
-        id: msgId, senderPid: participantId, senderCallSign,
+        id: msgId, roomId, roomType,
+        senderPid: participantId, senderCallSign,
         originalText: finalText, translatedText: finalText,
-        isDraft: true, at: Date.now(),
+        text: finalText,
+        isDraft: true, at: Date.now(), timestamp: Date.now(),
       });
     };
 
@@ -2006,30 +2097,49 @@ io.on('connection', (socket) => {
   });
 
   // --- send-message 핸들러 (room-type aware) ---
-  socket.on('send-message', async ({ roomId, message, participantId }) => {
+  socket.on('send-message', async ({ roomId, message, participantId }, ack) => {
+    const ackReply = (payload) => {
+      if (typeof ack === "function") {
+        try { ack(payload); } catch {}
+      }
+    };
     if (!consumeRate(socket.id, 'send-message', LIMITS.SEND_MESSAGE_PER_10S, 10000)) {
       console.warn(`[rate] send-message throttled sid=${socket.id}`);
+      ackReply({ ok: false, error: "rate_limited" });
       return;
     }
     if (!roomId || !message || !participantId) {
       console.log(`[send-message] ❌ 누락: room=${roomId} msg=${!!message} pid=${participantId}`);
+      ackReply({ ok: false, error: "invalid_payload" });
       return;
     }
     if (!isAuthorizedParticipant(socket, roomId, participantId)) {
       console.warn(`[auth] send-message rejected room=${roomId} pid=${participantId} sid=${socket.id}`);
+      ackReply({ ok: false, error: "unauthorized" });
       return;
     }
 
     const { id, text } = message;
-    if (!id || typeof id !== 'string' || id.length > 128) return;
-    if (typeof text !== 'string') return;
+    if (!id || typeof id !== 'string' || id.length > 128) {
+      ackReply({ ok: false, error: "invalid_message_id" });
+      return;
+    }
+    if (typeof text !== 'string') {
+      ackReply({ ok: false, error: "invalid_text" });
+      return;
+    }
     const trimmedText = text.trim();
-    if (!trimmedText) return;
+    if (!trimmedText) {
+      ackReply({ ok: false, error: "empty_text" });
+      return;
+    }
     if (trimmedText.length > LIMITS.MAX_MESSAGE_CHARS) {
       console.warn(`[send-message] text too long pid=${participantId} len=${trimmedText.length}`);
+      ackReply({ ok: false, error: "text_too_long" });
       return;
     }
     if (isRecentDuplicateMessage(roomId, id)) {
+      ackReply({ ok: true, duplicate: true });
       return;
     }
     const meta = ensureRoomMeta(roomId);
@@ -2043,6 +2153,7 @@ io.on('connection', (socket) => {
     if (!messageBuffer[roomId]) messageBuffer[roomId] = [];
     messageBuffer[roomId].push({ id, text: trimmedText, senderPid: participantId, senderCallSign, time: Date.now() });
     if (messageBuffer[roomId].length > 200) messageBuffer[roomId].shift();
+    ackReply({ ok: true, accepted: true });
 
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
     const detectedLang = detectTextLang(trimmedText);
@@ -2072,13 +2183,22 @@ io.on('connection', (socket) => {
       // → Other (sender name adapted to receiver's language)
       if (otherP?.socketId) {
         io.to(otherP.socketId).emit('receive-message', {
-          id, senderPid: participantId,
+          id, roomId, roomType,
+          senderPid: participantId,
           senderDisplayName,
           senderCallSign: senderDisplayName,
           originalText: trimmedText, translatedText: draft,
-          isDraft: true, at: Date.now(),
+          text: draft || trimmedText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
         io.to(otherP.socketId).emit("notify", { title: senderDisplayName || "MONO", body: draft?.substring(0, 50) || "" });
+        socket.emit("message-status", {
+          roomId,
+          messageId: id,
+          participantId: otherPid,
+          status: "delivered",
+          at: Date.now(),
+        });
       }
       // Always send push for background/lock-screen reliability.
       sendPushToUser(otherPid, {
@@ -2138,9 +2258,11 @@ io.on('connection', (socket) => {
 
       if (targetP.socketId) {
         io.to(targetP.socketId).emit('receive-message', {
-          id, senderPid: participantId, senderCallSign,
+            id, roomId, roomType,
+            senderPid: participantId, senderCallSign,
           originalText: cleanText, translatedText: draft,
-          isDraft: true, at: Date.now(),
+            text: draft || cleanText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
       }
       sendPushToUser(csMatch.targetPid, {
@@ -2194,9 +2316,11 @@ io.on('connection', (socket) => {
         );
         if (listener.socketId) {
           io.to(listener.socketId).emit('receive-message', {
-            id, senderPid: participantId, senderCallSign,
+            id, roomId, roomType,
+            senderPid: participantId, senderCallSign,
             originalText: trimmedText, translatedText: draft,
-            isDraft: true, at: Date.now(),
+            text: draft || trimmedText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
           io.to(listener.socketId).emit("notify", { title: "MONO", body: draft?.substring(0, 50) || "" });
         }
@@ -2381,6 +2505,7 @@ app.post("/stt", upload.single("audio"), async (req, res) => {
 
 attachGoogleAuth(app);
 attachKakaoAuth(app);
+attachAuthApi(app);
 
 app.get("/api/guess-lang", (req,res)=>{
   const code = detectFromAcceptLang(req.headers['accept-language']);

@@ -9,7 +9,7 @@ import SITE_CONTEXTS from "../constants/siteContexts";
 import languages from "../constants/languages";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import useOutbox from "../hooks/useOutbox";
-import { upsertRoom, touchRoom } from "../db";
+import { touchRoom, recordRoomActivity, saveMessage, getMessages } from "../db";
 import {
   initBrowserTts,
   hasVoiceForMonoLang,
@@ -18,7 +18,6 @@ import {
 } from "../audio/browserTts";
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
-import { loadSessionMessages, saveSessionMessages } from "../utils/ChatStorage";
 
 // ─── Dedup utilities ───
 function dedupeRepeatTokens(s) {
@@ -124,6 +123,7 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState("");
   const [micListening, setMicListening] = useState(false);
   const [participants, setParticipants] = useState([]);
+  const [typingPeerName, setTypingPeerName] = useState("");
   const [serverWarning, setServerWarning] = useState("");
   const [reconnectState, setReconnectState] = useState("connected");
 
@@ -198,10 +198,18 @@ export default function ChatScreen() {
   const partnerShortRef = useRef(partnerShort);
   // myCallSign stored internally for server communication, not displayed
   const lastPingAtRef = useRef(0);
+  const typingActiveRef = useRef(false);
+  const typingStopTimerRef = useRef(null);
+  const readSentRef = useRef(new Set());
+  const messagesRef = useRef([]);
 
   useEffect(() => {
     roomTypeRef.current = roomType;
   }, [roomType]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     partnerNameRef.current = partnerName;
@@ -236,20 +244,52 @@ export default function ChatScreen() {
   }, [roomId, participantId, fromLang, roleHint]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!roomId) return;
-    const prevMessages = loadSessionMessages(roomId);
-    if (prevMessages.length > 0) {
-      setMessages(prevMessages);
-      prevMessages.forEach((m) => {
-        if (m?.id) seenIdsRef.current.add(m.id);
-      });
-    }
-    historyLoadedRef.current = true;
+    (async () => {
+      const prevMessages = await getMessages(roomId, 100, 0).catch(() => []);
+      if (cancelled) return;
+      if (prevMessages.length > 0) {
+        const hydrated = prevMessages.map((m) => ({
+          ...m,
+          mine: m.senderId === participantIdRef.current,
+          text: m.translatedText || m.originalText || m.text || "",
+          senderFlagUrl: m.senderFlagUrl || "",
+          senderLabel: m.senderLabel || "",
+        }));
+        setMessages(hydrated);
+        hydrated.forEach((m) => {
+          if (m?.id) seenIdsRef.current.add(m.id);
+        });
+      }
+      historyLoadedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [roomId]);
 
   useEffect(() => {
-    if (!roomId || !historyLoadedRef.current) return;
-    saveSessionMessages(roomId, messages);
+    if (!roomId || !historyLoadedRef.current || !messages.length) return;
+    const tasks = messages
+      .filter((m) => m?.id && !m?.system)
+      .map((m) =>
+        saveMessage({
+          id: m.id,
+          roomId,
+          senderId: m.mine ? participantIdRef.current : (m.senderId || ""),
+          senderName: m.mine ? (localNameRef.current || "나") : (m.senderDisplayName || ""),
+          originalText: m.originalText || "",
+          translatedText: m.translatedText || m.text || "",
+          originalLang: m.mine ? fromLangRef.current : "",
+          translatedLang: fromLangRef.current,
+          type: "text",
+          status: m.status || (m.mine ? "sent" : "translated"),
+          timestamp: Number(m.timestamp || Date.now()),
+          replyTo: m.replyTo || null,
+        }).catch(() => {})
+      );
+    Promise.all(tasks).catch(() => {});
   }, [roomId, messages]);
 
   useEffect(() => {
@@ -306,6 +346,18 @@ export default function ChatScreen() {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      if (typingActiveRef.current) {
+        socket.emit("typing-stop", {
+          roomId: roomIdRef.current,
+          participantId: participantIdRef.current,
+        });
+      }
+    };
+  }, []);
+
   // ─── Socket event listeners (register once) ───
   useEffect(() => {
     const onCallSignAssigned = (payload) => {
@@ -337,22 +389,70 @@ export default function ChatScreen() {
       }
     };
 
+    const onTypingStart = (payload) => {
+      const pid = payload?.participantId;
+      if (!pid || pid === participantIdRef.current) return;
+      const name = payload?.displayName || partnerNameRef.current || "상대방";
+      setTypingPeerName(name);
+    };
+
+    const onTypingStop = (payload) => {
+      const pid = payload?.participantId;
+      if (!pid || pid === participantIdRef.current) return;
+      setTypingPeerName("");
+    };
+
+    const onMessageStatus = (payload) => {
+      const messageId = payload?.messageId;
+      const status = String(payload?.status || "");
+      if (!messageId || !status) return;
+      if (payload?.roomId && payload.roomId !== roomIdRef.current) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (!m?.id || m.id !== messageId) return m;
+          if (!m.mine) return m;
+          const normalized =
+            status === "read"
+              ? "read"
+              : status === "delivered"
+              ? "translated"
+              : status === "accepted"
+              ? "sent"
+              : m.status;
+          if (normalized === m.status && !m.queued) return m;
+          return { ...m, status: normalized, queued: false };
+        })
+      );
+    };
+
     const onReceiveMessage = async (payload) => {
-      const { id, originalText, translatedText, senderPid, senderCallSign, senderDisplayName } = payload || {};
+      const { id, roomId: incomingRoomId, originalText, translatedText, senderPid, senderCallSign, senderDisplayName } = payload || {};
       if (!id) return;
+      if (incomingRoomId && incomingRoomId !== roomIdRef.current) return;
       if (seenIdsRef.current.has(id)) return;
       seenIdsRef.current.add(id);
+      const eventTs = Number(payload?.timestamp || payload?.at || Date.now());
 
       const isMine = senderPid && senderPid === participantIdRef.current;
 
       if (isMine) {
         if (originalText) {
+          const minePreview = String(originalText || "").trim().slice(0, 120);
+          recordRoomActivity(roomIdRef.current, {
+            lastMessagePreview: minePreview,
+            lastMessageAt: eventTs,
+            lastMessageMine: true,
+            unreadCount: 0,
+          }).catch(() => {});
           setMessages((prev) => [...prev, {
             id,
             text: originalText,
             originalText,
             translatedText: "",
             mine: true,
+            senderId: participantIdRef.current,
+            status: "sent",
+            timestamp: eventTs,
             senderFlagUrl: myFlagRef.current,
             senderLabel: myShortRef.current,
           }]);
@@ -363,6 +463,12 @@ export default function ChatScreen() {
       // Other's message → show translated text (my language)
       const incoming = dedupeRepeats(translatedText || originalText || "");
       if (!incoming) return;
+      recordRoomActivity(roomIdRef.current, {
+        lastMessagePreview: String(incoming).trim().slice(0, 120),
+        lastMessageAt: eventTs,
+        lastMessageMine: false,
+        unreadCount: 0,
+      }).catch(() => {});
       const resolvedSenderName =
         senderDisplayName ||
         (roomTypeRef.current === "oneToOne" ? (partnerNameRef.current || "") : (senderCallSign || ""));
@@ -372,6 +478,9 @@ export default function ChatScreen() {
         originalText: originalText || "",
         translatedText: incoming,
         mine: false,
+        senderId: senderPid || "",
+        status: "translated",
+        timestamp: eventTs,
         senderDisplayName: resolvedSenderName,
         senderCallSign: senderCallSign || "",
         senderFlagUrl: roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : "",
@@ -413,16 +522,21 @@ export default function ChatScreen() {
       setMessages((prev) => {
         const merged = [...prev];
         for (const m of msgs) {
+          if (m?.roomId && m.roomId !== roomIdRef.current) continue;
           const mid = m.id || crypto.randomUUID();
           if (seenIdsRef.current.has(mid)) continue;
           seenIdsRef.current.add(mid);
           const isMine = m.senderPid === participantIdRef.current;
+          const eventTs = Number(m.timestamp || m.at || Date.now());
           merged.push({
             id: mid,
             text: m.translatedText || m.text || m.originalText || "",
             originalText: m.originalText || m.text || "",
             translatedText: m.translatedText || m.text || "",
             mine: isMine,
+            senderId: m.senderPid || (isMine ? participantIdRef.current : ""),
+            status: isMine ? "sent" : "translated",
+            timestamp: eventTs,
             senderFlagUrl: isMine
               ? myFlagRef.current
               : (roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : ""),
@@ -536,6 +650,9 @@ export default function ChatScreen() {
     socket.on("room-full", onRoomFull);
     socket.on("partner-info", onPartnerInfo);
     socket.on("partner-joined", onPartnerJoined);
+    socket.on("typing-start", onTypingStart);
+    socket.on("typing-stop", onTypingStop);
+    socket.on("message-status", onMessageStatus);
 
     return () => {
       socket.off("call-sign-assigned", onCallSignAssigned);
@@ -551,6 +668,9 @@ export default function ChatScreen() {
       socket.off("room-full", onRoomFull);
       socket.off("partner-info", onPartnerInfo);
       socket.off("partner-joined", onPartnerJoined);
+      socket.off("typing-start", onTypingStart);
+      socket.off("typing-stop", onTypingStop);
+      socket.off("message-status", onMessageStatus);
     };
   }, []);
 
@@ -606,6 +726,36 @@ export default function ChatScreen() {
     }, 25000);
     return () => clearInterval(iv);
   }, []);
+
+  // Read receipt: when visible, acknowledge latest incoming message once.
+  const emitLatestReadReceipt = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    if (!roomId || !participantId) return;
+    const latestIncoming = [...messagesRef.current]
+      .reverse()
+      .find((m) => !m.mine && !m.system && m.id);
+    if (!latestIncoming?.id) return;
+    if (readSentRef.current.has(latestIncoming.id)) return;
+    readSentRef.current.add(latestIncoming.id);
+    socket.emit("message-read", {
+      roomId,
+      messageId: latestIncoming.id,
+      participantId,
+    });
+  }, [roomId, participantId]);
+
+  useEffect(() => {
+    emitLatestReadReceipt();
+  }, [messages, emitLatestReadReceipt]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      emitLatestReadReceipt();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [emitLatestReadReceipt]);
 
   // Reconnect
   const initialConnectRef = useRef(true);
@@ -785,7 +935,7 @@ export default function ChatScreen() {
   const handleLeave = () => {
     cancelSpeech();
     socket.emit("manual-leave");
-    navigate("/rooms");
+    navigate("/home");
   };
 
   const onMicListeningChange = useCallback((listening) => {
@@ -829,10 +979,27 @@ export default function ChatScreen() {
       originalText: text,
       translatedText: "",
       mine: true,
+      senderId: participantIdRef.current,
+      status: queued ? "sending" : "sent",
+      timestamp: Date.now(),
       queued,
       senderFlagUrl: myFlagRef.current,
       senderLabel: myShortRef.current,
     }]);
+    if (typingActiveRef.current) {
+      socket.emit("typing-stop", { roomId, participantId });
+      typingActiveRef.current = false;
+    }
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+      typingStopTimerRef.current = null;
+    }
+    recordRoomActivity(roomId, {
+      lastMessagePreview: text.slice(0, 120),
+      lastMessageAt: Date.now(),
+      lastMessageMine: true,
+      unreadCount: 0,
+    }).catch(() => {});
     touchRoom(roomId).catch(() => {});
   };
 
@@ -843,6 +1010,10 @@ export default function ChatScreen() {
 
   // Broadcast listeners cannot send
   const isBroadcastListener = roomType === "broadcast" && roleHint !== "owner";
+  const partnerOnline = useMemo(
+    () => participants.some((p) => p?.pid && p.pid !== participantId && p.online !== false),
+    [participants, participantId]
+  );
 
   return (
     <div className="relative">
@@ -851,6 +1022,14 @@ export default function ChatScreen() {
         <div className="fixed top-0 left-0 right-0 bg-[#f8fafc] border-b border-[#d1d5db] z-10 max-w-screen-sm mx-auto backdrop-blur">
           <div className="px-4 pt-3 pb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] min-w-[92px]">
+              <button
+                onClick={handleLeave}
+                className="text-[18px] text-[#111]"
+                aria-label="뒤로가기"
+                title="대화목록으로"
+              >
+                ←
+              </button>
               <span className={`${reconnectState === "reconnecting" ? "animate-pulse" : ""}`}>
                 {reconnectState === "connected" ? "🟢" : reconnectState === "reconnecting" ? "🟡" : "🔴"}
               </span>
@@ -860,6 +1039,11 @@ export default function ChatScreen() {
             </div>
 
             <div className="flex-1 text-center text-[13px] font-medium text-[#111]">
+              {roomType === "oneToOne" && (
+                <div className="text-[12px] text-[#444] mb-0.5 truncate">
+                  {partnerName || "상대방"} · {partnerOnline ? "온라인" : "오프라인"}
+                </div>
+              )}
               {roomType === "oneToOne" ? (
                 <span className="inline-flex items-center gap-1">
                   {myFlagUrl ? <img className="flag" src={myFlagUrl} alt="" /> : null}
@@ -885,6 +1069,13 @@ export default function ChatScreen() {
 
             <div className="flex items-center gap-2 text-[12px] min-w-[92px] justify-end">
               <button
+                className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-white text-[#6b7280] border-[#c7ccd3]"
+                title="방 메뉴"
+                aria-label="방 메뉴"
+              >
+                ⋮
+              </button>
+              <button
                 onClick={toggleVoice}
                 className={`w-9 h-9 rounded-full border text-[18px] flex items-center justify-center ${
                   voiceEnabled
@@ -895,12 +1086,6 @@ export default function ChatScreen() {
                 disabled={!canSpeakCurrentLang}
               >
                 {voiceEnabled ? "🔊" : "🔇"}
-              </button>
-              <button
-                onClick={handleLeave}
-                className="text-[#FF5252] font-medium"
-              >
-                나가기
               </button>
             </div>
           </div>
@@ -933,6 +1118,13 @@ export default function ChatScreen() {
           {messages.map((m) => (
             <MessageBubble key={m.id} message={m} onPlay={() => playMessageOnce(m)} />
           ))}
+          {typingPeerName ? (
+            <div className="w-full flex justify-start mb-2">
+              <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-[#d1d5db] bg-white px-3 py-2 text-[12px] text-[#6b7280]">
+                {typingPeerName} 입력 중...
+              </div>
+            </div>
+          ) : null}
           <div ref={messagesEndRef} />
         </div>
 
@@ -956,8 +1148,35 @@ export default function ChatScreen() {
                   className="mono-input w-full resize-none h-11 min-h-11 max-h-11 px-4 py-0 text-[14px] leading-[44px] overflow-hidden bg-white focus:outline-none box-border"
                   value={inputText}
                   onChange={(e) => {
-                    setInputText(e.target.value);
+                    const nextText = e.target.value;
+                    setInputText(nextText);
                     autosize();
+                    if (!nextText.trim()) {
+                      if (typingActiveRef.current) {
+                        socket.emit("typing-stop", { roomId, participantId });
+                        typingActiveRef.current = false;
+                      }
+                      if (typingStopTimerRef.current) {
+                        clearTimeout(typingStopTimerRef.current);
+                        typingStopTimerRef.current = null;
+                      }
+                      return;
+                    }
+                    if (!typingActiveRef.current) {
+                      socket.emit("typing-start", {
+                        roomId,
+                        participantId,
+                        displayName: localNameRef.current || "상대방",
+                      });
+                      typingActiveRef.current = true;
+                    }
+                    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+                    typingStopTimerRef.current = setTimeout(() => {
+                      if (typingActiveRef.current) {
+                        socket.emit("typing-stop", { roomId, participantId });
+                        typingActiveRef.current = false;
+                      }
+                    }, 2000);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
