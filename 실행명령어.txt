@@ -1,14 +1,29 @@
-# 서버
+# MONO 운영/검증 명령어 (최신)
 
+# 1) DB 마이그레이션
+npm run db:migrate:sqlite
 
-pwsh ./scan_all.ps1 -Out ".\mro_c2c_audio_snapshot.json"
-
-
+# 2) 빌드
 npm run build
+
+# 3) 서버 실행 (로컬)
 $env:PORT="3174"; node server.js
+
+# 4) 터널 실행 (로컬 운영 시)
 cloudflared tunnel --config C:\Users\USER\.cloudflared\config.yml run 7590e315-f780-491a-85d2-668f9939fed5
 
+# 5) 헬스체크
+curl.exe -s http://127.0.0.1:3174/healthz
 
+# 6) 공통 QA 스모크
+npm run qa:smoke
 
+# 7) 스트레스 테스트
+# (예) 2분
+$env:SIM_USERS="14"; $env:SIM_DURATION_MS="120000"; $env:SIM_SEND_MS="700"; $env:SIM_RECONNECT_MS="9000"; npm run sim:stress
 
+# (예) 5분
+$env:SIM_USERS="14"; $env:SIM_DURATION_MS="300000"; $env:SIM_SEND_MS="700"; $env:SIM_RECONNECT_MS="9000"; npm run sim:stress
 
+# (예) 1시간
+$env:SIM_USERS="10"; $env:SIM_DURATION_MS="3600000"; $env:SIM_SEND_MS="1000"; $env:SIM_RECONNECT_MS="15000"; npm run sim:stress:1h
