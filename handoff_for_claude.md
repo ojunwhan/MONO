@@ -98,3 +98,17 @@
 
 ## 5) 주의 사항
 - 터널 설정 파일(`C:\Users\USER\.cloudflared\config.yml`)은 레포 외부 파일이라 Git 커밋/푸시에 포함되지 않음.
+
+## 6) GitHub에 올라간 자료 (확정)
+- 리포: `https://github.com/ojunwhan/MONO`
+- 브랜치: `main`
+- 포함된 주요 루트 자료:
+  - 앱/서버 코드: `src/`, `server/`, `public/`, `server.js`
+  - 빌드/실행 설정: `package.json`, `package-lock.json`, `vite.config.js`, `tailwind.config.js`, `postcss.config.cjs`
+  - 인계/문서: `handoff_for_claude.md`, `aws_lightsail_migration_guide.md`
+  - 참고 자료: `mono_investor_proof.csv`, `mro_c2c_audio_snapshot.json`, `monitor_simple.ps1`, `scan_all.ps1`
+- Git 미포함(로컬 전용) 대표 항목:
+  - `.env`
+  - `node_modules/`, `dist/`
+  - `state/`, `tmp/`, `uploads/`, `monitor_logs/`
+  - `server/fcm-service-key.json`
