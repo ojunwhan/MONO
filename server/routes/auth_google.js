@@ -50,6 +50,10 @@ module.exports = function attachGoogleAuth(app) {
     });
     res.redirect(url);
   });
+  app.get('/api/auth/google', (req, res) => {
+    const next = encodeURIComponent(req.query.next || '/');
+    return res.redirect(`/auth/google?next=${next}`);
+  });
 
   // 2) 콜백 → JWT 발급 → next로 이동
   app.get('/auth/google/callback', async (req, res) => {
@@ -66,18 +70,19 @@ module.exports = function attachGoogleAuth(app) {
         audience: process.env.GOOGLE_CLIENT_ID,
       });
       const payload = ticket.getPayload();
-      const sub = `google:${payload.sub}`;
       const profile = {
-        id: sub,
+        provider: 'google',
+        providerUserId: payload.sub,
         displayName: payload.name || 'Google User',
         photoURL: payload.picture || '',
         email: payload.email || '',
-        provider: 'google',
       };
 
+      let appUser = null;
       try {
-        await upsertUserFromOAuth({
-          id: profile.id,
+        appUser = await upsertUserFromOAuth({
+          provider: profile.provider,
+          providerUserId: profile.providerUserId,
           email: profile.email,
           nickname: profile.displayName,
           avatarUrl: profile.photoURL,
@@ -90,7 +95,7 @@ module.exports = function attachGoogleAuth(app) {
 
       // JWT 발급 (30일)
       const appJwt = jwt.sign(
-        { sub: profile.id, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
+        { sub: appUser?.id || `google:${profile.providerUserId}`, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
         process.env.JWT_SECRET,
         { expiresIn: '30d' }
       );
@@ -114,5 +119,9 @@ module.exports = function attachGoogleAuth(app) {
       console.error('google_callback_error', e);
       return res.status(500).send('GOOGLE_CALLBACK_ERROR');
     }
+  });
+  app.get('/api/auth/google/callback', (req, res) => {
+    const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    return res.redirect(`/auth/google/callback${q}`);
   });
 };

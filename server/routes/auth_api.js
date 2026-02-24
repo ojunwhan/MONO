@@ -6,6 +6,10 @@ const {
   normalizeLangCode,
 } = require("../db/users");
 const { all, get, run } = require("../db/sqlite");
+const {
+  getUserBillingOverview,
+  getFreeMonthlyLimit,
+} = require("../billing");
 
 function readToken(req) {
   const cookieToken = req.cookies?.token;
@@ -29,6 +33,28 @@ function verifyToken(req, res, next) {
     return next();
   } catch (e) {
     return res.status(401).json({ error: "invalid_token" });
+  }
+}
+
+async function checkUsageLimitMiddleware(req, res, next) {
+  try {
+    const overview = await getUserBillingOverview(req.auth?.sub);
+    if (overview?.overLimit) {
+      return res.status(402).json({
+        error: "translation_limit_exceeded",
+        message: "번역 한도 초과",
+        subscription: {
+          plan: overview.plan,
+          usageCount: overview.used,
+          monthlyLimit: overview.limit,
+          month: overview.month,
+        },
+      });
+    }
+    req.usageOverview = overview;
+    return next();
+  } catch {
+    return res.status(500).json({ error: "usage_limit_check_failed" });
   }
 }
 
@@ -604,6 +630,58 @@ module.exports = function attachAuthApi(app) {
     } catch {
       return res.status(500).json({ error: "room_read_update_failed" });
     }
+  });
+
+  // ── Subscription / Billing (Phase 4-1 scaffolding) ──
+  app.get("/api/subscription/me", verifyToken, async (req, res) => {
+    try {
+      const overview = await getUserBillingOverview(req.auth?.sub);
+      return res.json({
+        success: true,
+        subscription: {
+          plan: overview.plan,
+          planExpiresAt: overview.planExpiresAt,
+          month: overview.month,
+          usageCount: overview.used,
+          monthlyLimit: overview.limit,
+          remaining: overview.remaining,
+          overLimit: overview.overLimit,
+          freeLimitDefault: getFreeMonthlyLimit(),
+        },
+      });
+    } catch {
+      return res.status(500).json({ error: "subscription_overview_failed" });
+    }
+  });
+
+  app.get("/api/subscription/check-limit", verifyToken, checkUsageLimitMiddleware, async (req, res) => {
+    return res.json({
+      success: true,
+      allowed: true,
+      subscription: req.usageOverview || null,
+    });
+  });
+
+  // Payment integration placeholder (redirect target can be wired later)
+  app.post("/api/subscription/checkout", verifyToken, async (req, res) => {
+    try {
+      const requestedPlan = String(req.body?.plan || "pro").trim().toLowerCase();
+      const plan = ["pro", "business"].includes(requestedPlan) ? requestedPlan : "pro";
+      const next = String(req.body?.next || "/settings").trim() || "/settings";
+      return res.json({
+        success: true,
+        provider: "pending",
+        plan,
+        checkoutUrl: `/settings?checkout=pending&plan=${encodeURIComponent(plan)}&next=${encodeURIComponent(next)}`,
+      });
+    } catch {
+      return res.status(500).json({ error: "subscription_checkout_failed" });
+    }
+  });
+
+  // Webhook placeholder (signature verification to be added with real PSP)
+  app.post("/api/subscription/webhook", async (req, res) => {
+    return res.status(202).json({ success: true, status: "pending_integration" });
   });
 };
 

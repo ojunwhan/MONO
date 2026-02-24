@@ -19,6 +19,7 @@ export default function SettingsPage() {
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [subscription, setSubscription] = useState(null);
 
   const authFetch = useCallback(async (url, options = {}) => {
     return fetch(url, {
@@ -48,6 +49,13 @@ export default function SettingsPage() {
         }
         if (cancelled) return;
         setIsAuthenticated(true);
+        try {
+          const subRes = await authFetch("/api/subscription/me");
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            setSubscription(subData?.subscription || null);
+          }
+        } catch {}
         setForm({
           nickname: user.nickname || "",
           monoId: user.monoId || "",
@@ -191,12 +199,32 @@ export default function SettingsPage() {
           <p className="mt-2 text-[13px] text-[#666]">
             로그인하면 프로필, 언어, 저장관리, 알림 설정을 사용할 수 있습니다.
           </p>
-          <a
-            href="/auth/google?next=/home"
-            className="mono-btn mt-4 inline-flex h-[44px] px-4 items-center border border-[#111] bg-[#111] text-white"
-          >
-            Google 로그인
-          </a>
+          <div className="mt-4 space-y-2">
+            <a
+              href="/auth/google?next=/home"
+              className="mono-btn inline-flex w-full h-[44px] px-4 items-center justify-center border border-[#111] bg-white text-[#111] font-semibold"
+            >
+              G Google로 계속하기
+            </a>
+            <a
+              href="/auth/kakao?next=/home"
+              className="mono-btn inline-flex w-full h-[44px] px-4 items-center justify-center border border-[#E6C200] bg-[#FEE500] text-[#191919] font-semibold"
+            >
+              K 카카오로 계속하기
+            </a>
+            <a
+              href="/auth/line?next=/home"
+              className="mono-btn inline-flex w-full h-[44px] px-4 items-center justify-center border border-[#06B53F] bg-[#06C755] text-white font-semibold"
+            >
+              L LINE으로 계속하기
+            </a>
+            <a
+              href="/auth/apple?next=/home"
+              className="mono-btn inline-flex w-full h-[44px] px-4 items-center justify-center border border-[#111] bg-[#111] text-white font-semibold"
+            >
+              Apple로 계속하기
+            </a>
+          </div>
         </div>
 
         <div className="mono-card p-5">
@@ -299,6 +327,42 @@ export default function SettingsPage() {
             로그아웃
           </button>
         </div>
+      </div>
+
+      <div className="mono-card p-5 space-y-3">
+        <h2 className="text-[16px] font-semibold">구독관리</h2>
+        <p className="text-[12px] text-[#666]">
+          이번 달 번역{" "}
+          <span className="font-semibold text-[#111]">
+            {subscription?.usageCount ?? 0}
+          </span>
+          회
+          {subscription?.monthlyLimit != null
+            ? ` / ${subscription.monthlyLimit}회`
+            : " (무제한)"}
+        </p>
+        <p className="text-[12px] text-[#666]">
+          현재 플랜: <span className="font-semibold text-[#111]">{subscription?.plan || "free"}</span>
+        </p>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const r = await authFetch("/api/subscription/checkout", {
+                method: "POST",
+                body: JSON.stringify({ plan: "pro", next: "/settings" }),
+              });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) throw new Error("checkout_failed");
+              if (d?.checkoutUrl) window.location.href = d.checkoutUrl;
+            } catch {
+              setError("결제 연결 준비 중입니다. 잠시 후 다시 시도해주세요.");
+            }
+          }}
+          className="mono-btn h-[44px] px-4 border border-[#111] bg-[#111] text-white"
+        >
+          Pro 업그레이드
+        </button>
       </div>
 
       <div className="mono-card p-5 space-y-3">

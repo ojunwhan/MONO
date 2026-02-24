@@ -27,6 +27,10 @@ module.exports = function attachKakaoAuth(app) {
     });
     res.redirect(`https://kauth.kakao.com/oauth/authorize?${params.toString()}`);
   });
+  app.get('/api/auth/kakao', (req, res) => {
+    const next = encodeURIComponent(req.query.next || '/');
+    return res.redirect(`/auth/kakao?next=${next}`);
+  });
 
   // 2) 콜백 → 토큰 교환 → 사용자 조회 → JWT 발급 → next로 이동
   app.get('/auth/kakao/callback', async (req, res) => {
@@ -50,18 +54,21 @@ module.exports = function attachKakaoAuth(app) {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       const kuser = meRes.data;
-      const sub = `kakao:${kuser.id}`;
+      const email = kuser?.kakao_account?.email || '';
       const profile = {
-        id: sub,
+        provider: 'kakao',
+        providerUserId: String(kuser.id),
         displayName: kuser.properties?.nickname || 'Kakao User',
         photoURL: kuser.properties?.profile_image || '',
-        provider: 'kakao',
+        email,
       };
 
+      let appUser = null;
       try {
-        await upsertUserFromOAuth({
-          id: profile.id,
-          email: '',
+        appUser = await upsertUserFromOAuth({
+          provider: profile.provider,
+          providerUserId: profile.providerUserId,
+          email: profile.email,
           nickname: profile.displayName,
           avatarUrl: profile.photoURL,
           nativeLanguage: 'ko',
@@ -73,7 +80,7 @@ module.exports = function attachKakaoAuth(app) {
 
       // JWT (30일)
       const appJwt = jwt.sign(
-        { sub: profile.id, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
+        { sub: appUser?.id || `kakao:${profile.providerUserId}`, name: profile.displayName, pic: profile.photoURL, p: profile.provider },
         process.env.JWT_SECRET,
         { expiresIn: '30d' }
       );
@@ -94,5 +101,9 @@ module.exports = function attachKakaoAuth(app) {
       console.error('kakao_callback_error', e?.response?.data || e);
       return res.status(500).send('KAKAO_CALLBACK_ERROR');
     }
+  });
+  app.get('/api/auth/kakao/callback', (req, res) => {
+    const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    return res.redirect(`/auth/kakao/callback${q}`);
   });
 };

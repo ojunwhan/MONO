@@ -7,8 +7,14 @@ CREATE TABLE IF NOT EXISTS users (
   mono_id TEXT NOT NULL UNIQUE,
   avatar_url TEXT,
   native_language TEXT NOT NULL,
+  google_id TEXT UNIQUE,
+  kakao_id TEXT UNIQUE,
+  line_id TEXT UNIQUE,
+  apple_id TEXT UNIQUE,
   phone_number TEXT UNIQUE,
   status_message TEXT,
+  plan TEXT NOT NULL DEFAULT 'free',
+  plan_expires_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -45,12 +51,27 @@ CREATE TABLE IF NOT EXISTS room_members (
   CONSTRAINT room_members_unique UNIQUE (room_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS translation_usage (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  month TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT translation_usage_unique UNIQUE (user_id, month)
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_mono_id ON users(mono_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_kakao_id ON users(kakao_id);
+CREATE INDEX IF NOT EXISTS idx_users_line_id ON users(line_id);
+CREATE INDEX IF NOT EXISTS idx_users_apple_id ON users(apple_id);
 CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users(phone_number);
 CREATE INDEX IF NOT EXISTS idx_friends_user_status ON friends(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_friends_friend_status ON friends(friend_id, status);
 CREATE INDEX IF NOT EXISTS idx_rooms_type_created_at ON rooms(type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_translation_usage_user_month ON translation_usage(user_id, month);
 

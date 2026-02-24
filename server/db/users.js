@@ -52,46 +52,117 @@ async function findUserById(id) {
   return get("SELECT * FROM users WHERE id = ? LIMIT 1", [id]);
 }
 
+const OAUTH_ID_COLUMNS = {
+  google: "google_id",
+  kakao: "kakao_id",
+  line: "line_id",
+  apple: "apple_id",
+};
+
+async function findUserByEmail(email = "") {
+  const v = String(email || "").trim().toLowerCase();
+  if (!v) return null;
+  return get("SELECT * FROM users WHERE email = ? LIMIT 1", [v]);
+}
+
+async function findUserByProviderId(provider, providerUserId) {
+  const col = OAUTH_ID_COLUMNS[provider];
+  if (!col) return null;
+  const v = String(providerUserId || "").trim();
+  if (!v) return null;
+  return get(`SELECT * FROM users WHERE ${col} = ? LIMIT 1`, [v]);
+}
+
 async function upsertUserFromOAuth({
-  id,
+  provider = "google",
+  providerUserId = "",
   email = "",
   nickname = "",
   avatarUrl = "",
   nativeLanguage = "en",
 }) {
-  const userId = String(id || "").trim();
-  if (!userId) throw new Error("user_id_required");
+  const p = String(provider || "").trim().toLowerCase();
+  const providerCol = OAUTH_ID_COLUMNS[p];
+  if (!providerCol) throw new Error("unsupported_provider");
+  const pid = String(providerUserId || "").trim();
+  if (!pid) throw new Error("provider_user_id_required");
 
-  const existing = await findUserById(userId);
+  const userId = `${p}:${pid}`;
   const resolvedNickname = normalizeNickname(nickname, "MONO User");
   const resolvedLang = normalizeLangCode(nativeLanguage);
   const resolvedEmail = String(email || "").trim().toLowerCase() || null;
   const resolvedAvatar = String(avatarUrl || "").trim() || null;
+  const byProvider = await findUserByProviderId(p, pid);
+  const byEmail = resolvedEmail ? await findUserByEmail(resolvedEmail) : null;
+  const existing = byProvider || byEmail || (await findUserById(userId));
 
   if (existing) {
+    const mergeFields = {
+      google_id: existing.google_id || null,
+      kakao_id: existing.kakao_id || null,
+      line_id: existing.line_id || null,
+      apple_id: existing.apple_id || null,
+    };
+    mergeFields[providerCol] = pid;
     await run(
       `
       UPDATE users
       SET email = COALESCE(?, email),
           nickname = ?,
           avatar_url = ?,
-          native_language = COALESCE(native_language, ?)
+          native_language = COALESCE(native_language, ?),
+          google_id = COALESCE(?, google_id),
+          kakao_id = COALESCE(?, kakao_id),
+          line_id = COALESCE(?, line_id),
+          apple_id = COALESCE(?, apple_id)
       WHERE id = ?
       `,
-      [resolvedEmail, resolvedNickname, resolvedAvatar, resolvedLang, userId]
+      [
+        resolvedEmail,
+        resolvedNickname,
+        resolvedAvatar,
+        resolvedLang,
+        mergeFields.google_id,
+        mergeFields.kakao_id,
+        mergeFields.line_id,
+        mergeFields.apple_id,
+        existing.id,
+      ]
     );
-    return findUserById(userId);
+    return findUserById(existing.id);
   }
 
   const monoSeed = normalizeMonoId(resolvedNickname.replace(/\s+/g, "_")) || "mono";
   const monoId = await ensureUniqueMonoId(monoSeed);
+  const providerValues = {
+    google_id: null,
+    kakao_id: null,
+    line_id: null,
+    apple_id: null,
+  };
+  providerValues[providerCol] = pid;
 
   await run(
     `
-    INSERT INTO users (id, email, nickname, mono_id, avatar_url, native_language, status_message)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (
+      id, email, nickname, mono_id, avatar_url, native_language, status_message,
+      google_id, kakao_id, line_id, apple_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [userId, resolvedEmail, resolvedNickname, monoId, resolvedAvatar, resolvedLang, ""]
+    [
+      userId,
+      resolvedEmail,
+      resolvedNickname,
+      monoId,
+      resolvedAvatar,
+      resolvedLang,
+      "",
+      providerValues.google_id,
+      providerValues.kakao_id,
+      providerValues.line_id,
+      providerValues.apple_id,
+    ]
   );
   return findUserById(userId);
 }
@@ -154,6 +225,7 @@ async function updateUserProfile(userId, patch) {
 
 module.exports = {
   findUserById,
+  findUserByEmail,
   upsertUserFromOAuth,
   updateUserProfile,
   normalizeLangCode,

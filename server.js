@@ -27,7 +27,10 @@ Ffmpeg.setFfmpegPath(ffmpegPath);
 // Google 및 Kakao 인증 라우트 모듈 불러오기
 const attachGoogleAuth = require('./server/routes/auth_google');
 const attachKakaoAuth = require('./server/routes/auth_kakao');
+const attachLineAuth = require('./server/routes/auth_line');
+const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
+const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 
 // --- lang detect & map ---
 const LANG_ALIAS = {
@@ -392,6 +395,39 @@ function emitQuotaWarning(socket) {
   });
 }
 
+function emitUsageLimitWarning(socket, usage) {
+  const limit = usage?.overview?.limit;
+  const used = usage?.overview?.used;
+  socket.emit("server-warning", {
+    code: "usage_limit_exceeded",
+    message: `Free translation limit reached (${used}/${limit}). Upgrade to Pro to continue translated delivery.`,
+  });
+}
+
+async function canTranslateForUser(socket, userId) {
+  if (!userId) return true;
+  try {
+    const status = await checkUsageLimit(userId);
+    if (!status.allowed) {
+      emitUsageLimitWarning(socket, status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("[billing:check]", e?.message || e);
+    return true;
+  }
+}
+
+async function consumeTranslationUsage(userId) {
+  if (!userId) return;
+  try {
+    await bumpTranslationUsage(userId, 1);
+  } catch (e) {
+    console.warn("[billing:consume]", e?.message || e);
+  }
+}
+
 async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
   if (!openai || isOpenAIBlocked()) return "";
   const wavBuffer = pcm16ToWavBuffer(pcmBuffer, sampleRateHz, 1);
@@ -481,6 +517,7 @@ if (process.env.STT_PROVIDER === "google") {
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
 // ═══════════════════════════════════════════════════════════════
@@ -1940,8 +1977,11 @@ io.on('connection', (socket) => {
         let translated = finalText;
         if (fromLang !== toLang) {
           try {
-            translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx);
-            console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
+            if (await canTranslateForUser(socket, participantId)) {
+              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx);
+              await consumeTranslationUsage(participantId);
+              console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
+            }
           } catch (e) { console.warn("[translate]:", e?.message); }
         }
         if (isGarbageText(translated)) return;
@@ -2030,8 +2070,12 @@ io.on('connection', (socket) => {
         const toLang = targetP.lang || "en";
         let translated = cleanText;
         if (fromLang !== toLang) {
-          try { translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx); }
-          catch (e) { console.warn("[translate]:", e?.message); }
+          try {
+            if (await canTranslateForUser(socket, participantId)) {
+              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx);
+              await consumeTranslationUsage(participantId);
+            }
+          } catch (e) { console.warn("[translate]:", e?.message); }
         }
 
         if (targetP.socketId) {
@@ -2089,8 +2133,12 @@ io.on('connection', (socket) => {
       for (const [lang, listeners] of Object.entries(langGroups)) {
         let translated = finalText;
         if (fromLang !== lang) {
-          try { translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx); }
-          catch (e) { console.warn("[translate]:", e?.message); }
+          try {
+            if (await canTranslateForUser(socket, participantId)) {
+              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx);
+              await consumeTranslationUsage(participantId);
+            }
+          } catch (e) { console.warn("[translate]:", e?.message); }
         }
         if (isGarbageText(translated)) continue;
 
@@ -2268,7 +2316,12 @@ io.on('connection', (socket) => {
 
       let draft = trimmedText;
       if (fromLang !== toLang) {
-        try { draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx); }
+        try {
+          if (await canTranslateForUser(socket, participantId)) {
+            draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx);
+            await consumeTranslationUsage(participantId);
+          }
+        }
         catch (e) {
           console.warn('[translate]:', e.message);
           if (isQuotaExceededError(e)) emitQuotaWarning(socket);
@@ -2344,7 +2397,12 @@ io.on('connection', (socket) => {
       const toLang = targetP.lang || "en";
       let draft = cleanText;
       if (fromLang !== toLang) {
-        try { draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx); }
+        try {
+          if (await canTranslateForUser(socket, participantId)) {
+            draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx);
+            await consumeTranslationUsage(participantId);
+          }
+        }
         catch (e) {
           console.warn('[translate]:', e.message);
           if (isQuotaExceededError(e)) emitQuotaWarning(socket);
@@ -2399,7 +2457,12 @@ io.on('connection', (socket) => {
     for (const [lang, listeners] of Object.entries(langGroups)) {
       let draft = trimmedText;
       if (fromLang !== lang) {
-        try { draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx); }
+        try {
+          if (await canTranslateForUser(socket, participantId)) {
+            draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx);
+            await consumeTranslationUsage(participantId);
+          }
+        }
         catch (e) {
           console.warn('[translate]:', e.message);
           if (isQuotaExceededError(e)) emitQuotaWarning(socket);
@@ -2600,6 +2663,8 @@ app.post("/stt", upload.single("audio"), async (req, res) => {
 
 attachGoogleAuth(app);
 attachKakaoAuth(app);
+attachLineAuth(app);
+attachAppleAuth(app);
 attachAuthApi(app);
 
 app.get("/api/guess-lang", (req,res)=>{

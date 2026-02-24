@@ -117,22 +117,32 @@
 - `src/pages/RoomList.jsx`
 
 ## 5. 다음 작업 포인트
-- Step 3-5: Global 확장 전 최소 운영문서 정리 완료
-  - `실행명령어.txt`에 운영/검증 명령 통합
-  - `build`, `healthz`, `qa:smoke`, `sim:stress` 기준 정리
-- Step 4-1: 운영 배포 체크리스트 문서 초안 완료
-  - `docs/phase4_ops_deploy_checklist.md`
-  - AWS/PM2/Nginx/SSL 및 배포 직후 스모크 항목 포함
-- Step 4-2: 장애 대응 런북 초안 완료
-  - `docs/phase4_incident_runbook.md`
-  - SEV 기준, 1차 대응, 롤백, 로그 채취, 사후조치 포함
-- Step 4-3: 운영 모니터링 지표 초안 완료
-  - `docs/phase4_monitoring_metrics.md`
-  - 소켓 안정성/전달률/지연/알람 임계치/대시보드 구성 포함
+- PDF 기준 재정렬:
+  - `MONO_Cursor_프롬프트_전체순서.md.pdf` 확인 후 Phase 4 정의를 재적용
+  - Phase 4는 운영문서화가 아니라 `4-1 과금`, `4-2 소셜로그인`, `4-3 폰트/디자인`
+- Step 4-1 (과금 체계) 구현 완료
+  - DB: `users.plan`, `users.plan_expires_at`, `translation_usage`
+  - 서버: 번역 시 사용자 월간 사용량 카운트 + free limit 초과 경고(`server-warning`)
+  - API:
+    - `GET /api/subscription/me`
+    - `POST /api/subscription/checkout` (결제 연동 스텁)
+    - `POST /api/subscription/webhook` (웹훅 스텁)
+  - 클라이언트: `Settings`의 구독관리 카드(이번 달 번역 횟수/플랜/업그레이드 버튼)
+- Step 4-2 (소셜로그인 확장) 진행 중
+  - OAuth 계정 매핑 컬럼 추가: `google_id`, `kakao_id`, `line_id`, `apple_id`
+  - 이메일 기반 계정 병합 로직 추가 (`upsertUserFromOAuth` 개선)
+  - 소셜 로그인 라우트:
+    - `Google`: `/auth/google` + `/api/auth/google` alias
+    - `Kakao`: `/auth/kakao` + `/api/auth/kakao` alias
+    - `LINE`: `/auth/line` + `/api/auth/line` alias
+    - `Apple`: `/auth/apple` + `/api/auth/apple` alias
+  - 콜백 라우트도 `/api/auth/*/callback` alias 지원
+  - Apple OAuth는 form_post + token exchange(id_token 확보) 경로 반영
+  - 로그인 JWT `sub`는 병합된 실제 사용자 레코드 id를 우선 사용하도록 수정
 - 다음 우선순위
-  - Phase 4 문서 기반 실운영 점검 리허설 (체크리스트 + 런북 + 지표)
-  - 알람 임계치 실데이터 튜닝
-  - 주간 운영 리포트 템플릿 확정
+  - Step 4-3: 폰트 스택(Pretendard/Inter/Noto Sans JP)과 디자인 토큰 정리 완료
+  - `docs/MONO_Cursor_프롬프트_전체순서.md` 기준 Phase 4 체크리스트(`4-1~4-3`) 완료 표시 반영
+  - 운영 반영 전: 소셜 로그인 provider별 실제 키/콘솔 설정 검증(환경변수/redirect URI)
 
 ## 6. 주의 사항
 - `.env`/키/비밀값은 문서에 기록하지 않음
