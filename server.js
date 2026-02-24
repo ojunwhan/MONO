@@ -1212,6 +1212,101 @@ io.on('connection', (socket) => {
     socket.emit("room-created-ack", { roomId, siteContext: ctx });
   });
 
+  // Ensure a shared global broadcast room exists without resetting existing participants.
+  socket.on("ensure-global-room", ({ roomId, participantId, fromLang } = {}, ack) => {
+    const ackReply = (payload) => {
+      if (typeof ack === "function") {
+        try { ack(payload); } catch {}
+      }
+    };
+    const rid = String(roomId || "global-lobby").trim().slice(0, 120) || "global-lobby";
+    let meta = ROOMS.get(rid);
+    let created = false;
+    if (!meta) {
+      created = true;
+      meta = {
+        roomType: "broadcast",
+        ownerLang: mapLang(fromLang || "en"),
+        guestLang: "auto",
+        siteContext: "general",
+        locked: true,
+        ownerPid: null,
+        participants: {},
+        callSignCounters: {},
+      };
+    }
+    const isOwner = !!participantId && !meta.ownerPid;
+    if (isOwner) {
+      meta.ownerPid = participantId;
+      meta.ownerLang = mapLang(fromLang || meta.ownerLang || "en");
+    }
+    ROOMS.set(rid, meta);
+    ackReply({ ok: true, roomId: rid, created, isOwner });
+    socket.emit("global-room-ready", { roomId: rid, created, isOwner });
+  });
+
+  // Atomic global join: avoid race between room ensure and join/auth checks.
+  socket.on("join-global", ({ roomId, participantId, fromLang, localName } = {}, ack) => {
+    const ackReply = (payload) => {
+      if (typeof ack === "function") {
+        try { ack(payload); } catch {}
+      }
+    };
+    if (!participantId || typeof participantId !== "string") {
+      ackReply({ ok: false, error: "participant_id_required" });
+      return;
+    }
+    const rid = String(roomId || "global-lobby").trim().slice(0, 120) || "global-lobby";
+    let meta = ROOMS.get(rid);
+    if (!meta) {
+      meta = {
+        roomType: "broadcast",
+        ownerLang: mapLang(fromLang || "en"),
+        guestLang: "auto",
+        siteContext: "general",
+        locked: true,
+        ownerPid: null,
+        participants: {},
+        callSignCounters: {},
+      };
+    }
+
+    const isOwner = !meta.ownerPid || meta.ownerPid === participantId;
+    if (isOwner) meta.ownerPid = participantId;
+    const role = isOwner ? "owner" : "guest";
+    const roleName = isOwner ? "Manager" : "Tech";
+    const langCode = mapLang(fromLang || "en");
+
+    socket.join(rid);
+    socket.roomId = rid;
+    socket.data.participantId = participantId;
+    SOCKET_ROLES.set(socket.id, { role });
+
+    const existing = meta.participants[participantId];
+    const callSign = existing?.callSign || assignCallSign(meta, roleName);
+    meta.participants[participantId] = {
+      callSign,
+      localName: localName || existing?.localName || "",
+      role: existing?.role || roleName,
+      lang: langCode || existing?.lang || "en",
+      socketId: socket.id,
+      phoneticVariants: existing?.phoneticVariants || generateCallSignPhonetics(callSign),
+    };
+    if (isOwner) meta.ownerLang = langCode || meta.ownerLang;
+    ROOMS.set(rid, meta);
+    emitParticipants(rid);
+    emitRoutes(rid);
+
+    socket.emit("call-sign-assigned", { callSign, siteContext: meta.siteContext });
+    socket.emit("room-context", {
+      siteContext: meta.siteContext,
+      locked: meta.locked,
+      roomType: meta.roomType,
+      roles: SITE_ROLES[meta.siteContext] || SITE_ROLES.general,
+    });
+    ackReply({ ok: true, roomId: rid, roleHint: role, callSign });
+  });
+
   socket.on('joinRoom', (roomId) => {
     socket.join(roomId);
     socket.roomId = roomId;

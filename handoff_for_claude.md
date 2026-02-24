@@ -73,6 +73,17 @@
   - `participants` 이벤트에 `online` 필드 추가
   - `message-status`, `message-read` 이벤트 추가
 
+### 2.6 Global 탭 최소 기능 (Step 3-1 / 3-2 진행)
+- `server.js`
+  - `join-global` 이벤트 추가
+    - 글로벌 방 생성/조인/참여자 등록 원자 처리
+    - `call-sign-assigned`, `room-context`, `participants` 동기화
+    - ACK로 `roomId/roleHint/callSign` 반환
+- `src/pages/Global.jsx`
+  - 스텁에서 실동작 페이지로 전환
+  - 글로벌 채널 입장 버튼 -> `join-global` -> `/room/global-lobby` 이동
+  - 로딩/상태 텍스트/타임아웃/오류 처리 추가
+
 ## 3. 검증 결과 (최근)
 - `npm run build`: 성공
 - lints: 신규 오류 없음
@@ -92,6 +103,7 @@
      - `receive-message`
      - `recent-messages`
   6) room filter edge-case 검증 (타 방 메시지 무시)
+  7) global broadcast 스모크 테스트 PASS (`join-global` 경로)
 
 ## 4. 현재 핵심 변경 파일
 - `server.js`

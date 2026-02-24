@@ -439,6 +439,7 @@ export default function ChatScreen() {
         if (originalText) {
           const minePreview = String(originalText || "").trim().slice(0, 120);
           recordRoomActivity(roomIdRef.current, {
+            roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
             lastMessagePreview: minePreview,
             lastMessageAt: eventTs,
             lastMessageMine: true,
@@ -464,6 +465,7 @@ export default function ChatScreen() {
       const incoming = dedupeRepeats(translatedText || originalText || "");
       if (!incoming) return;
       recordRoomActivity(roomIdRef.current, {
+        roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
         lastMessagePreview: String(incoming).trim().slice(0, 120),
         lastMessageAt: eventTs,
         lastMessageMine: false,
@@ -995,6 +997,7 @@ export default function ChatScreen() {
       typingStopTimerRef.current = null;
     }
     recordRoomActivity(roomId, {
+      roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
       lastMessagePreview: text.slice(0, 120),
       lastMessageAt: Date.now(),
       lastMessageMine: true,
