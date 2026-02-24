@@ -9,7 +9,8 @@
     "db:migrate:sqlite": "node server/db/run_migration_sqlite.js",
     "sim:stress": "node scripts/stress-sim.js",
     "sim:stress:5m": "node scripts/stress-sim.js",
-    "sim:stress:1h": "node scripts/stress-sim.js"
+    "sim:stress:1h": "node scripts/stress-sim.js",
+    "qa:smoke": "node scripts/qa-smoke.js"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",
