@@ -3,6 +3,18 @@ const jwt = require('jsonwebtoken');
 const { upsertUserFromOAuth } = require('../db/users');
 
 module.exports = function attachKakaoAuth(app) {
+  function isLocalRequest(req) {
+    const host = String(req.headers?.host || '').toLowerCase();
+    return host.includes('localhost') || host.startsWith('127.0.0.1');
+  }
+
+  function getCallbackUrl(req) {
+    const explicit = String(process.env.KAKAO_CALLBACK_URL || '').trim();
+    if (explicit) return explicit;
+    const origin = isLocalRequest(req) ? 'http://localhost:3174' : 'https://lingora.chat';
+    return `${origin}/auth/kakao/callback`;
+  }
+
   // JWT_SECRET 환경 변수 존재 여부 확인
   if (!process.env.JWT_SECRET) {
     console.error('SERVER_MISCONFIG: JWT_SECRET environment variable is not set for Kakao authentication.');
@@ -19,9 +31,10 @@ module.exports = function attachKakaoAuth(app) {
   // 1) 카카오로 리다이렉트
   app.get('/auth/kakao', (req, res) => {
     const next = req.query.next || '/';
+    const callbackUrl = getCallbackUrl(req);
     const params = new URLSearchParams({
       client_id: process.env.KAKAO_CLIENT_ID,
-      redirect_uri: process.env.KAKAO_CALLBACK_URL,
+      redirect_uri: callbackUrl,
       response_type: 'code',
       state: Buffer.from(JSON.stringify({ next })).toString('base64url'),
     });
@@ -36,15 +49,21 @@ module.exports = function attachKakaoAuth(app) {
   app.get('/auth/kakao/callback', async (req, res) => {
     try {
       const { code, state } = req.query;
-
-      // 액세스 토큰
-      const tokenRes = await axios.post('https://kauth.kakao.com/oauth/token', new URLSearchParams({
+      const callbackUrl = getCallbackUrl(req);
+      const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: process.env.KAKAO_CLIENT_ID,
-        client_secret: process.env.KAKAO_CLIENT_SECRET, // 사용 설정된 경우 필수
-        redirect_uri: process.env.KAKAO_CALLBACK_URL,
+        redirect_uri: callbackUrl,
         code,
-      }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      });
+      const clientSecret = String(process.env.KAKAO_CLIENT_SECRET || '').trim();
+      // Kakao can work without client_secret if app is configured for REST API key only.
+      if (clientSecret) tokenParams.set('client_secret', clientSecret);
+
+      // 액세스 토큰
+      const tokenRes = await axios.post('https://kauth.kakao.com/oauth/token', tokenParams, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
 
       const accessToken = tokenRes.data.access_token;
       if (!accessToken) return res.status(400).send('KAKAO_NO_TOKEN');
