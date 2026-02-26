@@ -20,6 +20,7 @@ const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
 const fs = require('fs');
 const multer = require('multer');
+const jwt = require('jsonwebtoken');
 // Google 및 Kakao 인증 라우트 모듈 불러오기
 const attachGoogleAuth = require('./server/routes/auth_google');
 const attachKakaoAuth = require('./server/routes/auth_kakao');
@@ -907,12 +908,13 @@ function getVisibleUsers(viewerUserId) {
 function ensureRoomMeta(roomId){
   let m = ROOMS.get(roomId);
   if(!m){
-    m = { roomType:'oneToOne', ownerLang:'auto', guestLang:'auto', siteContext:'general', locked:false, ownerPid:null, participants:{}, callSignCounters:{} };
+    m = { roomType:'oneToOne', ownerLang:'auto', guestLang:'auto', siteContext:'general', locked:false, ownerPid:null, participants:{}, callSignCounters:{}, expiresAt: Date.now() + 24 * 60 * 60 * 1000 };
     ROOMS.set(roomId, m);
   }
   if (!m.participants) m.participants = {};
   if (!m.callSignCounters) m.callSignCounters = {};
   if (!m.roomType) m.roomType = 'oneToOne';
+  if (!m.expiresAt) m.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
   return m;
 }
 
@@ -1272,6 +1274,7 @@ io.on('connection', (socket) => {
       ownerPid: participantId || null,
       participants: {},
       callSignCounters: {},
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     };
 
     if (participantId) {
@@ -1621,6 +1624,10 @@ io.on('connection', (socket) => {
     }
 
     const meta = ensureRoomMeta(roomId);
+    if (meta.expiresAt && Date.now() > Number(meta.expiresAt)) {
+      socket.emit("room-status", { status: "room-expired", roomId });
+      return;
+    }
 
     // ── 1:1 인원 제한: 방 타입이 oneToOne이면 최대 2명 ──
     if (meta.roomType === "oneToOne") {
@@ -2594,6 +2601,12 @@ io.on('connection', (socket) => {
 
     if (!roomId) return;
     SOCKET_ROLES.delete(socket.id);
+    let disconnectedWasHost = false;
+    const metaBefore = roomId ? ROOMS.get(roomId) : null;
+    if (metaBefore?.ownerPid) {
+      const ownerSocketId = metaBefore.participants?.[metaBefore.ownerPid]?.socketId;
+      disconnectedWasHost = ownerSocketId === socket.id;
+    }
     const roomSockets = io.sockets.adapter.rooms.get(roomId);
     const remaining = roomSockets ? roomSockets.size : 0;
 
@@ -2612,6 +2625,19 @@ io.on('connection', (socket) => {
       }, 300_000); // 5분 유예 (모바일 백그라운드 재접속 대비)
     } else {
       console.log(`👤 Room ${roomId} has ${remaining} socket(s) remaining`);
+      if (disconnectedWasHost) {
+        io.to(roomId).emit("host-left", { message: "호스트가 통역을 종료했습니다." });
+        setTimeout(() => {
+          const room = io.sockets.adapter.rooms.get(roomId);
+          const meta = ROOMS.get(roomId);
+          if (!room || room.size === 0 || !meta?.participants || Object.keys(meta.participants).length === 0) {
+            io.to(roomId).emit("room-closed");
+            ROOMS.delete(roomId);
+            delete messageBuffer[roomId];
+            console.log(`💨 Room ${roomId} closed after host left`);
+          }
+        }, 5 * 60 * 1000);
+      }
     }
   });
 
@@ -2679,6 +2705,55 @@ async function handleSttUpload(req, res) {
 
 app.post("/stt", upload.single("audio"), handleSttUpload);
 app.post("/api/stt", upload.single("audio"), handleSttUpload);
+
+function readAuthTokenFromRequest(req) {
+  const cookieToken = req.cookies?.token;
+  if (cookieToken) return cookieToken;
+  const auth = req.headers?.authorization || "";
+  if (String(auth).toLowerCase().startsWith("bearer ")) return String(auth).slice(7).trim();
+  return "";
+}
+
+app.post("/api/auth/convert-guest", async (req, res) => {
+  try {
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: "server_misconfig_jwt_secret" });
+    }
+    const token = readAuthTokenFromRequest(req);
+    if (!token) return res.status(401).json({ error: "unauthorized" });
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: "invalid_token" });
+    }
+    const roomId = String(req.body?.roomId || "").trim();
+    const guestId = String(req.body?.guestId || "").trim();
+    const userId = String(payload?.sub || "").trim();
+    if (!roomId || !guestId || !userId) {
+      return res.status(400).json({ error: "room_id_guest_id_required" });
+    }
+    const meta = ROOMS.get(roomId);
+    if (!meta?.participants || !meta.participants[guestId]) {
+      return res.json({ success: true, userId, converted: false });
+    }
+
+    if (!meta.participants[userId]) {
+      meta.participants[userId] = {
+        ...meta.participants[guestId],
+        role: meta.participants[guestId]?.role || "Tech",
+      };
+    }
+    delete meta.participants[guestId];
+    if (meta.ownerPid === guestId) meta.ownerPid = userId;
+    ROOMS.set(roomId, meta);
+    emitParticipants(roomId);
+
+    return res.json({ success: true, userId, converted: true });
+  } catch (e) {
+    return res.status(500).json({ error: "convert_guest_failed" });
+  }
+});
 
 
 attachGoogleAuth(app);

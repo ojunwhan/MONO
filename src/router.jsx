@@ -8,14 +8,16 @@ import Contacts from "./pages/Contacts";
 import SettingsPage from "./pages/Settings";
 import LoginPage from "./pages/Login";
 import CsChatPage from "./pages/CsChat";
+import GuestJoinPage from "./pages/GuestJoin";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
   const url = new URL(request.url);
   const roomId = url.searchParams.get("roomId");
   if (roomId) {
-    const search = url.searchParams.toString();
-    return redirect(`/interpret?${search}`);
+    const siteContext = url.searchParams.get("siteContext") || "general";
+    const roomType = url.searchParams.get("roomType") || "oneToOne";
+    return redirect(`/join/${encodeURIComponent(roomId)}?siteContext=${encodeURIComponent(siteContext)}&roomType=${encodeURIComponent(roomType)}`);
   }
 
   const me = await fetchAuthMe();
@@ -64,6 +66,10 @@ const router = createBrowserRouter([
         element: <SettingsPage />,
       },
     ],
+  },
+  {
+    path: "/join/:roomId",
+    element: <GuestJoinPage />,
   },
   {
     path: "/room/:roomId",

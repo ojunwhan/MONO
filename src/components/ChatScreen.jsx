@@ -13,6 +13,7 @@ import languages from "../constants/languages";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import useOutbox from "../hooks/useOutbox";
 import { touchRoom, recordRoomActivity, saveMessage, getMessages } from "../db";
+import { fetchAuthMe } from "../auth/session";
 import {
   initBrowserTts,
   hasVoiceForMonoLang,
@@ -92,10 +93,20 @@ export default function ChatScreen() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search || ""), [location.search]);
+  const queryGuestId = searchParams.get("guestId") || "";
+  const queryUid = searchParams.get("uid") || "";
+  const queryFromLang = searchParams.get("fromLang") || "";
+  const queryLocalName = searchParams.get("localName") || "";
+  const convertGuest = searchParams.get("convertGuest") === "1";
+  const isGuestMode = !!location.state?.isGuest;
 
   // PID
   const pidKey = `mro.pid.${roomId}`;
   const [participantId] = useState(() => {
+    if (queryUid) return String(queryUid);
+    if (isGuestMode && location.state?.guestId) return String(location.state.guestId);
+    if (queryGuestId) return String(queryGuestId);
     // 1:1 room path (RoomList/Setup): use stable userId for server identity + push routing
     const explicitUserId = location.state?.myUserId || "";
     if (explicitUserId) return explicitUserId;
@@ -108,11 +119,11 @@ export default function ChatScreen() {
   });
 
   const [fromLang] = useState(
-    location.state?.fromLang || localStorage.getItem("myLang") || "ko"
+    location.state?.fromLang || queryFromLang || localStorage.getItem("myLang") || "ko"
   );
-  const [localName] = useState(location.state?.localName || "");
+  const [localName] = useState(location.state?.localName || queryLocalName || "");
   const [selectedRole] = useState(location.state?.role || "Tech");
-  const roleHint = location.state?.isCreator ? "owner" : "guest";
+  const roleHint = isGuestMode ? "guest" : (location.state?.isCreator ? "owner" : "guest");
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
@@ -134,6 +145,8 @@ export default function ChatScreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState("");
   const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
+  const [showGuestConvertBanner, setShowGuestConvertBanner] = useState(isGuestMode);
   const roomMenuRef = useRef(null);
 
   // ── Network & Offline queue ──
@@ -917,6 +930,11 @@ export default function ChatScreen() {
   }, []);
 
   useEffect(() => {
+    const pushToast = (msg) => {
+      setToast(msg);
+      window.clearTimeout(window.__monoToastTimer);
+      window.__monoToastTimer = window.setTimeout(() => setToast(""), 2000);
+    };
     const iv = setInterval(() => {
       if (!socket.connected) return;
       lastPingAtRef.current = Date.now();
@@ -932,18 +950,54 @@ export default function ChatScreen() {
     const onRoomStatus = (payload) => {
       if (payload?.status === "room-gone") {
         setReconnectState("disconnected");
+      } else if (payload?.status === "room-expired") {
+        pushToast("이 통역 세션이 만료되었습니다.");
+        if (isGuestMode) {
+          try {
+            sessionStorage.removeItem("mono_guest");
+          } catch {}
+          navigate("/login");
+        } else {
+          navigate("/interpret");
+        }
       }
+    };
+    const onHostLeft = () => {
+      if (!isGuestMode) return;
+      pushToast("호스트가 통역을 종료했습니다.");
+    };
+    const onRoomClosed = () => {
+      if (!isGuestMode) return;
+      pushToast("방이 종료되었습니다.");
+      leaveAsGuestNow();
     };
     socket.on("mono-pong", onPong);
     socket.on("room-status", onRoomStatus);
+    socket.on("host-left", onHostLeft);
+    socket.on("room-closed", onRoomClosed);
     return () => {
       clearInterval(iv);
       socket.off("mono-pong", onPong);
       socket.off("room-status", onRoomStatus);
+      socket.off("host-left", onHostLeft);
+      socket.off("room-closed", onRoomClosed);
     };
-  }, []);
+  }, [isGuestMode, navigate]);
+
+  const leaveAsGuestNow = () => {
+    cancelSpeech();
+    socket.emit("manual-leave");
+    try {
+      sessionStorage.removeItem("mono_guest");
+    } catch {}
+    navigate("/login");
+  };
 
   const handleLeave = () => {
+    if (isGuestMode) {
+      setShowGuestSignupPrompt(true);
+      return;
+    }
     cancelSpeech();
     socket.emit("manual-leave");
     navigate("/home");
@@ -952,6 +1006,37 @@ export default function ChatScreen() {
   const onMicListeningChange = useCallback((listening) => {
     setMicListening(listening);
   }, []);
+
+  useEffect(() => {
+    if (!convertGuest || !queryGuestId || !roomId || isGuestMode) return;
+    let cancelled = false;
+    (async () => {
+      const me = await fetchAuthMe();
+      if (cancelled || !me?.authenticated || !me?.user?.id) return;
+      try {
+        await fetch("/api/auth/convert-guest", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guestId: queryGuestId, roomId }),
+        });
+      } catch {}
+      try {
+        sessionStorage.removeItem("mono_guest");
+      } catch {}
+      if (cancelled) return;
+      if (participantIdRef.current !== me.user.id) {
+        const params = new URLSearchParams();
+        params.set("uid", me.user.id);
+        params.set("fromLang", fromLangRef.current || "en");
+        if (localNameRef.current) params.set("localName", localNameRef.current);
+        window.location.replace(`/room/${encodeURIComponent(roomId)}?${params.toString()}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [convertGuest, queryGuestId, roomId, isGuestMode]);
 
   const handleUserGesture = useCallback(() => {}, []);
 
@@ -1075,6 +1160,19 @@ export default function ChatScreen() {
   return (
     <div className="relative">
       <div className="mono-shell h-screen w-screen flex flex-col max-w-[480px] mx-auto text-[var(--color-text)] bg-[var(--color-bg)]">
+        {showGuestConvertBanner ? (
+          <div className="fixed top-[56px] left-0 right-0 max-w-[480px] mx-auto z-[11] px-3 pt-2">
+            <div className="rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-[13px] flex items-center justify-between">
+              <span>🔒 가입하면 대화기록이 저장돼요</span>
+              <div className="flex items-center gap-2">
+                <a href={`/auth/google?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`} className="text-[var(--color-primary)] font-semibold">
+                  가입
+                </a>
+                <button type="button" onClick={() => setShowGuestConvertBanner(false)} className="text-[var(--color-text-secondary)]">✕</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {/* ─── Header ─── */}
         <div className="fixed top-0 left-0 right-0 bg-[var(--color-bg)] border-b border-[var(--color-border)] z-10 max-w-[480px] mx-auto">
           <div className="h-[56px] px-4 flex items-center justify-between">
@@ -1173,7 +1271,7 @@ export default function ChatScreen() {
         </div>
 
         {/* ─── Messages ─── */}
-        <div className="mono-scroll flex-1 overflow-y-auto px-3 pb-[112px] pt-[64px] bg-[var(--color-bg-secondary)]">
+        <div className={`mono-scroll flex-1 overflow-y-auto px-3 pb-[112px] ${showGuestConvertBanner ? "pt-[112px]" : "pt-[64px]"} bg-[var(--color-bg-secondary)]`}>
           {reconnectState === "disconnected" && (
             <button
               type="button"
@@ -1432,6 +1530,44 @@ export default function ChatScreen() {
           </div>
         </div>
       ) : null}
+      <BottomSheet open={showGuestSignupPrompt} onClose={() => setShowGuestSignupPrompt(false)} title="MONO에 가입하시겠어요?">
+        <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+          <div className="text-[14px] text-[var(--color-text-secondary)] leading-6">
+            가입하면
+            <br />✅ 대화 기록이 저장됩니다
+            <br />✅ 친구 추가가 가능합니다
+            <br />✅ 언제든 다시 통역할 수 있어요
+          </div>
+          <a
+            href={`/auth/google?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`}
+            className="mt-4 w-full flex items-center justify-center gap-2 py-3 border border-gray-300 rounded-xl bg-white text-[#111] font-medium"
+          >
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Google로 가입
+          </a>
+          <a
+            href={`/auth/kakao?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`}
+            className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FEE500] text-[#000000D9] font-medium"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
+              <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
+            </svg>
+            카카오로 가입
+          </a>
+          <button
+            type="button"
+            onClick={leaveAsGuestNow}
+            className="mt-3 w-full h-[44px] rounded-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+          >
+            나중에 할게요
+          </button>
+        </div>
+      </BottomSheet>
       <ToastMessage visible={!!toast} message={toast} />
     </div>
   );

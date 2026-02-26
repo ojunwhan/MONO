@@ -27,8 +27,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
 
   // ── Invitation link ──
   const link = useMemo(() => {
-    const base = new URL(`${window.location.origin}/`);
-    base.searchParams.set("roomId", roomId);
+    const base = new URL(`${window.location.origin}/join/${encodeURIComponent(roomId)}`);
     base.searchParams.set("siteContext", siteContext || "general");
     base.searchParams.set("roomType", roomType || "oneToOne");
     base.searchParams.set("v", Date.now().toString());
