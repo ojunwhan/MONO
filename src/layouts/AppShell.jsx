@@ -5,18 +5,18 @@ import { getAllRooms } from "../db";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 
 const TABS = [
-  { to: "/interpret", label: "통역", icon: Mic, activeColor: "#7C6FEB", matchPrefixes: ["/interpret"] },
-  { to: "/home", label: "채팅", icon: MessageCircle, activeColor: "#F472B6", matchPrefixes: ["/home", "/room"] },
-  { to: "/contacts", label: "연락처", icon: Users, activeColor: "#34D399", matchPrefixes: ["/contacts"] },
-  { to: "/settings", label: "설정", icon: Settings, activeColor: "#FBBF24", matchPrefixes: ["/settings"] },
+  { to: "/interpret", label: "통역", icon: Mic, matchPrefixes: ["/interpret"] },
+  { to: "/home", label: "채팅", icon: MessageCircle, matchPrefixes: ["/home", "/room"] },
+  { to: "/contacts", label: "연락처", icon: Users, matchPrefixes: ["/contacts"] },
+  { to: "/settings", label: "설정", icon: Settings, matchPrefixes: ["/settings"] },
 ];
 
-function tabClass() {
-  return [
-    "flex-1 h-full flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors duration-200",
-    "text-[var(--color-tab-inactive)]",
-  ].join(" ");
-}
+const TAB_COLORS = {
+  "/interpret": "#7C6FEB",
+  "/home": "#F472B6",
+  "/contacts": "#34D399",
+  "/settings": "#FBBF24",
+};
 
 export default function AppShell() {
   const location = useLocation();
@@ -67,23 +67,25 @@ export default function AppShell() {
             <NavLink
               key={tab.to}
               to={tab.to}
-              className={tabClass}
-              style={() => {
+              className={() => {
                 const isActive = (tab.matchPrefixes || []).some(
                   (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
                 );
-                return { color: isActive ? tab.activeColor : "var(--color-tab-inactive)" };
+                return `flex-1 h-full flex flex-col items-center justify-center gap-1 ${
+                  isActive ? "font-bold scale-110" : "font-normal scale-100"
+                } transition-transform duration-150`;
               }}
+              style={{ fontSize: "10px" }}
             >
               <div className="relative">
-                <tab.icon size={24} strokeWidth={1.8} />
+                <tab.icon size={24} strokeWidth={2.2} style={{ color: TAB_COLORS[tab.to] }} />
                 {tab.to === "/home" && unreadTotal > 0 ? (
                   <span className="absolute -top-2 -right-3 min-w-[18px] h-[18px] px-[4px] rounded-full bg-[var(--color-unread)] text-white text-[11px] font-bold leading-[18px] text-center">
                     {unreadTotal > 99 ? "99+" : unreadTotal}
                   </span>
                 ) : null}
               </div>
-              <span>{tab.label}</span>
+              <span style={{ color: TAB_COLORS[tab.to] }}>{tab.label}</span>
             </NavLink>
           ))}
         </div>
