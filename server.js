@@ -753,6 +753,8 @@ const STT_SESSIONS = new Map();
 const STT_TEXT_BUFFER = new Map();
 const RECENT_MESSAGE_IDS = new Map(); // roomId -> Map<msgId, ts>
 const RATE_BUCKETS = new Map(); // key(socketId:event) -> { count, resetAt }
+const ROOM_MESSAGE_CACHE = new Map(); // roomId -> recent conversation context
+const MAX_CONTEXT_MESSAGES = 10;
 
 const LIMITS = {
   MAX_MESSAGE_CHARS: 500,
@@ -930,17 +932,48 @@ function speakerMicroCtx(hist = [], role) {
   return last.map(m => `- (${m.role === 'owner' ? 'A' : 'B'}:${label(m.lang)}) ${m.text}`).join('\n');
 }
 
+function addToRoomContext(roomId, message) {
+  if (!roomId || !message?.text) return;
+  if (!ROOM_MESSAGE_CACHE.has(roomId)) {
+    ROOM_MESSAGE_CACHE.set(roomId, []);
+  }
+  const cache = ROOM_MESSAGE_CACHE.get(roomId);
+  cache.push({
+    text: String(message.text || '').trim(),
+    lang: message.lang || 'auto',
+    role: message.role || 'user',
+    timestamp: Date.now(),
+  });
+  if (cache.length > MAX_CONTEXT_MESSAGES) {
+    cache.splice(0, cache.length - MAX_CONTEXT_MESSAGES);
+  }
+}
+
+function getRoomContext(roomId) {
+  return ROOM_MESSAGE_CACHE.get(roomId) || [];
+}
+
 function buildSystemPrompt(from, to, ctx, siteContext) {
   const siteDomain = SITE_CONTEXT_PROMPTS[siteContext] || SITE_CONTEXT_PROMPTS.general;
   return [
-    `You are a real-time industrial translator for work sites.`,
-    siteDomain,
-    `Translation style: Direct, imperative, safety-first. Short sentences.`,
-    `Do NOT use casual tone, abbreviations, slang, or emojis.`,
-    `Preserve names, numbers, measurement units, and safety-critical terms exactly.`,
-    ctx ? `Speaker context:\n${ctx}` : '',
-    `Translate from ${label(from)} to ${label(to)}.`,
-    `Return ONLY the translated text. No explanations, no commentary.`,
+    `You are a professional real-time interpreter for MONO multilingual messenger.`,
+    `This is a casual chat messenger. Users use slang, abbreviations, and shorthand.`,
+    siteDomain ? `Domain context: ${siteDomain}` : '',
+    `Translate from ${label(from)} to ${label(to)} with conversation context awareness.`,
+    `Always preserve speaker tone and intensity: casual->casual, formal->formal, rude->rude, playful->playful.`,
+    `Internet slang must be translated to equivalent slang in target language.`,
+    `Examples: ㅇㅇ->yeah, ㄱㄱ->let's go, ㅋㅋㅋ->lol, lol->ㅋㅋ, nvm->됐어/아니야, idk->몰라, www->ㅋㅋㅋ, 666/yyds->sick/goat, 555->lol.`,
+    `Do not literal-translate slang if natural equivalent exists in target language.`,
+    `Honorific/formal Korean must remain formal and polite in English (business-like register).`,
+    `When prior context clearly points to a specific person, prefer natural person pronouns over generic "them".`,
+    `For Korean deferential endings like "감사합니다", "부탁드립니다/부탁드리겠습니다", use polite business English (e.g., "I would appreciate...", "could you please...").`,
+    `For colloquial Korean pronouns like "걔/그 사람", prefer a natural singular pronoun (him/her) when context indicates one person.`,
+    `Preserve proper nouns, brand names, numbers, units, and safety-critical terms accurately.`,
+    `Preserve emojis/emoticons (e.g., ㅠㅠ, :) ) as-is unless target has a direct equivalent emoji.`,
+    `If message is ambiguous, use conversation context to resolve references/pronouns.`,
+    `If message is not empty, NEVER refuse and NEVER ask for more text. Always output best-effort translation.`,
+    ctx ? `Recent speaker hints:\n${ctx}` : '',
+    `Output ONLY translated text. No explanation, no notes, no quotation marks, no brackets.`,
   ].filter(Boolean).join('\n');
 }
 
@@ -1018,16 +1051,25 @@ async function generateNameAdaptations(roomId) {
 
 // ─────────────────────────────────────────────────────────────────────
 
-async function fastTranslate(text, from, to, ctx, siteContext) {
+async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general');
+  const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map((msg) => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: `[${label(msg.lang)}] ${String(msg.text || '').trim()}`,
+    }))
+    .filter((msg) => msg.content.length > 3);
   try {
     const r = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
+      model: 'gpt-4o',
+      temperature: 0.3,
+      max_tokens: 1024,
       messages: [
         { role: 'system', content: sys },
-        { role: 'user', content: text },
+        ...recentContext,
+        { role: 'user', content: `Translate the following from ${label(from)} to ${label(to)}:\n\n${text}` },
       ],
     });
     return r.choices?.[0]?.message?.content?.trim() || text;
@@ -1037,17 +1079,26 @@ async function fastTranslate(text, from, to, ctx, siteContext) {
   }
 }
 
-async function hqTranslate(text, from, to, ctx, siteContext) {
+async function hqTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general')
-    + `\nPolish wording to native fluency *without changing tone or meaning*. Keep it short and imperative.`;
+    + `\nRefine to fluent native chat style without changing meaning or emotional tone.`;
+  const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map((msg) => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: `[${label(msg.lang)}] ${String(msg.text || '').trim()}`,
+    }))
+    .filter((msg) => msg.content.length > 3);
   try {
     const r = await openai.chat.completions.create({
       model: 'gpt-4o',
-      temperature: 0.2,
+      temperature: 0.3,
+      max_tokens: 1024,
       messages: [
         { role: 'system', content: sys },
-        { role: 'user', content: text },
+        ...recentContext,
+        { role: 'user', content: `Translate the following from ${label(from)} to ${label(to)}:\n\n${text}` },
       ],
     });
     return r.choices?.[0]?.message?.content?.trim() || text;
@@ -1957,6 +2008,9 @@ io.on('connection', (socket) => {
       const roomType = meta.roomType || "oneToOne";
       const msgId = uuidv4();
 
+      const roomContext = getRoomContext(roomId);
+      addToRoomContext(roomId, { text: finalText, lang: fromLang, role: 'user' });
+
       // ══════════════════════════════════════
       // A. ONE-TO-ONE ROOM — always send to the other person
       // ══════════════════════════════════════
@@ -1974,7 +2028,7 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx);
+              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext);
               await consumeTranslationUsage(participantId);
               console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
             }
@@ -1993,6 +2047,7 @@ io.on('connection', (socket) => {
             text: translated || finalText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
+          addToRoomContext(roomId, { text: translated || finalText, lang: toLang, role: 'assistant' });
         socket.emit("message-status", {
           roomId,
           messageId: msgId,
@@ -2026,7 +2081,7 @@ io.on('connection', (socket) => {
         // Make TTS follow the same finalized sentence shown in UI.
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx);
+          const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext);
           if (!isGarbageText(hq) && otherP?.socketId) {
             finalizedForTts = hq;
             io.to(otherP.socketId).emit("revise-message", {
@@ -2068,7 +2123,7 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx);
+              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext);
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
@@ -2082,6 +2137,7 @@ io.on('connection', (socket) => {
             text: translated || cleanText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
+        addToRoomContext(roomId, { text: translated || cleanText, lang: toLang, role: 'assistant' });
         }
         sendPushToUser(csMatch.targetPid, {
           title: senderCallSign || 'MONO',
@@ -2101,7 +2157,7 @@ io.on('connection', (socket) => {
 
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(cleanText, fromLang, toLang, "", siteCtx);
+          const hq = await hqTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext);
           if (!isGarbageText(hq) && targetP.socketId) {
             finalizedForTts = hq;
             io.to(targetP.socketId).emit("revise-message", { id: msgId, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -2131,7 +2187,7 @@ io.on('connection', (socket) => {
         if (fromLang !== lang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx);
+              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx, roomContext);
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
@@ -2150,6 +2206,7 @@ io.on('connection', (socket) => {
               text: translated || finalText,
               isDraft: true, at: Date.now(), timestamp: Date.now(),
             });
+            addToRoomContext(roomId, { text: translated || finalText, lang, role: 'assistant' });
           }
           if (listenerPid) {
             sendPushToUser(listenerPid, {
@@ -2163,7 +2220,7 @@ io.on('connection', (socket) => {
         }
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(finalText, fromLang, lang, "", siteCtx);
+          const hq = await hqTranslate(finalText, fromLang, lang, "", siteCtx, roomContext);
           if (!isGarbageText(hq)) {
             finalizedForTts = hq;
             for (const listener of listeners) {
@@ -2298,6 +2355,9 @@ io.on('connection', (socket) => {
     const detectedLang = detectTextLang(trimmedText);
     const fromLang = detectedLang || registeredLang;
 
+    const roomContext = getRoomContext(roomId);
+    addToRoomContext(roomId, { text: trimmedText, lang: fromLang, role: 'user' });
+
     // ══════════════════════════════════════
     // A. ONE-TO-ONE — always send to the other person
     // ══════════════════════════════════════
@@ -2314,7 +2374,7 @@ io.on('connection', (socket) => {
       if (fromLang !== toLang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx);
+            draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext);
             await consumeTranslationUsage(participantId);
           }
         }
@@ -2335,6 +2395,7 @@ io.on('connection', (socket) => {
           text: draft || trimmedText,
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
+        addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
         io.to(otherP.socketId).emit("notify", { title: senderDisplayName || "MONO", body: draft?.substring(0, 50) || "" });
         socket.emit("message-status", {
           roomId,
@@ -2355,7 +2416,7 @@ io.on('connection', (socket) => {
 
       let finalizedForTts = draft;
       try {
-        const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx);
+        const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext);
         if (!isGarbageText(hq) && otherP?.socketId) {
           finalizedForTts = hq;
           io.to(otherP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -2395,7 +2456,7 @@ io.on('connection', (socket) => {
       if (fromLang !== toLang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx);
+            draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext);
             await consumeTranslationUsage(participantId);
           }
         }
@@ -2413,6 +2474,7 @@ io.on('connection', (socket) => {
             text: draft || cleanText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
+        addToRoomContext(roomId, { text: draft || cleanText, lang: toLang, role: 'assistant' });
       }
       sendPushToUser(csMatch.targetPid, {
         title: senderCallSign || 'MONO',
@@ -2423,7 +2485,7 @@ io.on('connection', (socket) => {
       }).catch(() => {});
       let finalizedForTts = draft;
       try {
-        const hq = await hqTranslate(cleanText, fromLang, toLang, '', siteCtx);
+        const hq = await hqTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext);
         if (!isGarbageText(hq) && targetP.socketId) {
           finalizedForTts = hq;
           io.to(targetP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -2455,7 +2517,7 @@ io.on('connection', (socket) => {
       if (fromLang !== lang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx);
+            draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext);
             await consumeTranslationUsage(participantId);
           }
         }
@@ -2476,6 +2538,7 @@ io.on('connection', (socket) => {
             text: draft || trimmedText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
+          addToRoomContext(roomId, { text: draft || trimmedText, lang, role: 'assistant' });
           io.to(listener.socketId).emit("notify", { title: "MONO", body: draft?.substring(0, 50) || "" });
         }
         if (listenerPid) {
@@ -2491,7 +2554,7 @@ io.on('connection', (socket) => {
       let finalizedForTts = draft;
       // HQ revision per language group
       try {
-        const hq = await hqTranslate(trimmedText, fromLang, lang, '', siteCtx);
+        const hq = await hqTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext);
         if (!isGarbageText(hq)) {
           finalizedForTts = hq;
           for (const listener of listeners) {

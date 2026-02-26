@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate, useLocation } from "react-router-dom";
 import QRCodeBox from "../components/QRCodeBox";
 import { LANGUAGE_PROFILES, detectUserLanguage, getLanguageProfileByCode } from "../constants/languageProfiles";
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { getLanguageByCode } from "../constants/languages";
+import { ChevronLeft } from "lucide-react";
+import LanguageSelector from "../components/LanguageSelector";
 import { fetchAuthMe } from "../auth/session";
 
 function MonoLogo() {
@@ -17,58 +19,6 @@ function MonoLogo() {
   );
 }
 
-function LanguageDropdown({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const selected = getLanguageProfileByCode(value) || LANGUAGE_PROFILES[0];
-
-  useEffect(() => {
-    const onDocClick = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
-
-  return (
-    <div ref={wrapRef} className="relative w-full max-w-[320px] z-20">
-      <button
-        type="button"
-        onClick={() => setOpen((p) => !p)}
-        className="w-full px-4 text-left flex items-center justify-between bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[8px] h-[48px]"
-      >
-        <img className="flag" src={selected.flagUrl} alt={selected.name} />
-        <span className="flex-1 ml-3 text-[15px] font-medium text-[var(--color-text)]">
-          {selected.name}
-        </span>
-        <ChevronDown size={16} className={`text-[var(--color-text-secondary)] transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute left-0 right-0 mt-1 max-h-[300px] overflow-y-auto bg-[var(--color-bg)] rounded-[8px] border border-[var(--color-border)] shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-[100]">
-          {LANGUAGE_PROFILES.map((l) => (
-            <button
-              key={l.code}
-              type="button"
-              onClick={() => {
-                onChange(l.code);
-                setOpen(false);
-              }}
-              className={`w-full px-4 text-left h-[44px] flex items-center gap-3 hover:bg-[var(--color-bg-secondary)] ${
-                l.code === selected.code ? "bg-[#EEF4FF]" : ""
-              }`}
-            >
-              <img className="flag" src={l.flagUrl} alt={l.name} />
-              <span className="text-[15px] text-[var(--color-text)]">{l.name}</span>
-              {l.code === selected.code && <span className="ml-auto text-[var(--color-primary)]">✓</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,7 +27,7 @@ export default function Home() {
   const detected = useMemo(() => detectUserLanguage(), []);
   const initialLang = useMemo(() => {
     const saved = localStorage.getItem("myLang");
-    if (saved && getLanguageProfileByCode(saved)) return saved;
+    if (saved && getLanguageByCode(saved)) return saved;
     return detected?.code || "ko";
   }, [detected]);
 
@@ -186,7 +136,7 @@ export default function Home() {
           </div>
         ) : null}
         <div className="mb-8"><MonoLogo /></div>
-        <LanguageDropdown
+        <LanguageSelector
           value={selectedLang}
           onChange={isGuest ? setSelectedLang : handleHostLangChange}
         />

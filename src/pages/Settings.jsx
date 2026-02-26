@@ -3,6 +3,7 @@ import { clearMyIdentity, clearQueue, getMyIdentity, getStorageUsage, setMyIdent
 import { clearAllHistory } from "../utils/ChatStorage";
 import { LANGUAGE_PROFILES, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { useNavigate } from "react-router-dom";
+import LanguageSelector from "../components/LanguageSelector";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -304,26 +305,22 @@ export default function SettingsPage() {
         <div className="space-y-2">
           <div>
             <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">모국어</label>
-            <select className="mono-input w-full h-[44px] px-3" value={form.nativeLanguage} onChange={(e) => onChange("nativeLanguage", e.target.value)}>
-              {LANGUAGE_PROFILES.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.name}</option>
-              ))}
-            </select>
+            <LanguageSelector
+              value={form.nativeLanguage}
+              onChange={(code) => onChange("nativeLanguage", code)}
+              placeholder="모국어 검색..."
+            />
           </div>
           <div>
             <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">선호 번역 언어</label>
-            <select
-              className="mono-input w-full h-[44px] px-3"
+            <LanguageSelector
               value={preferredLang}
-              onChange={(e) => {
-                setPreferredLang(e.target.value);
-                localStorage.setItem("mono.preferredLang", e.target.value);
+              onChange={(code) => {
+                setPreferredLang(code);
+                localStorage.setItem("mono.preferredLang", code);
               }}
-            >
-              {LANGUAGE_PROFILES.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.name}</option>
-              ))}
-            </select>
+              placeholder="선호 언어 검색..."
+            />
           </div>
           <div>
             <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">앱 UI 언어</label>
