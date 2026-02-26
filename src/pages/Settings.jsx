@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { clearMyIdentity, clearQueue, getMyIdentity, setMyIdentity } from "../db";
+import { clearMyIdentity, clearQueue, getMyIdentity, getStorageUsage, setMyIdentity } from "../db";
 import { clearAllHistory } from "../utils/ChatStorage";
 import { LANGUAGE_PROFILES, getLanguageProfileByCode } from "../constants/languageProfiles";
+import { useNavigate } from "react-router-dom";
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -20,6 +22,20 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [subscription, setSubscription] = useState(null);
+  const [darkMode, setDarkMode] = useState(
+    typeof window !== "undefined" && localStorage.getItem("mono.theme") === "dark"
+  );
+  const [preferredLang, setPreferredLang] = useState(localStorage.getItem("mono.preferredLang") || "en");
+  const [uiLang, setUiLang] = useState(localStorage.getItem("mono.uiLang") || "ko");
+  const [ttsVoice, setTtsVoice] = useState(localStorage.getItem("mono.tts.voice") || "female");
+  const [ttsSpeed, setTtsSpeed] = useState(Number(localStorage.getItem("mono.tts.speed") || "1"));
+  const [autoPlay, setAutoPlay] = useState(localStorage.getItem("mono.tts.autoplay") !== "0");
+  const [micSensitivity, setMicSensitivity] = useState(Number(localStorage.getItem("mono.mic.sensitivity") || "60"));
+  const [fontSize, setFontSize] = useState(localStorage.getItem("mono.fontSize") || "보통");
+  const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem("mono.notif.enabled") !== "0");
+  const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem("mono.notif.sound") !== "0");
+  const [vibrationEnabled, setVibrationEnabled] = useState(localStorage.getItem("mono.notif.vibration") !== "0");
+  const [storageUsage, setStorageUsage] = useState({ usageMB: 0, quotaMB: 0 });
 
   const authFetch = useCallback(async (url, options = {}) => {
     return fetch(url, {
@@ -178,10 +194,37 @@ export default function SettingsPage() {
     }
   };
 
+  const toggleDarkMode = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("mono.theme", next ? "dark" : "light");
+  };
+
   const selectedLang = useMemo(
     () => getLanguageProfileByCode(form.nativeLanguage) || LANGUAGE_PROFILES[0],
     [form.nativeLanguage]
   );
+  const usagePercent = useMemo(() => {
+    if (!subscription?.monthlyLimit || subscription.monthlyLimit <= 0) return 0;
+    return Math.min(100, Math.round(((subscription?.usageCount || 0) / subscription.monthlyLimit) * 100));
+  }, [subscription]);
+  const storagePercent = useMemo(() => {
+    if (!storageUsage?.quotaMB) return 0;
+    return Math.min(100, Math.round((storageUsage.usageMB / storageUsage.quotaMB) * 100));
+  }, [storageUsage]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getStorageUsage()
+      .then((v) => setStorageUsage(v || { usageMB: 0, quotaMB: 0 }))
+      .catch(() => {});
+  }, [isAuthenticated]);
+
+  const persistToggle = (key, value, setter) => {
+    setter(value);
+    localStorage.setItem(key, value ? "1" : "0");
+  };
 
   if (loading) {
     return (
@@ -238,112 +281,185 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[420px] px-4 py-6 space-y-4">
-      <div className="mono-card p-5">
-        <h1 className="text-[18px] font-semibold">설정</h1>
-        <p className="mt-1 text-[12px] text-[#666]">
-          프로필 정보를 수정하고 계정을 로그아웃할 수 있습니다.
-        </p>
+    <div className="mx-auto w-full max-w-[480px] px-4 py-5 space-y-4 bg-[var(--color-bg-secondary)]">
+      <div className="text-[18px] font-semibold px-1">설정</div>
+
+      <div className="mono-card p-4">
+        <button type="button" onClick={() => {}} className="w-full text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center text-[20px] font-semibold">
+              {(form.nickname || "M").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[17px] font-semibold truncate">{form.nickname || "MONO User"}</div>
+              <div className="text-[14px] text-[var(--color-text-secondary)] truncate">@{form.monoId || "mono_id"}</div>
+              <div className="text-[14px] text-[var(--color-text-secondary)] truncate">{form.statusMessage || "상태메시지가 없습니다."}</div>
+            </div>
+          </div>
+        </button>
       </div>
 
-      <div className="mono-card p-5 space-y-3">
-        <div>
-          <label className="block text-[12px] text-[#666] mb-1">닉네임</label>
-          <input
-            className="mono-input w-full h-[44px] px-3"
-            value={form.nickname}
-            onChange={(e) => onChange("nickname", e.target.value)}
-            maxLength={40}
-          />
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">언어 설정</div>
+        <div className="space-y-2">
+          <div>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">모국어</label>
+            <select className="mono-input w-full h-[44px] px-3" value={form.nativeLanguage} onChange={(e) => onChange("nativeLanguage", e.target.value)}>
+              {LANGUAGE_PROFILES.map((lang) => (
+                <option key={lang.code} value={lang.code}>{lang.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">선호 번역 언어</label>
+            <select
+              className="mono-input w-full h-[44px] px-3"
+              value={preferredLang}
+              onChange={(e) => {
+                setPreferredLang(e.target.value);
+                localStorage.setItem("mono.preferredLang", e.target.value);
+              }}
+            >
+              {LANGUAGE_PROFILES.map((lang) => (
+                <option key={lang.code} value={lang.code}>{lang.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">앱 UI 언어</label>
+            <select
+              className="mono-input w-full h-[44px] px-3"
+              value={uiLang}
+              onChange={(e) => {
+                setUiLang(e.target.value);
+                localStorage.setItem("mono.uiLang", e.target.value);
+              }}
+            >
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+            </select>
+          </div>
         </div>
+      </div>
 
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">음성 설정</div>
         <div>
-          <label className="block text-[12px] text-[#666] mb-1">MONO ID</label>
-          <input
-            className="mono-input w-full h-[44px] px-3"
-            value={form.monoId}
-            onChange={(e) => onChange("monoId", e.target.value.toLowerCase())}
-            maxLength={30}
-            placeholder="mono_id"
-          />
-        </div>
-
-        <div>
-          <label className="block text-[12px] text-[#666] mb-1">
-            모국어 ({selectedLang?.shortLabel || selectedLang?.code?.toUpperCase()})
-          </label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">TTS 음성</label>
           <select
-            className="mono-input w-full h-[44px] px-3 bg-white"
-            value={form.nativeLanguage}
-            onChange={(e) => onChange("nativeLanguage", e.target.value)}
+            className="mono-input w-full h-[44px] px-3"
+            value={ttsVoice}
+            onChange={(e) => {
+              setTtsVoice(e.target.value);
+              localStorage.setItem("mono.tts.voice", e.target.value);
+            }}
           >
-            {LANGUAGE_PROFILES.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.name}
-              </option>
-            ))}
+            <option value="female">여성</option>
+            <option value="male">남성</option>
           </select>
         </div>
-
         <div>
-          <label className="block text-[12px] text-[#666] mb-1">상태 메시지</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">TTS 속도 ({ttsSpeed.toFixed(1)}x)</label>
           <input
-            className="mono-input w-full h-[44px] px-3"
-            value={form.statusMessage}
-            onChange={(e) => onChange("statusMessage", e.target.value)}
-            maxLength={160}
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={ttsSpeed}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setTtsSpeed(v);
+              localStorage.setItem("mono.tts.speed", String(v));
+            }}
+            className="w-full"
           />
         </div>
-
         <div>
-          <label className="block text-[12px] text-[#666] mb-1">전화번호 (연락처 초대용)</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">마이크 감도 ({micSensitivity})</label>
           <input
-            className="mono-input w-full h-[44px] px-3"
-            value={form.phoneNumber || ""}
-            onChange={(e) => onChange("phoneNumber", e.target.value)}
-            placeholder="+82..."
-            maxLength={24}
+            type="range"
+            min="1"
+            max="100"
+            step="1"
+            value={micSensitivity}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setMicSensitivity(v);
+              localStorage.setItem("mono.mic.sensitivity", String(v));
+            }}
+            className="w-full"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => persistToggle("mono.tts.autoplay", !autoPlay, setAutoPlay)}
+          className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between"
+        >
+          <span className="text-[15px]">자동재생</span>
+          <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${autoPlay ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}>
+            <span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${autoPlay ? "translate-x-[23px]" : "translate-x-[3px]"}`} />
+          </span>
+        </button>
+      </div>
 
-        {error ? <p className="text-[12px] text-[#DC2626]">{error}</p> : null}
-        {message ? <p className="text-[12px] text-[#2563EB]">{message}</p> : null}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={saveProfile}
-            disabled={saving}
-            className="mono-btn flex-1 h-[44px] border border-[#111] bg-[#111] text-white"
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">표시 설정</div>
+        <button
+          type="button"
+          onClick={toggleDarkMode}
+          className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between"
+        >
+          <span className="text-[15px]">다크모드</span>
+          <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${darkMode ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}>
+            <span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${darkMode ? "translate-x-[23px]" : "translate-x-[3px]"}`} />
+          </span>
+        </button>
+        <div>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">글자 크기</label>
+          <select
+            className="mono-input w-full h-[44px] px-3"
+            value={fontSize}
+            onChange={(e) => {
+              setFontSize(e.target.value);
+              localStorage.setItem("mono.fontSize", e.target.value);
+            }}
           >
-            저장
-          </button>
-          <button
-            type="button"
-            onClick={doLogout}
-            disabled={saving}
-            className="mono-btn h-[44px] px-4 border border-[#D1D5DB] bg-white text-[#111]"
-          >
-            로그아웃
-          </button>
+            <option>작게</option>
+            <option>보통</option>
+            <option>크게</option>
+          </select>
         </div>
       </div>
 
-      <div className="mono-card p-5 space-y-3">
-        <h2 className="text-[16px] font-semibold">구독관리</h2>
-        <p className="text-[12px] text-[#666]">
-          이번 달 번역{" "}
-          <span className="font-semibold text-[#111]">
-            {subscription?.usageCount ?? 0}
-          </span>
-          회
-          {subscription?.monthlyLimit != null
-            ? ` / ${subscription.monthlyLimit}회`
-            : " (무제한)"}
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">알림 설정</div>
+        <button type="button" onClick={() => persistToggle("mono.notif.enabled", !notifEnabled, setNotifEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
+          <span className="text-[15px]">알림</span>
+          <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${notifEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${notifEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
+        </button>
+        <button type="button" onClick={() => persistToggle("mono.notif.sound", !soundEnabled, setSoundEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
+          <span className="text-[15px]">소리</span>
+          <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${soundEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${soundEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
+        </button>
+        <button type="button" onClick={() => persistToggle("mono.notif.vibration", !vibrationEnabled, setVibrationEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
+          <span className="text-[15px]">진동</span>
+          <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${vibrationEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${vibrationEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
+        </button>
+        <button type="button" onClick={requestNotificationPermission} className="mono-btn h-[40px] px-4 border border-[var(--color-border)] bg-[var(--color-bg)]">
+          알림 권한 요청 (현재: {notificationPermission})
+        </button>
+      </div>
+
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">구독 관리</div>
+        <p className="text-[14px]">현재 플랜: <span className="font-semibold uppercase">{subscription?.plan || "free"}</span></p>
+        <p className="text-[13px] text-[var(--color-text-secondary)]">
+          이번 달 번역: {(subscription?.usageCount ?? 0)}회{subscription?.monthlyLimit != null ? ` / ${subscription.monthlyLimit}회` : " (무제한)"}
         </p>
-        <p className="text-[12px] text-[#666]">
-          현재 플랜: <span className="font-semibold text-[#111]">{subscription?.plan || "free"}</span>
-        </p>
+        <div className="h-2 rounded-full bg-[var(--color-bg-secondary)] overflow-hidden">
+          <div className="h-full bg-[var(--color-primary)]" style={{ width: `${usagePercent}%` }} />
+        </div>
         <button
           type="button"
           onClick={async () => {
@@ -355,44 +471,79 @@ export default function SettingsPage() {
               const d = await r.json().catch(() => ({}));
               if (!r.ok) throw new Error("checkout_failed");
               if (d?.checkoutUrl) window.location.href = d.checkoutUrl;
+              else setMessage("준비 중입니다.");
             } catch {
-              setError("결제 연결 준비 중입니다. 잠시 후 다시 시도해주세요.");
+              setMessage("준비 중입니다.");
             }
           }}
-          className="mono-btn h-[44px] px-4 border border-[#111] bg-[#111] text-white"
+          className="mono-btn w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
         >
           Pro 업그레이드
         </button>
       </div>
 
-      <div className="mono-card p-5 space-y-3">
-        <h2 className="text-[16px] font-semibold">저장관리</h2>
-        <p className="text-[12px] text-[#666]">
-          로컬 대화 기록/오프라인 전송 큐를 정리합니다.
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">저장 관리</div>
+        <p className="text-[13px] text-[var(--color-text-secondary)]">
+          로컬 저장량: {storageUsage?.usageMB?.toFixed?.(2) || "0.00"} MB
+          {storageUsage?.quotaMB ? ` / ${storageUsage.quotaMB.toFixed(2)} MB` : ""}
         </p>
-        <button
-          type="button"
-          onClick={clearLocalData}
-          disabled={saving}
-          className="mono-btn h-[44px] px-4 border border-[#D1D5DB] bg-white text-[#111]"
-        >
+        <div className="h-2 rounded-full bg-[var(--color-bg-secondary)] overflow-hidden">
+          <div className="h-full bg-[var(--color-primary)]" style={{ width: `${storagePercent}%` }} />
+        </div>
+        <button type="button" onClick={clearLocalData} disabled={saving} className="mono-btn h-[40px] px-4 border border-[var(--color-border)] bg-[var(--color-bg)]">
           로컬 데이터 정리
         </button>
       </div>
 
-      <div className="mono-card p-5 space-y-3">
-        <h2 className="text-[16px] font-semibold">알림</h2>
-        <p className="text-[12px] text-[#666]">
-          현재 권한: {notificationPermission}
-        </p>
-        <button
-          type="button"
-          onClick={requestNotificationPermission}
-          className="mono-btn h-[44px] px-4 border border-[#D1D5DB] bg-white text-[#111]"
-        >
-          알림 권한 요청
+      <div className="mono-card p-4 space-y-3">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">프로필</div>
+        <div className="space-y-2">
+          <input className="mono-input w-full h-[44px] px-3" value={form.nickname} onChange={(e) => onChange("nickname", e.target.value)} maxLength={40} placeholder="닉네임" />
+          <input className="mono-input w-full h-[44px] px-3" value={form.monoId} onChange={(e) => onChange("monoId", e.target.value.toLowerCase())} maxLength={30} placeholder="MONO ID" />
+          <input className="mono-input w-full h-[44px] px-3" value={form.statusMessage} onChange={(e) => onChange("statusMessage", e.target.value)} maxLength={160} placeholder="상태 메시지" />
+          <input className="mono-input w-full h-[44px] px-3" value={form.phoneNumber || ""} onChange={(e) => onChange("phoneNumber", e.target.value)} placeholder="+82..." maxLength={24} />
+        </div>
+        <button type="button" onClick={saveProfile} disabled={saving} className="mono-btn w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]">
+          프로필 저장
         </button>
       </div>
+
+      <div className="mono-card p-4 space-y-2">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">계정</div>
+        <button type="button" onClick={doLogout} disabled={saving} className="w-full text-left text-[15px] text-[#DC2626] h-[40px]">로그아웃</button>
+        <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">계정 삭제</button>
+        <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">차단 목록</button>
+      </div>
+
+      <div className="mono-card p-4 space-y-2">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">고객센터</div>
+        <button
+          type="button"
+          onClick={() => navigate("/cs-chat")}
+          className="w-full text-left h-[44px] text-[15px] inline-flex items-center justify-between"
+        >
+          <span>💬 MONO 도우미</span>
+          <span className="text-[var(--color-text-secondary)]">›</span>
+        </button>
+        <a
+          href="mailto:support@lingora.chat"
+          className="block h-[44px] leading-[44px] text-[15px]"
+        >
+          📧 이메일 문의
+        </a>
+      </div>
+
+      <div className="mono-card p-4 space-y-2">
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">앱 정보</div>
+        <a href="/terms" className="block text-[14px] text-[var(--color-text)]">이용약관</a>
+        <a href="/privacy" className="block text-[14px] text-[var(--color-text)]">개인정보처리방침</a>
+        <div className="text-[13px] text-[var(--color-text-secondary)]">앱 버전: {import.meta.env.VITE_APP_VERSION || "1.0.0"}</div>
+      </div>
+
+      {error ? <p className="text-[12px] text-[#DC2626]">{error}</p> : null}
+      {message ? <p className="text-[12px] text-[var(--color-primary)]">{message}</p> : null}
+      <div className="h-2" />
     </div>
   );
 }

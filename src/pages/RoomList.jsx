@@ -1,6 +1,8 @@
 // src/pages/RoomList.jsx — Recent conversations + new chat
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { MessageCircle, Search, SquarePen, Users as UsersIcon } from "lucide-react";
+import BottomSheet from "../components/BottomSheet";
 import {
   getMyIdentity,
   setMyIdentity,
@@ -24,6 +26,8 @@ export default function RoomList() {
   const [rooms, setRooms] = useState([]);
   const [friendCandidates, setFriendCandidates] = useState([]);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatStep, setNewChatStep] = useState("type");
+  const [newChatType, setNewChatType] = useState("dm");
   const registeredRef = useRef(false);
   const [loadingFriends, setLoadingFriends] = useState(false);
 
@@ -31,14 +35,28 @@ export default function RoomList() {
     if (!ts) return "";
     const d = new Date(ts);
     const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
     const sameDay =
       d.getFullYear() === now.getFullYear() &&
       d.getMonth() === now.getMonth() &&
       d.getDate() === now.getDate();
     if (sameDay) {
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
     }
+    const sameYesterday =
+      d.getFullYear() === yesterday.getFullYear() &&
+      d.getMonth() === yesterday.getMonth() &&
+      d.getDate() === yesterday.getDate();
+    if (sameYesterday) return "어제";
     return d.toLocaleDateString();
+  }, []);
+
+  const getAvatarColor = useCallback((name = "") => {
+    const palette = ["#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#06B6D4", "#F97316", "#84CC16"];
+    const key = String(name || "MONO");
+    const sum = Array.from(key).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return palette[sum % palette.length];
   }, []);
 
   // ── Load identity ──
@@ -159,7 +177,7 @@ export default function RoomList() {
   }, [loadRooms, me?.userId]);
 
   // ── Request user list for new chat ──
-  const openNewChat = async () => {
+  const loadFriendCandidates = async () => {
     setLoadingFriends(true);
     try {
       const res = await fetch("/api/contacts/friends", {
@@ -178,7 +196,21 @@ export default function RoomList() {
     } finally {
       setLoadingFriends(false);
     }
+  };
+
+  const openNewChat = async () => {
+    setNewChatStep("type");
+    setNewChatType("dm");
     setShowNewChat(true);
+  };
+
+  const selectNewChatType = async (type) => {
+    setNewChatType(type);
+    if (type === "group") {
+      return;
+    }
+    setNewChatStep("friends");
+    await loadFriendCandidates();
   };
 
   // ── Start 1:1 chat ──
@@ -225,156 +257,185 @@ export default function RoomList() {
     }
   }, [navigate]);
 
-  if (!me) return null;
+  if (!me) {
+    return (
+      <div className="mx-auto w-full max-w-[480px] px-4 py-5 space-y-3">
+        <div className="h-[52px] rounded-[12px] bg-[var(--color-bg-secondary)] animate-pulse" />
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <div key={idx} className="h-[72px] rounded-[12px] bg-[var(--color-bg-secondary)] animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className="mono-shell min-h-screen text-[#111]">
-      <div className="mx-auto w-full max-w-md min-h-screen flex flex-col">
+    <div className="mono-shell min-h-screen text-[var(--color-text)]">
+      <div className="mx-auto w-full max-w-[480px] min-h-screen flex flex-col bg-[var(--color-bg)]">
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-[#d1d5db] bg-[#f8fafc] backdrop-blur">
+        <div className="h-[52px] px-4 border-b border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-between">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[20px] font-bold tracking-[0.15em]">MONO</span>
-              <span className="ml-2 text-[12px] text-[#555]">· {me.canonicalName}</span>
+              <span className="text-[20px] font-bold tracking-[0.02em] text-[var(--color-primary)]">MONO</span>
             </div>
-            <div className="flex items-center gap-2">
-              {!isConnected && (
-                <span className="mono-chip bg-[#FF5252] text-white">
-                  오프라인
-                </span>
-              )}
-              <button
-                onClick={() => navigate("/settings")}
-                className="text-[12px] text-[#555] underline"
-              >
-                설정
-              </button>
-            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => alert("검색 기능은 곧 제공됩니다.")}
+              className="h-[44px] w-[44px] -mr-2 flex items-center justify-center text-[var(--color-text)]"
+              aria-label="검색"
+            >
+              <Search size={24} />
+            </button>
+            <button
+              type="button"
+              onClick={openNewChat}
+              className="h-[44px] w-[44px] -mr-2 flex items-center justify-center text-[var(--color-text)]"
+              aria-label="새 대화"
+            >
+              <SquarePen size={24} />
+            </button>
           </div>
         </div>
 
         {/* Room List */}
-        <div className="mono-scroll flex-1 overflow-y-auto px-3 py-3">
+        <div className="mono-scroll flex-1 overflow-y-auto">
+          {!isConnected ? (
+            <div className="px-4 py-2 text-[12px] text-[#B42318] bg-[#FEE4E2] border-b border-[#FECACA]">
+              인터넷 연결이 불안정합니다.
+            </div>
+          ) : null}
           {rooms.length === 0 ? (
-            <div className="mono-card px-4 py-12 text-center text-[14px] text-[#888]">
-              대화가 없습니다.
-              <br />
-              아래 버튼으로 새 대화를 시작하세요.
+            <div className="px-6 py-16 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center">
+                <MessageCircle size={24} />
+              </div>
+              <p className="mt-4 text-[16px] text-[var(--color-text)]">아직 대화가 없습니다</p>
+              <p className="mt-1 text-[14px] text-[var(--color-text-secondary)]">친구를 추가하고 대화를 시작해보세요</p>
+              <button
+                type="button"
+                onClick={() => navigate("/contacts")}
+                className="mono-btn mt-5 h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[14px]"
+              >
+                친구 추가
+              </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div>
               {rooms.map((room) => (
                 <div
                   key={room.roomId}
                   onClick={() => openRoom(room)}
-                  className="mono-card px-4 py-4 flex items-center justify-between cursor-pointer hover:bg-[#f9fafb] active:bg-[#f3f4f6] transition-colors"
+                  className="relative h-[72px] px-4 flex items-center justify-between cursor-pointer hover:bg-[var(--color-bg-secondary)] transition-colors"
                 >
+                  <div className="absolute left-[76px] right-0 top-0 h-px bg-[var(--color-border)]" />
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full bg-[#111] text-white flex items-center justify-center text-[16px] font-bold flex-shrink-0">
-                      {(room.peerAlias || room.peerCanonicalName || "?").charAt(0).toUpperCase()}
+                    <div
+                      className="w-12 h-12 rounded-full text-white flex items-center justify-center text-[18px] font-semibold flex-shrink-0 relative"
+                      style={{ backgroundColor: getAvatarColor(room.peerAlias || room.peerCanonicalName || "MONO") }}
+                    >
+                      {(room.peerAlias || room.peerCanonicalName || "M").charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[15px] font-medium truncate">
-                        {room.peerAlias || room.peerCanonicalName || "Unknown"}
+                      <div className="text-[15px] font-semibold truncate">
+                        {room.peerAlias || room.peerCanonicalName || "알 수 없는 사용자"}
                       </div>
-                      <div className="text-[12px] text-[#666] truncate">
+                      <div className="text-[14px] text-[var(--color-text-secondary)] truncate">
                         {room.lastMessagePreview
                           ? `${room.lastMessageMine ? "나: " : ""}${room.lastMessagePreview}`
                           : "메시지 없음"}
                       </div>
-                      <div className="text-[11px] text-[#888] truncate flex items-center gap-1 mt-1">
-                        <span className="mono-chip bg-[#eef2f7] text-[#4b5563]">
-                          {room.roomType === "broadcast" ? "방송" : "1:1"}
-                        </span>
-                        {(room.lastMessageAt || room.lastActiveAt) && (
-                          <span className="ml-1">
-                            · {formatListTime(room.lastMessageAt || room.lastActiveAt)}
-                          </span>
-                        )}
-                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {room.unreadCount > 0 && (
-                      <span className="mono-chip bg-[#FF5252] text-white min-w-[20px] text-center">
-                        {room.unreadCount > 99 ? "99+" : room.unreadCount}
-                      </span>
-                    )}
-                    <button
-                      onClick={(e) => handleDeleteRoom(room.roomId, e)}
-                      className="text-[11px] text-[#AAA] hover:text-[#FF5252] px-1"
-                    >
-                      ✕
-                    </button>
+                  <div className="h-full py-3 flex flex-col items-end justify-between">
+                    <div className="text-[12px] text-[var(--color-text-secondary)]">
+                      {formatListTime(room.lastMessageAt || room.lastActiveAt)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {room.unreadCount > 0 && (
+                        <span className="min-w-[20px] h-[20px] px-[6px] rounded-full bg-[var(--color-unread)] text-white text-[11px] font-semibold leading-[20px] text-center">
+                          {room.unreadCount > 99 ? "99+" : room.unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={(e) => handleDeleteRoom(room.roomId, e)}
+                    className="absolute right-2 top-2 text-[11px] text-[#AAA] hover:text-[#FF5252] px-1"
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* New Chat Button */}
-        <div className="px-4 py-3 border-t border-[#d1d5db] bg-[#f8fafc]">
-          <button
-            onClick={openNewChat}
-            className="mono-btn w-full py-3 bg-[#111] text-white text-[15px] font-medium border border-[#111]"
-          >
-            + 새 대화
-          </button>
-        </div>
-
         {/* New Chat Modal */}
-        {showNewChat && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-            <div className="w-full max-w-md bg-white border border-[#d1d5db] rounded-t-2xl max-h-[72vh] flex flex-col shadow-2xl">
-              <div className="px-4 py-3 border-b border-[#DDD] flex items-center justify-between">
-                <span className="text-[16px] font-bold">새 대화 시작</span>
-                <button
-                  onClick={() => setShowNewChat(false)}
-                  className="text-[14px] text-[#555]"
-                >
-                  닫기
-                </button>
-              </div>
-              <div className="mono-scroll flex-1 overflow-y-auto">
-                {loadingFriends ? (
-                  <div className="px-4 py-8 text-center text-[13px] text-[#888]">
+        <BottomSheet open={showNewChat} onClose={() => setShowNewChat(false)} title={newChatStep === "type" ? "새 대화" : "대화 상대 선택"}>
+          <div className="mono-scroll max-h-[78vh] overflow-y-auto">
+                {newChatStep === "type" ? (
+                  <div className="p-4 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => selectNewChatType("dm")}
+                      className="w-full h-[52px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left text-[15px] font-medium"
+                    >
+                      1:1 대화
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => selectNewChatType("group")}
+                      className="w-full h-[52px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left text-[15px] font-medium"
+                    >
+                      그룹 대화
+                    </button>
+                    {newChatType === "group" ? (
+                      <p className="text-[13px] text-[var(--color-text-secondary)]">
+                        그룹 대화 생성 UI는 곧 연결됩니다.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : loadingFriends ? (
+                  <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-secondary)]">
                     친구 목록 불러오는 중...
                   </div>
                 ) : friendCandidates.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-[13px] text-[#888]">
+                  <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-secondary)]">
                     친구가 없습니다.
                     <br />
                     연락처 탭에서 친구를 추가해주세요.
                   </div>
                 ) : (
-                  <div className="divide-y divide-[#EEE]">
+                  <div className="divide-y divide-[var(--color-border)]">
                     {friendCandidates.map((u) => (
                       <div
                         key={u.id}
                         onClick={() => startChat(u.id)}
-                        className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#F5F5F5] active:bg-[#EEE]"
+                        className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--color-bg-secondary)] transition-colors"
                       >
-                        <div className="w-9 h-9 bg-[#111] text-white flex items-center justify-center text-[14px] font-bold flex-shrink-0">
-                          {(u.nickname || "?").charAt(0).toUpperCase()}
+                        <div
+                          className="w-11 h-11 rounded-full text-white flex items-center justify-center text-[16px] font-semibold flex-shrink-0"
+                          style={{ backgroundColor: getAvatarColor(u.nickname || u.monoId || "MONO") }}
+                        >
+                          {(u.nickname || "M").charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="text-[14px] font-medium">
-                            {u.nickname || "Unknown"}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[15px] font-medium truncate">
+                            {u.nickname || "알 수 없는 사용자"}
                           </div>
-                          <div className="text-[11px] text-[#888]">
+                          <div className="text-[13px] text-[var(--color-text-secondary)] truncate">
                             @{u.monoId || ""}
                           </div>
                         </div>
+                        <UsersIcon size={16} className="text-[var(--color-text-secondary)]" />
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
           </div>
-        )}
+        </BottomSheet>
       </div>
     </div>
   );

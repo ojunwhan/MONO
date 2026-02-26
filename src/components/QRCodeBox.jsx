@@ -268,28 +268,27 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
   return (
     <div className="w-full flex flex-col items-center gap-4">
       {/* QR */}
-      <div className="bg-white p-4 border-2 border-[#E5E7EB] rounded-xl">
+      <div className="bg-[var(--color-bg)] p-4 border border-[var(--color-border)] rounded-[12px] shadow-sm">
         <QRCode
           value={link}
           size={200}
           bgColor="#FFFFFF"
-          fgColor="#059669"
+          fgColor="#3B82F6"
           level="M"
         />
       </div>
 
-      <p className="text-[13px] text-[#111] text-center font-medium">상대방에게 보여주세요</p>
-      <p className="text-[12px] text-[#666] text-center">Show this to your partner</p>
+      <p className="text-[14px] text-[var(--color-text-secondary)] text-center">상대방에게 보여주세요</p>
 
       <button
         type="button"
         onClick={copyToClipboard}
-        className="mono-btn px-4 py-2 border border-[#E5E7EB] bg-white text-[#374151] text-[14px]"
+        className="mono-btn h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-bg)] text-[var(--color-primary)] text-[14px]"
       >
         {copied ? "✅ 복사됨!" : "📋 링크 복사"}
       </button>
 
-      <p className="text-[11px] text-[#888] text-center">
+      <p className="text-[13px] text-[var(--color-text-secondary)] text-center">
         {guestJoined ? "상대방이 입장했습니다." : "게스트가 입장하면 자동으로 대화방으로 이동합니다."}
       </p>
     </div>

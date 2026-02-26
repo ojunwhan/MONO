@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useNavigate, useLocation } from "react-router-dom";
 import QRCodeBox from "../components/QRCodeBox";
 import { LANGUAGE_PROFILES, detectUserLanguage, getLanguageProfileByCode } from "../constants/languageProfiles";
+import { ChevronDown } from "lucide-react";
 
 function MonoLogo() {
   return (
@@ -34,16 +35,16 @@ function LanguageDropdown({ value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="w-full px-4 text-left flex items-center justify-between bg-white border border-[#E5E7EB] rounded-[12px] h-[48px]"
+        className="w-full px-4 text-left flex items-center justify-between bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[8px] h-[48px]"
       >
         <img className="flag" src={selected.flagUrl} alt={selected.name} />
-        <span className="flex-1 ml-3 text-[16px] font-medium text-[#374151]">
+        <span className="flex-1 ml-3 text-[15px] font-medium text-[var(--color-text)]">
           {selected.name}
         </span>
-        <span className="text-[12px] text-[#666]">{open ? "▲" : "▼"}</span>
+        <ChevronDown size={16} className={`text-[var(--color-text-secondary)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 mt-1 max-h-[300px] overflow-y-auto bg-white rounded-[12px] border border-[#E5E7EB] shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-[100]">
+        <div className="absolute left-0 right-0 mt-1 max-h-[300px] overflow-y-auto bg-[var(--color-bg)] rounded-[8px] border border-[var(--color-border)] shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-[100]">
           {LANGUAGE_PROFILES.map((l) => (
             <button
               key={l.code}
@@ -52,13 +53,13 @@ function LanguageDropdown({ value, onChange }) {
                 onChange(l.code);
                 setOpen(false);
               }}
-              className={`w-full px-4 text-left h-[44px] flex items-center gap-3 hover:bg-[#F9FAFB] ${
-                l.code === selected.code ? "bg-[#F3F4FF]" : ""
+              className={`w-full px-4 text-left h-[44px] flex items-center gap-3 hover:bg-[var(--color-bg-secondary)] ${
+                l.code === selected.code ? "bg-[#EEF4FF]" : ""
               }`}
             >
               <img className="flag" src={l.flagUrl} alt={l.name} />
-              <span className="text-[15px] text-[#374151]">{l.name}</span>
-              {l.code === selected.code && <span className="ml-auto text-[#7C6FEB]">✓</span>}
+              <span className="text-[15px] text-[var(--color-text)]">{l.name}</span>
+              {l.code === selected.code && <span className="ml-auto text-[var(--color-primary)]">✓</span>}
             </button>
           ))}
         </div>
@@ -134,16 +135,19 @@ export default function Home() {
   const me = getLanguageProfileByCode(selectedLang) || LANGUAGE_PROFILES[0];
 
   return (
-    <div className="min-h-[100dvh] text-[#111] bg-[#FAFAFF]">
-      <div className="mx-auto w-full max-w-[380px] min-h-[100dvh] px-4 py-4 box-border flex flex-col items-center justify-center overflow-hidden">
-        <div className="mb-4"><MonoLogo /></div>
+    <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+      <div className="mx-auto w-full max-w-[480px] min-h-[100dvh] px-4 py-6 box-border flex flex-col items-center justify-start overflow-hidden">
+        <div className="w-full h-[52px] flex items-center">
+          <h1 className="text-[18px] font-semibold">통역</h1>
+        </div>
+        <div className="mt-4 mb-5"><MonoLogo /></div>
         <LanguageDropdown
           value={selectedLang}
           onChange={isGuest ? setSelectedLang : handleHostLangChange}
         />
 
         {!isGuest ? (
-          <div className="mt-4 w-full flex flex-col items-center">
+          <div className="mt-5 w-full flex flex-col items-center">
             {!!roomId && !!hostPid && (
               <QRCodeBox
                 key={roomId}
@@ -162,7 +166,7 @@ export default function Home() {
             <button
               type="button"
               onClick={handleGuestStart}
-              className="mono-btn w-full px-4 py-3 text-[16px] font-medium border bg-[#7C6FEB] text-white border-[#7C6FEB]"
+              className="mono-btn w-full h-[48px] px-4 text-[16px] font-medium border bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
             >
               {me.startLabel}
             </button>

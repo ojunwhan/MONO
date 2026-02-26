@@ -7,6 +7,8 @@ import AppShell from "./layouts/AppShell";
 import Contacts from "./pages/Contacts";
 import GlobalPage from "./pages/Global";
 import SettingsPage from "./pages/Settings";
+import LoginPage from "./pages/Login";
+import CsChatPage from "./pages/CsChat";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -22,13 +24,17 @@ async function rootRedirectLoader({ request }) {
     await syncAuthUserToLocalIdentity();
     return redirect("/home");
   }
-  return redirect("/interpret");
+  return redirect("/login");
 }
 
 const router = createBrowserRouter([
   {
     path: "/",
     loader: rootRedirectLoader,
+  },
+  {
+    path: "/login",
+    element: <LoginPage />,
   },
   {
     path: "/setup",
@@ -67,6 +73,10 @@ const router = createBrowserRouter([
   {
     path: "/room/:roomId",
     element: <ChatScreen />,
+  },
+  {
+    path: "/cs-chat",
+    element: <CsChatPage />,
   },
 ]);
 

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
+const OpenAI = require("openai");
 const {
   findUserById,
   updateUserProfile,
@@ -10,6 +11,137 @@ const {
   getUserBillingOverview,
   getFreeMonthlyLimit,
 } = require("../billing");
+
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+function buildCsSystemPrompt(language = "ko") {
+  const lang = String(language || "ko").toLowerCase();
+  return `당신은 MONO 앱의 AI 고객지원 도우미 "모노봇"입니다.
+사용자의 언어에 맞춰 같은 언어로 답변하세요.
+친절하고 간결하게, 존댓말로 답변하세요.
+모르는 내용은 추측하지 말고 "담당자에게 연결해드리겠습니다"라고 안내하세요.
+[MONO 앱 정보]
+
+MONO란?
+
+
+AI 실시간 통역 메신저. 언어가 달라도 모국어로 대화 가능.
+웹브라우저에서 바로 사용하는 PWA. 앱 설치 불필요.
+Google 또는 카카오 계정으로 로그인하면 자동 가입.
+지원 언어: 한국어, 영어, 일본어, 중국어, 베트남어 등.
+
+
+QR 즉시통역
+
+
+회원가입 없이 QR코드 스캔으로 바로 통역 대화 시작.
+상대방 앱 설치 불필요. 브라우저에서 바로 참여.
+기본 제공 횟수 내 무료.
+
+
+메신저 기능
+
+
+친구 추가: 연락처 탭에서 MONO ID 검색 또는 초대 링크 전송.
+MONO ID: 고유 아이디. 설정에서 확인 가능.
+그룹 채팅: 여러 명이 각자 모국어로 대화 가능.
+음성 메시지: 마이크 버튼으로 음성 전송. 자동 텍스트 변환 + 번역.
+글로벌 채팅방: 전 세계 사용자와 공개 대화.
+
+
+번역/통역
+
+
+GPT-4o 기반 AI 번역. 자연스러운 대화체.
+번역 오류 시: 메시지 길게 누르기 → "번역 다시하기" 또는 "번역 피드백".
+음성 인식 문제 시: 조용한 환경, 또렷한 발음. 설정에서 마이크 감도 조절.
+TTS 끄기: 설정 > 음성 설정 > 자동재생 OFF.
+
+
+요금/구독
+
+
+Free 플랜: 월 1,000회 번역 무료.
+Pro 플랜: 추가 번역 횟수 + 프리미엄 기능 (준비 중).
+남은 횟수 확인: 설정 > 구독 관리.
+
+
+계정/설정
+
+
+프로필 변경: 설정 > 프로필 카드 탭.
+모국어 변경: 설정 > 언어 설정.
+다크모드: 설정 > 표시 설정.
+로그아웃/계정삭제: 설정 하단.
+데이터: 로컬(기기) 저장. 설정 > 저장 관리에서 확인/정리.
+
+
+보안/개인정보
+
+
+대화는 참여자만 열람 가능. 제3자 접근 불가.
+AI 번역 처리 후 서버에 대화 내용 보관하지 않음.
+개인정보처리방침에 따라 최소한의 정보만 수집.
+
+
+PWA 사용법
+
+
+홈 화면 추가: iPhone → Safari > 공유 > "홈 화면에 추가" / Android → Chrome > 메뉴 > "홈 화면에 추가"
+앱스토어 출시는 준비 중.
+
+
+제조업 현장
+
+
+여러 직원이 각자 기기에서 동시 접속 가능.
+모바일 데이터로 Wi-Fi 없이도 사용 가능.
+
+
+문제 해결
+
+
+연결 끊김: 인터넷 확인. Wi-Fi ↔ 모바일 데이터 전환.
+메시지 전송 실패: 새로고침 또는 재로그인.
+알림 안 옴: 브라우저 알림 권한 허용 확인. 설정 > 알림.
+
+[답변 불가 상황]
+다음의 경우 "이 문의는 담당자에게 전달해드리겠습니다. 이메일(support@lingora.chat)로 연락 주시면 빠르게 도움드리겠습니다."라고 안내:
+
+결제/환불 관련 실제 처리가 필요한 경우
+버그 신고 (구체적 오류 현상)
+계정 복구/데이터 복원 요청
+MONO와 무관한 질문
+
+[응답 언어]
+- 반드시 language="${lang}"에 맞는 언어로 답변하세요.`;
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  const trimmed = history.slice(-10);
+  const out = [];
+  for (const item of trimmed) {
+    if (typeof item === "string") {
+      const content = item.trim();
+      if (content) out.push({ role: "user", content });
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+    const roleRaw = String(item.role || "").toLowerCase();
+    const role =
+      roleRaw === "assistant" || roleRaw === "system"
+        ? roleRaw
+        : "user";
+    const content = String(
+      item.content || item.message || item.text || item.reply || ""
+    ).trim();
+    if (content) out.push({ role, content });
+  }
+  return out.slice(-10);
+}
 
 function readToken(req) {
   const cookieToken = req.cookies?.token;
@@ -682,6 +814,51 @@ module.exports = function attachAuthApi(app) {
   // Webhook placeholder (signature verification to be added with real PSP)
   app.post("/api/subscription/webhook", async (req, res) => {
     return res.status(202).json({ success: true, status: "pending_integration" });
+  });
+
+  // ── CS Chatbot (Settings > Customer Support) ──
+  app.post("/api/cs-chat", verifyToken, async (req, res) => {
+    try {
+      if (!openai) {
+        return res.status(503).json({ error: "openai_api_key_missing" });
+      }
+      const message = String(req.body?.message || "").trim();
+      const language = normalizeLangCode(
+        String(req.body?.language || "ko").trim() || "ko"
+      );
+      const history = normalizeHistory(req.body?.history);
+
+      if (!message) {
+        return res.status(400).json({ error: "message_required" });
+      }
+      if (message.length > 4000) {
+        return res.status(400).json({ error: "message_too_long" });
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: process.env.CS_CHAT_MODEL || "gpt-4o-mini",
+        temperature: 0.3,
+        max_tokens: 500,
+        messages: [
+          { role: "system", content: buildCsSystemPrompt(language) },
+          ...history,
+          { role: "user", content: message },
+        ],
+      });
+
+      const reply = String(
+        completion?.choices?.[0]?.message?.content || ""
+      ).trim();
+      if (!reply) {
+        return res.status(502).json({ error: "empty_cs_reply" });
+      }
+      return res.json({ reply });
+    } catch (e) {
+      return res.status(500).json({
+        error: "cs_chat_failed",
+        detail: e?.message || "unknown_error",
+      });
+    }
   });
 };
 

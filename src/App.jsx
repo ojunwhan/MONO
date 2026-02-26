@@ -2,12 +2,20 @@ import React, { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 import router from "./router";
 import InAppBlocker from "./components/InAppBlocker"; // ✅ 추가
+import OnboardingSlides from "./components/OnboardingSlides";
 import socket from "./socket";
 import { getMyIdentity } from "./db";
 import { subscribeToPush } from "./push";
 
 const App = () => {
+  const [showOnboarding, setShowOnboarding] = React.useState(
+    () => localStorage.getItem("mono.onboardingDone") !== "1"
+  );
+
   useEffect(() => {
+    const theme = localStorage.getItem("mono.theme");
+    document.documentElement.classList.toggle("dark", theme === "dark");
+
     let disposed = false;
     let registerHandler = null;
     // App first load: restore identity -> register user -> subscribe push.
@@ -35,6 +43,13 @@ const App = () => {
     <>
       <InAppBlocker />   {/* ✅ 인앱 브라우저 차단 */}
       <RouterProvider router={router} />
+      <OnboardingSlides
+        open={showOnboarding}
+        onClose={() => {
+          localStorage.setItem("mono.onboardingDone", "1");
+          setShowOnboarding(false);
+        }}
+      />
     </>
   );
 };

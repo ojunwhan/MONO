@@ -204,24 +204,47 @@ async function scenarioGlobalBroadcast() {
   const A = mkClient();
   const B = mkClient();
   let got = false;
+  let aRole = "";
+  let bRole = "";
+  let joinsDone = 0;
 
   await new Promise((resolve) => {
     A.on("connect", () => {
       A.emit("join-global", { roomId, participantId: a, fromLang: "en", localName: "A" }, (ack) => {
-        if (!ack?.ok) resolve();
+        if (!ack?.ok) return resolve();
+        aRole = String(ack?.roleHint || "");
+        joinsDone += 1;
       });
     });
     B.on("connect", () => {
       B.emit("join-global", { roomId, participantId: b, fromLang: "en", localName: "B" }, (ack) => {
-        if (!ack?.ok) resolve();
+        if (!ack?.ok) return resolve();
+        bRole = String(ack?.roleHint || "");
+        joinsDone += 1;
       });
     });
     B.on("receive-message", (p) => {
       if (p?.roomId === roomId) got = true;
     });
+    A.on("receive-message", (p) => {
+      if (p?.roomId === roomId) got = true;
+    });
     setTimeout(() => {
-      A.emit("send-message", { roomId, participantId: a, message: { id: `g-${Date.now()}`, text: "global qa" } });
-    }, 1200);
+      // In broadcast rooms only owner can send; pick sender based on join-global ack.
+      if (joinsDone < 2) return;
+      const sender =
+        aRole === "owner"
+          ? { socket: A, pid: a }
+          : bRole === "owner"
+            ? { socket: B, pid: b }
+            : null;
+      if (!sender) return;
+      sender.socket.emit("send-message", {
+        roomId,
+        participantId: sender.pid,
+        message: { id: `g-${Date.now()}`, text: "global qa" },
+      });
+    }, 1400);
     setTimeout(resolve, 3200);
   });
 

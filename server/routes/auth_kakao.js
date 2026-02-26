@@ -15,6 +15,10 @@ module.exports = function attachKakaoAuth(app) {
     return `${origin}/auth/kakao/callback`;
   }
 
+  function getKakaoClientId() {
+    return String(process.env.KAKAO_CLIENT_ID || '').trim();
+  }
+
   // JWT_SECRET 환경 변수 존재 여부 확인
   if (!process.env.JWT_SECRET) {
     console.error('SERVER_MISCONFIG: JWT_SECRET environment variable is not set for Kakao authentication.');
@@ -32,8 +36,12 @@ module.exports = function attachKakaoAuth(app) {
   app.get('/auth/kakao', (req, res) => {
     const next = req.query.next || '/';
     const callbackUrl = getCallbackUrl(req);
+    const clientId = getKakaoClientId();
+    if (!clientId) {
+      return res.status(503).send('KAKAO_CLIENT_ID_MISSING');
+    }
     const params = new URLSearchParams({
-      client_id: process.env.KAKAO_CLIENT_ID,
+      client_id: clientId,
       redirect_uri: callbackUrl,
       response_type: 'code',
       state: Buffer.from(JSON.stringify({ next })).toString('base64url'),
@@ -50,15 +58,22 @@ module.exports = function attachKakaoAuth(app) {
     try {
       const { code, state } = req.query;
       const callbackUrl = getCallbackUrl(req);
+      const clientId = getKakaoClientId();
+      if (!clientId) {
+        return res.status(503).send('KAKAO_CLIENT_ID_MISSING');
+      }
       const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: process.env.KAKAO_CLIENT_ID,
+        client_id: clientId,
         redirect_uri: callbackUrl,
         code,
       });
       const clientSecret = String(process.env.KAKAO_CLIENT_SECRET || '').trim();
-      // Kakao can work without client_secret if app is configured for REST API key only.
-      if (clientSecret) tokenParams.set('client_secret', clientSecret);
+      // Kakao token exchange requires client_secret in this deployment.
+      if (!clientSecret) {
+        return res.status(503).send('KAKAO_CLIENT_SECRET_MISSING');
+      }
+      tokenParams.set('client_secret', clientSecret);
 
       // 액세스 토큰
       const tokenRes = await axios.post('https://kauth.kakao.com/oauth/token', tokenParams, {

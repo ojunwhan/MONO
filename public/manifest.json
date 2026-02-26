@@ -4,8 +4,9 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#2D5BFF",
+  "theme_color": "#3B82F6",
   "description": "Mr.O C2C 실시간 통역기",
   "icons": [
     {

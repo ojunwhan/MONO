@@ -20,10 +20,6 @@ const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
 const fs = require('fs');
 const multer = require('multer');
-const ffmpegPath = require("ffmpeg-static");
-const Ffmpeg = require("fluent-ffmpeg");
-Ffmpeg.setFfmpegPath(ffmpegPath);
-
 // Google 및 Kakao 인증 라우트 모듈 불러오기
 const attachGoogleAuth = require('./server/routes/auth_google');
 const attachKakaoAuth = require('./server/routes/auth_kakao');
@@ -2568,74 +2564,22 @@ io.on('connection', (socket) => {
   });
 });
 
-async function sniff(buffer) {
-  try {
-    const {fileTypeFromBuffer} = await import('file-type');
-    return fileTypeFromBuffer(buffer);
-  } catch (e) {
-    console.warn("File type sniffing failed:", e.message);
-    return null;
-  }
-}
-
-function bufferToWav(buffer) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    const stream = require("stream").Readable.from(buffer);
-    let cmd;
-
-    const timeout = setTimeout(() => {
-        if(cmd) cmd.kill('SIGKILL');
-        reject(new Error("ffmpeg timeout"));
-    }, 3000);
-
-    cmd = new Ffmpeg(stream)
-      .inputFormat("webm")
-      .audioCodec("pcm_s16le")
-      .format("wav")
-      .on("error", (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      })
-      .on("end", () => {
-        clearTimeout(timeout);
-        resolve(Buffer.concat(chunks));
-      });
-    
-    cmd.pipe().on("data", c => chunks.push(c));
-  });
-}
-
-const supported = new Set([
-  "audio/webm", "audio/ogg", "audio/wav",
-  "audio/mp3", "audio/mpeg", "audio/mp4", "audio/mpga", "audio/oga"
-]);
-
-app.post("/stt", upload.single("audio"), async (req, res) => {
+async function handleSttUpload(req, res) {
   let tmpFile = null;
   try {
     if (!openai) return res.status(500).json({ error: 'openai_not_configured' });
     if (!req.file?.buffer) return res.status(400).json({ error: "no audio" });
 
-    let buf = req.file.buffer;
-    let mime = req.file.mimetype;
-    
-    const sniffed = await sniff(buf).catch(() => null);
-    if (sniffed?.mime) mime = sniffed.mime;
+    // Browser MediaRecorder outputs webm/opus; Whisper supports webm directly.
+    // Avoid ffmpeg conversion to reduce format/codec failures.
+    tmpFile = path.join(os.tmpdir(), `${uuidv4()}.webm`);
+    fs.writeFileSync(tmpFile, req.file.buffer);
 
-    if (!supported.has(mime)) {
-      console.log(`[stt] forcing conversion (${mime} -> wav)`);
-      buf = await bufferToWav(buf);
-      mime = "audio/wav";
-    }
-
-    tmpFile = path.join(os.tmpdir(), `${uuidv4()}.wav`);
-    fs.writeFileSync(tmpFile, buf);
-
+    const language = String(req.body?.language || req.body?.lang || "").trim();
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
-      model: "gpt-4o-mini-transcribe",
-      ...(req.body.lang ? { language: req.body.lang } : {})
+      model: "whisper-1",
+      ...(language ? { language } : {}),
     });
 
     res.json({ text: result.text || "" });
@@ -2643,7 +2587,17 @@ app.post("/stt", upload.single("audio"), async (req, res) => {
   } catch (err) {
     console.error("[stt] error:", err.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message });
+      const status = Number(err?.status || err?.code || 500);
+      if (status === 429 || String(err?.message || "").includes("quota")) {
+        return res.status(429).json({
+          error: "stt_quota_exceeded",
+          message: "잠시 후 다시 시도해주세요.",
+        });
+      }
+      res.status(500).json({
+        error: "stt_failed",
+        message: "잠시 후 다시 시도해주세요.",
+      });
     }
   } finally {
     if (tmpFile) {
@@ -2658,7 +2612,10 @@ app.post("/stt", upload.single("audio"), async (req, res) => {
         });
     }
   }
-});
+}
+
+app.post("/stt", upload.single("audio"), handleSttUpload);
+app.post("/api/stt", upload.single("audio"), handleSttUpload);
 
 
 attachGoogleAuth(app);

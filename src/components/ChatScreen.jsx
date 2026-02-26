@@ -5,6 +5,9 @@ import socket from "../socket";
 import MicButton from "./MicButton";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
+import { ChevronLeft, MoreVertical, SendHorizontal, Plus } from "lucide-react";
+import BottomSheet from "./BottomSheet";
+import ToastMessage from "./ToastMessage";
 import SITE_CONTEXTS from "../constants/siteContexts";
 import languages from "../constants/languages";
 import useNetworkStatus from "../hooks/useNetworkStatus";
@@ -126,6 +129,12 @@ export default function ChatScreen() {
   const [typingPeerName, setTypingPeerName] = useState("");
   const [serverWarning, setServerWarning] = useState("");
   const [reconnectState, setReconnectState] = useState("connected");
+  const [menuMessage, setMenuMessage] = useState(null);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState("");
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  const roomMenuRef = useRef(null);
 
   // ── Network & Offline queue ──
   const { isConnected, isOnline, isSocketConnected } = useNetworkStatus();
@@ -969,6 +978,29 @@ export default function ChatScreen() {
 
   const canSend = inputText.trim().length > 0;
 
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    window.clearTimeout(window.__monoToastTimer);
+    window.__monoToastTimer = window.setTimeout(() => setToast(""), 2000);
+  }, []);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!roomMenuRef.current) return;
+      if (!roomMenuRef.current.contains(e.target)) setRoomMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const openMessageMenu = useCallback((message) => {
+    setMenuMessage(message || null);
+  }, []);
+
+  const closeMessageMenu = useCallback(() => {
+    setMenuMessage(null);
+  }, []);
+
   const sendTypedMessage = async (rawText) => {
     const text = (rawText || "").trim();
     if (!text) return;
@@ -987,7 +1019,11 @@ export default function ChatScreen() {
       queued,
       senderFlagUrl: myFlagRef.current,
       senderLabel: myShortRef.current,
+      replySnippet: replyTarget?.translatedText || replyTarget?.originalText || replyTarget?.text || "",
+      replyAuthor: replyTarget?.mine ? "나" : (replyTarget?.senderDisplayName || "상대"),
+      replyTo: replyTarget?.id || null,
     }]);
+    setReplyTarget(null);
     if (typingActiveRef.current) {
       socket.emit("typing-stop", { roomId, participantId });
       typingActiveRef.current = false;
@@ -1011,6 +1047,24 @@ export default function ChatScreen() {
     return SITE_CONTEXTS.find(c => c.id === siteContext)?.labelKo || siteContext;
   }, [siteContext]);
 
+  const formatDateDivider = useCallback((ts) => {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const week = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][d.getDay()];
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${week}`;
+  }, []);
+
+  const sameCalendarDay = useCallback((a, b) => {
+    if (!a || !b) return false;
+    const da = new Date(a);
+    const db = new Date(b);
+    return (
+      da.getFullYear() === db.getFullYear() &&
+      da.getMonth() === db.getMonth() &&
+      da.getDate() === db.getDate()
+    );
+  }, []);
+
   // Broadcast listeners cannot send
   const isBroadcastListener = roomType === "broadcast" && roleHint !== "owner";
   const partnerOnline = useMemo(
@@ -1020,35 +1074,34 @@ export default function ChatScreen() {
 
   return (
     <div className="relative">
-      <div className="mono-shell h-screen w-screen flex flex-col max-w-screen-sm mx-auto text-[#111]">
+      <div className="mono-shell h-screen w-screen flex flex-col max-w-[480px] mx-auto text-[var(--color-text)] bg-[var(--color-bg)]">
         {/* ─── Header ─── */}
-        <div className="fixed top-0 left-0 right-0 bg-[#f8fafc] border-b border-[#d1d5db] z-10 max-w-screen-sm mx-auto backdrop-blur">
-          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <div className="fixed top-0 left-0 right-0 bg-[var(--color-bg)] border-b border-[var(--color-border)] z-10 max-w-[480px] mx-auto">
+          <div className="h-[52px] px-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] min-w-[92px]">
               <button
                 onClick={handleLeave}
-                className="text-[18px] text-[#111]"
+                className="w-[36px] h-[36px] rounded-full flex items-center justify-center text-[var(--color-text)]"
                 aria-label="뒤로가기"
                 title="대화목록으로"
               >
-                ←
+                <ChevronLeft size={24} />
               </button>
-              <span className={`${reconnectState === "reconnecting" ? "animate-pulse" : ""}`}>
-                {reconnectState === "connected" ? "🟢" : reconnectState === "reconnecting" ? "🟡" : "🔴"}
-              </span>
-              <span className="text-[#666]">
-                {reconnectState === "connected" ? "연결됨" : reconnectState === "reconnecting" ? "재연결 중" : "끊김"}
-              </span>
             </div>
 
-            <div className="flex-1 text-center text-[13px] font-medium text-[#111]">
+            <div className="flex-1 text-center text-[13px] font-medium text-[var(--color-text)]">
               {roomType === "oneToOne" && (
-                <div className="text-[12px] text-[#444] mb-0.5 truncate">
-                  {partnerName || "상대방"} · {partnerOnline ? "온라인" : "오프라인"}
+                <div className="text-[16px] font-semibold truncate">
+                  {partnerName || "상대방"}
+                </div>
+              )}
+              {roomType === "oneToOne" && (
+                <div className={`text-[12px] truncate ${partnerOnline ? "text-[var(--color-online)]" : "text-[var(--color-text-secondary)]"}`}>
+                  {partnerOnline ? "온라인" : "마지막 접속 정보 없음"}
                 </div>
               )}
               {roomType === "oneToOne" ? (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)]">
                   {myFlagUrl ? <img className="flag" src={myFlagUrl} alt="" /> : null}
                   <span>{myShort || ""}</span>
                   <span>↔</span>
@@ -1058,11 +1111,11 @@ export default function ChatScreen() {
                       <span>{resolvedPartnerShort}</span>
                     </>
                   ) : (
-                    <span className="text-[#999]">대기 중...</span>
+                    <span className="text-[var(--color-text-secondary)]">대기 중...</span>
                   )}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)]">
                   {myFlagUrl ? <img className="flag" src={myFlagUrl} alt="" /> : null}
                   <span>{myShort || ""}</span>
                   <span>· LIVE</span>
@@ -1070,20 +1123,37 @@ export default function ChatScreen() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-[12px] min-w-[92px] justify-end">
+            <div className="flex items-center gap-1 text-[12px] min-w-[92px] justify-end relative" ref={roomMenuRef}>
               <button
-                className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-white text-[#6b7280] border-[#c7ccd3]"
+                onClick={() => setRoomMenuOpen((v) => !v)}
+                className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
                 title="방 메뉴"
                 aria-label="방 메뉴"
               >
-                ⋮
+                <MoreVertical size={18} />
               </button>
+              {roomMenuOpen ? (
+                <div className="absolute right-0 top-[44px] w-[176px] rounded-[8px] border border-[var(--color-border)] bg-white shadow-lg z-[70] overflow-hidden">
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("알림 설정 준비 중"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    🔔 알림 설정
+                  </button>
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("대화방 고정됨"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    📌 대화방 고정
+                  </button>
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("대화 내 검색 준비 중"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    🔍 대화 내 검색
+                  </button>
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); handleLeave(); }} className="w-full h-[42px] px-3 text-left text-[14px] text-[#DC2626] hover:bg-[var(--color-bg-secondary)]">
+                    🚪 대화방 나가기
+                  </button>
+                </div>
+              ) : null}
               <button
                 onClick={toggleVoice}
                 className={`w-9 h-9 rounded-full border text-[18px] flex items-center justify-center ${
                   voiceEnabled
-                    ? "bg-[#2563eb] text-white border-[#2563eb]"
-                    : "bg-white text-[#6b7280] border-[#c7ccd3] opacity-40"
+                    ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                    : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)] opacity-50"
                 }`}
                 title={voiceEnabled ? "음성 출력 ON" : "음성 출력 OFF"}
                 disabled={!canSpeakCurrentLang}
@@ -1095,7 +1165,7 @@ export default function ChatScreen() {
           {/* User count — broadcast only */}
           {roomType === "broadcast" && participants.length > 1 && (
             <div className="px-4 pb-2">
-              <span className="text-[11px] text-[#888]">
+              <span className="text-[11px] text-[var(--color-text-secondary)]">
                 {participants.length - 1}명 수신 중
               </span>
             </div>
@@ -1103,7 +1173,7 @@ export default function ChatScreen() {
         </div>
 
         {/* ─── Messages ─── */}
-        <div className="mono-scroll flex-1 overflow-y-auto px-4 pb-[96px] pt-[64px]">
+        <div className="mono-scroll flex-1 overflow-y-auto px-3 pb-[110px] pt-[60px] bg-[var(--color-bg-secondary)]">
           {reconnectState === "disconnected" && (
             <button
               type="button"
@@ -1118,13 +1188,42 @@ export default function ChatScreen() {
               {serverWarning}
             </div>
           )}
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} onPlay={() => playMessageOnce(m)} />
-          ))}
+          {messages.map((m, idx) => {
+            const prev = idx > 0 ? messages[idx - 1] : null;
+            const groupedWithPrev =
+              !!prev &&
+              !prev.system &&
+              !m.system &&
+              ((prev.mine === m.mine) ||
+                (String(prev.senderId || "") && String(prev.senderId || "") === String(m.senderId || "")));
+            const needDateDivider = !prev || !sameCalendarDay(prev.timestamp, m.timestamp);
+            return (
+              <React.Fragment key={m.id}>
+                {needDateDivider ? (
+                  <div className="my-3 flex items-center gap-2">
+                    <span className="h-px flex-1 bg-[var(--color-border)]" />
+                    <span className="text-[12px] text-[#8E8E93]">{formatDateDivider(m.timestamp)}</span>
+                    <span className="h-px flex-1 bg-[var(--color-border)]" />
+                  </div>
+                ) : null}
+                <MessageBubble
+                  message={m}
+                  onPlay={() => playMessageOnce(m)}
+                  onOpenMenu={openMessageMenu}
+                  currentUserId={participantIdRef.current}
+                  roomType={roomType}
+                  groupedWithPrev={groupedWithPrev}
+                />
+              </React.Fragment>
+            );
+          })}
           {typingPeerName ? (
             <div className="w-full flex justify-start mb-2">
-              <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-[#d1d5db] bg-white px-3 py-2 text-[12px] text-[#6b7280]">
-                {typingPeerName} 입력 중...
+              <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-[var(--color-border)] bg-[var(--color-bubble-other)] px-3 py-2 text-[12px] text-[var(--color-text-secondary)] inline-flex items-center gap-1">
+                <span>{typingPeerName} 입력 중</span>
+                <span className="typing-dot" />
+                <span className="typing-dot" />
+                <span className="typing-dot" />
               </div>
             </div>
           ) : null}
@@ -1134,7 +1233,7 @@ export default function ChatScreen() {
         {/* ─── Input (hidden for broadcast listeners) ─── */}
         {!isBroadcastListener && (
           <form
-            className="fixed bottom-0 left-0 right-0 px-4 pb-4 bg-[#f8fafc] z-10 max-w-screen-sm mx-auto border-t border-[#d1d5db]"
+            className="fixed bottom-0 left-0 right-0 px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)]"
             onSubmit={(e) => {
               e.preventDefault();
               if (!canSend) return;
@@ -1143,12 +1242,37 @@ export default function ChatScreen() {
               resetHeight();
             }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-secondary)] flex items-center justify-center"
+                title="첨부"
+                aria-label="첨부"
+              >
+                <Plus size={20} />
+              </button>
               <div className="relative flex-1">
+                {replyTarget ? (
+                  <div className="mb-1 rounded-[10px] bg-[var(--color-bg-secondary)] px-3 py-2 text-[13px] border-l-[3px] border-[var(--color-primary)] flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{replyTarget.mine ? "나" : (replyTarget.senderDisplayName || "상대")}</div>
+                      <div className="truncate text-[var(--color-text-secondary)]">
+                        {replyTarget.translatedText || replyTarget.originalText || replyTarget.text}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyTarget(null)}
+                      className="text-[var(--color-text-secondary)]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : null}
                 <textarea
                   ref={textareaRef}
                   rows={1}
-                  className="mono-input w-full resize-none h-11 min-h-11 max-h-11 px-4 py-0 text-[14px] leading-[44px] overflow-hidden bg-white focus:outline-none box-border"
+                  className="mono-input w-full resize-none min-h-[44px] max-h-[132px] px-4 py-[10px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
                   value={inputText}
                   onChange={(e) => {
                     const nextText = e.target.value;
@@ -1179,7 +1303,7 @@ export default function ChatScreen() {
                         socket.emit("typing-stop", { roomId, participantId });
                         typingActiveRef.current = false;
                       }
-                    }, 2000);
+                    }, 3000);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -1196,35 +1320,119 @@ export default function ChatScreen() {
                   <div className="mt-1 text-[11px] text-[#FF5252] font-medium">● 음성 입력 중</div>
                 )}
               </div>
-              <button
-                type="submit"
-                className={`mono-btn h-11 min-w-[64px] px-4 py-0 text-[14px] font-semibold border box-border ${
-                  canSend ? "bg-[#7C6FEB] text-white border-[#7C6FEB]" : "bg-[#DDD] text-[#888] border-[#bbb]"
-                }`}
-              >
-                전송
-              </button>
-            </div>
-            <div className="mt-2 flex justify-center">
-              <MicButton
-                roomId={roomId}
-                participantId={participantId}
-                lang={fromLang}
-                onListeningChange={onMicListeningChange}
-                onUserGesture={handleUserGesture}
-              />
+              <div className="transition-all duration-200">
+              {canSend ? (
+                <button
+                  type="submit"
+                  className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center transition-colors duration-200"
+                  aria-label="전송"
+                >
+                  <SendHorizontal size={18} />
+                </button>
+              ) : (
+                <MicButton
+                  roomId={roomId}
+                  participantId={participantId}
+                  lang={fromLang}
+                  onListeningChange={onMicListeningChange}
+                  onUserGesture={handleUserGesture}
+                  compact
+                />
+              )}
+              </div>
             </div>
           </form>
         )}
 
         {/* Broadcast listener: listen-only indicator */}
         {isBroadcastListener && (
-          <div className="fixed bottom-0 left-0 right-0 px-4 py-4 bg-[#f8fafc] z-10 max-w-screen-sm mx-auto border-t border-[#d1d5db] text-center">
-            <span className="text-[13px] text-[#888]">수신 전용 모드</span>
+          <div className="fixed bottom-0 left-0 right-0 px-4 py-4 bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)] text-center">
+            <span className="text-[13px] text-[var(--color-text-secondary)]">수신 전용 모드</span>
           </div>
         )}
       </div>
       <InstallBanner />
+      <BottomSheet open={!!menuMessage} onClose={closeMessageMenu} title="메시지 메뉴">
+        <div className="px-2 pb-2">
+          <button
+            type="button"
+            onClick={async () => {
+              const copied = menuMessage?.translatedText || menuMessage?.originalText || menuMessage?.text || "";
+              try {
+                await navigator.clipboard.writeText(copied);
+                showToast("복사 완료");
+              } catch {
+                showToast("복사 실패");
+              }
+              closeMessageMenu();
+            }}
+            className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
+          >
+            📋 복사
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setReplyTarget(menuMessage);
+              closeMessageMenu();
+            }}
+            className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
+          >
+            ↩️ 답장
+          </button>
+          <button type="button" onClick={() => { showToast("전달 기능 준비 중"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            ↗️ 전달
+          </button>
+          <button type="button" onClick={() => { showToast("즐겨찾기에 추가됨"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            ⭐ 즐겨찾기 추가
+          </button>
+          <button type="button" onClick={() => { showToast("재번역 요청 준비 중"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            🔄 번역 다시하기
+          </button>
+          <button type="button" onClick={() => { showToast("피드백 전송됨"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px]">
+            👍 번역 피드백
+          </button>
+          {menuMessage?.mine ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDeleteConfirm(true);
+                closeMessageMenu();
+              }}
+              className="w-full h-[52px] px-3 text-left text-[15px] text-[#DC2626]"
+            >
+              🗑️ 삭제
+            </button>
+          ) : null}
+        </div>
+      </BottomSheet>
+
+      {showDeleteConfirm ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40">
+          <div className="w-[280px] rounded-[14px] bg-[var(--color-bg)] p-4">
+            <div className="text-[17px] font-semibold">메시지를 삭제할까요?</div>
+            <div className="mt-1 text-[14px] text-[var(--color-text-secondary)]">이 작업은 취소할 수 없습니다.</div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} className="flex-1 h-[40px] rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMessages((prev) => prev.filter((m) => m.id !== menuMessage?.id));
+                  setShowDeleteConfirm(false);
+                  setMenuMessage(null);
+                  showToast("삭제됨");
+                }}
+                className="flex-1 h-[40px] rounded-[10px] bg-[#DC2626] text-white"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <ToastMessage visible={!!toast} message={toast} />
     </div>
   );
 }

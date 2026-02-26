@@ -1,48 +1,53 @@
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: "Pretendard", "Inter", "Noto Sans JP", -apple-system, sans-serif;
-  font-size: 14px;
-  color: var(--color-text);
-  background: var(--color-bg);
-}
-
 :root {
-  --color-primary: #111111;
-  --color-bg: #f3f4f6;
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f5f5f5;
   --color-card: #ffffff;
-  --color-text: #111111;
-  --color-subtext: #5b6470;
-  --color-border: #d1d5db;
-  --color-bubble-mine: #111111;
-  --color-bubble-other: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #8e8e93;
+  --color-subtext: var(--color-text-secondary);
+  --color-bubble-mine: #3b82f6;
+  --color-bubble-mine-text: #ffffff;
+  --color-bubble-other: #f0f0f0;
+  --color-bubble-other-text: #1a1a1a;
+  --color-border: #e5e5ea;
+  --color-unread: #ff3b30;
+  --color-online: #34c759;
+  --color-tab-active: #3b82f6;
+  --color-tab-inactive: #8e8e93;
   --space-unit: 4px;
-  --radius-bubble: 12px;
-  --radius-card: 8px;
+  --radius-bubble: 16px;
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-input: 20px;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 
   /* backward-compat mapping */
-  --mono-bg: #f3f4f6;
-  --mono-card: #ffffff;
-  --mono-ink: #111111;
-  --mono-sub: #5b6470;
-  --mono-line: #d1d5db;
-  --mono-primary: #111111;
+  --mono-bg: var(--color-bg-secondary);
+  --mono-card: var(--color-card);
+  --mono-ink: var(--color-text);
+  --mono-sub: var(--color-text-secondary);
+  --mono-line: var(--color-border);
+  --mono-primary: var(--color-primary);
   --mono-danger: #ef4444;
 }
 
 .dark {
-  --color-bg: #0f1115;
-  --color-card: #171a21;
-  --color-text: #eef1f5;
-  --color-subtext: #a8b0be;
-  --color-border: #303746;
-  --color-bubble-mine: #2c3343;
-  --color-bubble-other: #171a21;
+  --color-bg: #1c1c1e;
+  --color-bg-secondary: #2c2c2e;
+  --color-card: #2c2c2e;
+  --color-text: #ffffff;
+  --color-text-secondary: #8e8e93;
+  --color-subtext: var(--color-text-secondary);
+  --color-bubble-mine: #3b82f6;
+  --color-bubble-other: #2c2c2e;
+  --color-bubble-other-text: #ffffff;
+  --color-border: #38383a;
 
   --mono-bg: var(--color-bg);
   --mono-card: var(--color-card);
@@ -51,35 +56,64 @@ body {
   --mono-line: var(--color-border);
 }
 
+html,
+body {
+  margin: 0;
+  font-family: "Pretendard", "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 #root {
   min-height: 100vh;
 }
 
 .mono-shell {
-  background: linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+  background: var(--color-bg-secondary);
 }
 
 .mono-card {
   background: var(--color-card);
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-bubble);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
 }
 
 .mono-input {
-  border: 1.5px solid #c7ccd3;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-bg);
+  color: var(--color-text);
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .mono-input:focus {
-  border-color: #111;
-  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
 }
 
 .mono-btn {
-  border-radius: 10px;
+  border-radius: var(--radius-button);
   min-height: 44px;
 }
 
@@ -131,6 +165,24 @@ textarea { caret-color:#111; }
 .mic-pulse {
   animation: micPulse 1.5s infinite;
 }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+
+.typing-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-text-secondary);
+  display: inline-block;
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.1s; }
+.typing-dot:nth-child(3) { animation-delay: 0.2s; }
+.typing-dot:nth-child(4) { animation-delay: 0.3s; }
 
 img.flag {
   width: 24px;

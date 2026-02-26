@@ -79,3 +79,12 @@
 - 대화 생성 실패: 소켓 연결 상태, `create-1to1` payload의 `myUserId/peerUserId`
 - 목록 미반영: IndexedDB(`rooms`) 업데이트 여부, `recordRoomActivity` 호출 여부
 
+## 9) 공통 스모크 QA (자동)
+
+- 실행: `npm run qa:smoke`
+- 포함 시나리오:
+  - [x] 1:1 참여자 동기화
+  - [x] delivered/read 상태 전파
+  - [x] unauthorized 전송 거절 ACK
+  - [x] 재접속(rejoin-room)
+  - [x] global-lobby 방송 수신
