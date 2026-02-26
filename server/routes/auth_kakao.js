@@ -3,16 +3,10 @@ const jwt = require('jsonwebtoken');
 const { upsertUserFromOAuth } = require('../db/users');
 
 module.exports = function attachKakaoAuth(app) {
-  function isLocalRequest(req) {
-    const host = String(req.headers?.host || '').toLowerCase();
-    return host.includes('localhost') || host.startsWith('127.0.0.1');
-  }
-
-  function getCallbackUrl(req) {
+  function getCallbackUrl() {
     const explicit = String(process.env.KAKAO_CALLBACK_URL || '').trim();
     if (explicit) return explicit;
-    const origin = isLocalRequest(req) ? 'http://localhost:3174' : 'https://lingora.chat';
-    return `${origin}/auth/kakao/callback`;
+    return 'http://localhost:3174/auth/kakao/callback';
   }
 
   function getKakaoClientId() {
@@ -35,7 +29,7 @@ module.exports = function attachKakaoAuth(app) {
   // 1) 카카오로 리다이렉트
   app.get('/auth/kakao', (req, res) => {
     const next = req.query.next || '/';
-    const callbackUrl = getCallbackUrl(req);
+    const callbackUrl = getCallbackUrl();
     const clientId = getKakaoClientId();
     if (!clientId) {
       return res.status(503).send('KAKAO_CLIENT_ID_MISSING');
@@ -57,8 +51,13 @@ module.exports = function attachKakaoAuth(app) {
   app.get('/auth/kakao/callback', async (req, res) => {
     try {
       const { code, state } = req.query;
-      const callbackUrl = getCallbackUrl(req);
+      const callbackUrl = getCallbackUrl();
       const clientId = getKakaoClientId();
+      console.log('[kakao][callback] start', {
+        hasCode: Boolean(code),
+        callbackUrl,
+        hasClientId: Boolean(clientId),
+      });
       if (!clientId) {
         return res.status(503).send('KAKAO_CLIENT_ID_MISSING');
       }
@@ -69,18 +68,36 @@ module.exports = function attachKakaoAuth(app) {
         code,
       });
       const clientSecret = String(process.env.KAKAO_CLIENT_SECRET || '').trim();
-      // Kakao token exchange requires client_secret in this deployment.
-      if (!clientSecret) {
-        return res.status(503).send('KAKAO_CLIENT_SECRET_MISSING');
+      // client_secret is optional for Kakao OAuth.
+      if (clientSecret) {
+        tokenParams.set('client_secret', clientSecret);
       }
-      tokenParams.set('client_secret', clientSecret);
-
-      // 액세스 토큰
-      const tokenRes = await axios.post('https://kauth.kakao.com/oauth/token', tokenParams, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      console.log('[kakao][callback] token exchange request', {
+        hasClientSecret: Boolean(clientSecret),
+        callbackUrl,
       });
 
+      // 액세스 토큰
+      let tokenRes;
+      try {
+        tokenRes = await axios.post('https://kauth.kakao.com/oauth/token', tokenParams, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+      } catch (tokenErr) {
+        console.error('[kakao][callback] token exchange failed', {
+          status: tokenErr?.response?.status,
+          data: tokenErr?.response?.data,
+          hasCode: Boolean(code),
+          hasClientSecret: Boolean(clientSecret),
+          callbackUrl,
+        });
+        throw tokenErr;
+      }
+
       const accessToken = tokenRes.data.access_token;
+      console.log('[kakao][callback] token exchange success', {
+        hasAccessToken: Boolean(accessToken),
+      });
       if (!accessToken) return res.status(400).send('KAKAO_NO_TOKEN');
 
       // 사용자 정보
