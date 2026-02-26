@@ -11,7 +11,11 @@
 
     <!-- ✅ PWA manifest & theme-color 추가 -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#3B82F6" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MONO" />
+    <meta name="theme-color" content="#4A7BF7" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
@@ -38,10 +42,14 @@
         window.__PREF_LANG__ = cand; // socket.js에서 사용
       })();
 
-      // 2) 소켓 부트 (role/room 자동 등록)
-      import('/src/socket.js').then(mod => {
-        mod.bootRoomAndRegister();
-      });
+      // 2) Legacy socket boot (guarded): newer socket module may not expose this API.
+      import('/src/socket.js')
+        .then(mod => {
+          if (typeof mod?.bootRoomAndRegister === 'function') {
+            mod.bootRoomAndRegister();
+          }
+        })
+        .catch(() => {});
     </script>
   </body>
 </html>

@@ -374,6 +374,8 @@ export default function CsChatPage() {
         style={{
           flexShrink: 0,
           padding: "8px 16px",
+          minHeight: "56px",
+          paddingBottom: "calc(8px + env(safe-area-inset-bottom))",
           display: "flex",
           alignItems: "center",
           gap: "8px",
@@ -413,9 +415,9 @@ export default function CsChatPage() {
           style={{
             flex: 1,
             resize: "none",
-            minHeight: "36px",
+            minHeight: "40px",
             maxHeight: "160px",
-            padding: "8px 16px",
+            padding: "9px 16px",
             fontSize: "14px",
             lineHeight: "1.45",
             borderRadius: "18px",
@@ -435,8 +437,8 @@ export default function CsChatPage() {
           }
           disabled={loading || sttBusy}
           style={{
-            width: "36px",
-            height: "36px",
+            width: "40px",
+            height: "40px",
             borderRadius: "50%",
             display: "flex",
             alignItems: "center",
@@ -450,8 +452,8 @@ export default function CsChatPage() {
                 ? "#3B82F6"
                 : isRecording
                   ? "#FF3B30"
-                  : "#D9D9DE",
-            color: sttBusy ? "#8E8E93" : input.trim() || isRecording ? "#fff" : "#8E8E93",
+                  : "#3B82F6",
+            color: sttBusy ? "#8E8E93" : "#fff",
           }}
           className={isRecording && !sttBusy ? "mic-pulse" : ""}
         >

@@ -5,7 +5,6 @@ import RoomList from "./pages/RoomList";
 import ChatScreen from "./components/ChatScreen";
 import AppShell from "./layouts/AppShell";
 import Contacts from "./pages/Contacts";
-import GlobalPage from "./pages/Global";
 import SettingsPage from "./pages/Settings";
 import LoginPage from "./pages/Login";
 import CsChatPage from "./pages/CsChat";
@@ -22,7 +21,7 @@ async function rootRedirectLoader({ request }) {
   const me = await fetchAuthMe();
   if (me.authenticated) {
     await syncAuthUserToLocalIdentity();
-    return redirect("/home");
+    return redirect("/interpret");
   }
   return redirect("/login");
 }
@@ -59,10 +58,6 @@ const router = createBrowserRouter([
       {
         path: "interpret",
         element: <Home />,
-      },
-      {
-        path: "global",
-        element: <GlobalPage />,
       },
       {
         path: "settings",

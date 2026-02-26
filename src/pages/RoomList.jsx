@@ -275,7 +275,12 @@ export default function RoomList() {
         <div className="h-[52px] px-4 border-b border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-between">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[20px] font-bold tracking-[0.02em] text-[var(--color-primary)]">MONO</span>
+              <span className="text-[20px] font-bold tracking-[0.02em]">
+                <span style={{ color: "#7C6FEB" }}>M</span>
+                <span style={{ color: "#F472B6" }}>O</span>
+                <span style={{ color: "#34D399" }}>N</span>
+                <span style={{ color: "#FBBF24" }}>O</span>
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-4">

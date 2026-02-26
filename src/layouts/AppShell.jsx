@@ -1,28 +1,29 @@
 import React from "react";
-import { NavLink, Outlet } from "react-router-dom";
-import { MessageCircle, Users, Mic, Globe2, Settings } from "lucide-react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { MessageCircle, Users, Mic, Settings } from "lucide-react";
 import { getAllRooms } from "../db";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 
 const TABS = [
-  { to: "/home", label: "홈", icon: MessageCircle },
-  { to: "/contacts", label: "연락처", icon: Users },
-  { to: "/interpret", label: "통역", icon: Mic },
-  { to: "/global", label: "글로벌", icon: Globe2 },
-  { to: "/settings", label: "설정", icon: Settings },
+  { to: "/interpret", label: "통역", icon: Mic, activeColor: "#7C6FEB", matchPrefixes: ["/interpret"] },
+  { to: "/home", label: "채팅", icon: MessageCircle, activeColor: "#F472B6", matchPrefixes: ["/home", "/room"] },
+  { to: "/contacts", label: "연락처", icon: Users, activeColor: "#34D399", matchPrefixes: ["/contacts"] },
+  { to: "/settings", label: "설정", icon: Settings, activeColor: "#FBBF24", matchPrefixes: ["/settings"] },
 ];
 
-function tabClass({ isActive }) {
+function tabClass() {
   return [
     "flex-1 h-full flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors duration-200",
-    isActive ? "text-[var(--color-tab-active)]" : "text-[var(--color-tab-inactive)]",
+    "text-[var(--color-tab-inactive)]",
   ].join(" ");
 }
 
 export default function AppShell() {
+  const location = useLocation();
   const [unreadTotal, setUnreadTotal] = React.useState(0);
   const { isOnline } = useNetworkStatus();
   const [netBanner, setNetBanner] = React.useState("");
+  const pathname = location?.pathname || "/";
 
   React.useEffect(() => {
     let mounted = true;
@@ -63,7 +64,17 @@ export default function AppShell() {
       <nav className="fixed bottom-0 left-0 right-0 h-[calc(56px+env(safe-area-inset-bottom))] border-t border-[var(--color-border)] bg-[var(--color-bg)]">
         <div className="mx-auto flex h-[56px] w-full max-w-[480px]">
           {TABS.map((tab) => (
-            <NavLink key={tab.to} to={tab.to} className={tabClass}>
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              className={tabClass}
+              style={() => {
+                const isActive = (tab.matchPrefixes || []).some(
+                  (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+                );
+                return { color: isActive ? tab.activeColor : "var(--color-tab-inactive)" };
+              }}
+            >
               <div className="relative">
                 <tab.icon size={24} strokeWidth={1.8} />
                 {tab.to === "/home" && unreadTotal > 0 ? (

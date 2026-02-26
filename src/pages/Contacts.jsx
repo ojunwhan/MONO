@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import socket from "../socket";
 import { getMyIdentity } from "../db";
 import { getLanguageProfileByCode } from "../constants/languageProfiles";
-import { UserRound, UserPlus, Phone, Send, Plus, Search, QrCode, Link2, ChevronDown, ChevronUp } from "lucide-react";
+import { UserRound, UserPlus, Phone, Send, Plus, Search, QrCode, Link2, ChevronDown, ChevronUp, ChevronLeft } from "lucide-react";
 import BottomSheet from "../components/BottomSheet";
 
 export default function Contacts() {
@@ -206,6 +206,16 @@ export default function Contacts() {
     () => searchResults.filter((u) => String(u?.id || "") !== String(me?.userId || "")),
     [searchResults, me?.userId]
   );
+  const groupedFriends = useMemo(() => {
+    const group = new Map();
+    for (const f of sortedFriends) {
+      const base = String(f?.nickname || f?.monoId || "").trim();
+      const key = (base.charAt(0) || "#").toUpperCase();
+      if (!group.has(key)) group.set(key, []);
+      group.get(key).push(f);
+    }
+    return Array.from(group.entries()).sort(([a], [b]) => a.localeCompare(b, "ko"));
+  }, [sortedFriends]);
   const supportsContactPicker =
     typeof navigator !== "undefined" &&
     !!navigator.contacts &&
@@ -378,37 +388,55 @@ export default function Contacts() {
           </div>
         )}
 
-        <div className="mono-card p-4">
-          <h2 className="text-[14px] font-semibold">친구 ({sortedFriends.length})</h2>
-          <div className="mt-2 divide-y divide-[var(--color-border)]">
-            {sortedFriends.length === 0 ? (
-              <div className="py-10 text-center text-[13px] text-[var(--color-text-secondary)]">
-                아직 친구가 없습니다
-                <br />
-                MONO ID로 친구를 검색해보세요
+        <div className="mono-card p-0 overflow-hidden">
+          <div className="px-4 pt-4 pb-2 text-[14px] font-semibold">MONO 친구 ({sortedFriends.length})</div>
+          {sortedFriends.length === 0 ? (
+            <div className="px-6 py-14 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center">
+                <UserRound size={24} />
               </div>
-            ) : (
-              sortedFriends.map((u) => (
-                <button
-                  key={`friend-${u.id}`}
-                  type="button"
-                  onClick={() => setActiveFriend(u)}
-                  className="w-full py-3 flex items-center justify-between gap-2 text-left"
-                >
-                  <div className="min-w-0 flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center text-[14px] font-semibold text-[var(--color-text)]">
-                      {(u.nickname || "M").charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[15px] font-medium truncate">{u.nickname || "알 수 없는 사용자"}</div>
-                      <div className="text-[13px] text-[var(--color-text-secondary)] truncate">{u.statusMessage || `@${u.monoId}`}</div>
-                    </div>
+              <p className="mt-4 text-[16px] text-[var(--color-text)]">연락처가 없습니다</p>
+              <button
+                type="button"
+                onClick={() => setShowAddSheet(true)}
+                className="mono-btn mt-5 h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[14px]"
+              >
+                연락처 추가
+              </button>
+            </div>
+          ) : (
+            <div>
+              {groupedFriends.map(([section, users]) => (
+                <div key={`sec-${section}`}>
+                  <div className="h-[28px] px-4 text-[12px] font-semibold text-[var(--color-text-secondary)] bg-[var(--color-bg-secondary)] flex items-center">
+                    {section}
                   </div>
-                  <div className="text-[12px] text-[var(--color-text-secondary)]">{renderLang(u.nativeLanguage)}</div>
-                </button>
-              ))
-            )}
-          </div>
+                  {users.map((u) => (
+                    <button
+                      key={`friend-${u.id}`}
+                      type="button"
+                      onClick={() => setActiveFriend(u)}
+                      className="relative w-full h-[72px] px-4 flex items-center justify-between gap-2 text-left hover:bg-[var(--color-bg-secondary)]"
+                    >
+                      <span className="absolute left-[68px] right-0 top-0 h-px bg-[var(--color-border)]" />
+                      <div className="min-w-0 flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center text-[14px] font-semibold text-[var(--color-text)]">
+                          {(u.nickname || "M").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[15px] font-medium truncate">{u.nickname || "알 수 없는 사용자"}</div>
+                          <div className="text-[13px] text-[var(--color-text-secondary)] truncate">
+                            {u.statusMessage || `@${u.monoId}`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-[12px] text-[var(--color-text-secondary)]">{renderLang(u.nativeLanguage)}</div>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mono-card p-4">
@@ -486,6 +514,17 @@ export default function Contacts() {
 
       <BottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)}>
           <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="mb-3 flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowAddSheet(false)}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
+                aria-label="뒤로가기"
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <div className="ml-1 text-[15px] font-semibold">연락처 추가</div>
+            </div>
             <div className="space-y-2">
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
                 <Search size={18} /> MONO ID 검색

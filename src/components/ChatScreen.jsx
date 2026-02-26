@@ -1077,11 +1077,11 @@ export default function ChatScreen() {
       <div className="mono-shell h-screen w-screen flex flex-col max-w-[480px] mx-auto text-[var(--color-text)] bg-[var(--color-bg)]">
         {/* ─── Header ─── */}
         <div className="fixed top-0 left-0 right-0 bg-[var(--color-bg)] border-b border-[var(--color-border)] z-10 max-w-[480px] mx-auto">
-          <div className="h-[52px] px-3 flex items-center justify-between">
+          <div className="h-[56px] px-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] min-w-[92px]">
               <button
                 onClick={handleLeave}
-                className="w-[36px] h-[36px] rounded-full flex items-center justify-center text-[var(--color-text)]"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
                 aria-label="뒤로가기"
                 title="대화목록으로"
               >
@@ -1173,7 +1173,7 @@ export default function ChatScreen() {
         </div>
 
         {/* ─── Messages ─── */}
-        <div className="mono-scroll flex-1 overflow-y-auto px-3 pb-[110px] pt-[60px] bg-[var(--color-bg-secondary)]">
+        <div className="mono-scroll flex-1 overflow-y-auto px-3 pb-[112px] pt-[64px] bg-[var(--color-bg-secondary)]">
           {reconnectState === "disconnected" && (
             <button
               type="button"
@@ -1233,7 +1233,7 @@ export default function ChatScreen() {
         {/* ─── Input (hidden for broadcast listeners) ─── */}
         {!isBroadcastListener && (
           <form
-            className="fixed bottom-0 left-0 right-0 px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)]"
+            className="fixed bottom-0 left-0 right-0 bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)]"
             onSubmit={(e) => {
               e.preventDefault();
               if (!canSend) return;
@@ -1242,10 +1242,10 @@ export default function ChatScreen() {
               resetHeight();
             }}
           >
-            <div className="flex items-end gap-2">
+            <div className="px-4 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] min-h-[56px] flex items-center gap-2">
               <button
                 type="button"
-                className="w-10 h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-secondary)] flex items-center justify-center"
+                className="w-10 h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-secondary)] flex items-center justify-center shrink-0"
                 title="첨부"
                 aria-label="첨부"
               >
@@ -1272,7 +1272,7 @@ export default function ChatScreen() {
                 <textarea
                   ref={textareaRef}
                   rows={1}
-                  className="mono-input w-full resize-none min-h-[44px] max-h-[132px] px-4 py-[10px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
+                  className="mono-input w-full resize-none min-h-[40px] max-h-[132px] px-4 py-[9px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
                   value={inputText}
                   onChange={(e) => {
                     const nextText = e.target.value;
@@ -1324,7 +1324,7 @@ export default function ChatScreen() {
               {canSend ? (
                 <button
                   type="submit"
-                  className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center transition-colors duration-200"
+                  className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center transition-colors duration-200 shrink-0"
                   aria-label="전송"
                 >
                   <SendHorizontal size={18} />
@@ -1346,7 +1346,7 @@ export default function ChatScreen() {
 
         {/* Broadcast listener: listen-only indicator */}
         {isBroadcastListener && (
-          <div className="fixed bottom-0 left-0 right-0 px-4 py-4 bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)] text-center">
+          <div className="fixed bottom-0 left-0 right-0 px-4 py-2 pb-[calc(8px+env(safe-area-inset-bottom))] bg-[var(--color-bg)] z-10 max-w-[480px] mx-auto border-t border-[var(--color-border)] text-center min-h-[56px] flex items-center justify-center">
             <span className="text-[13px] text-[var(--color-text-secondary)]">수신 전용 모드</span>
           </div>
         )}
