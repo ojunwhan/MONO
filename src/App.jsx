@@ -11,6 +11,7 @@ const App = () => {
   const [showOnboarding, setShowOnboarding] = React.useState(
     () => localStorage.getItem("mono.onboardingDone") !== "1"
   );
+  const isGuestJoinRoute = window.location.pathname.startsWith("/join/");
 
   useEffect(() => {
     const theme = localStorage.getItem("mono.theme");
@@ -43,13 +44,15 @@ const App = () => {
     <>
       <InAppBlocker />   {/* ✅ 인앱 브라우저 차단 */}
       <RouterProvider router={router} />
-      <OnboardingSlides
-        open={showOnboarding}
-        onClose={() => {
-          localStorage.setItem("mono.onboardingDone", "1");
-          setShowOnboarding(false);
-        }}
-      />
+      {!isGuestJoinRoute ? (
+        <OnboardingSlides
+          open={showOnboarding}
+          onClose={() => {
+            localStorage.setItem("mono.onboardingDone", "1");
+            setShowOnboarding(false);
+          }}
+        />
+      ) : null}
     </>
   );
 };

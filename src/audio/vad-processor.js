@@ -4,7 +4,7 @@ class VADProcessor extends AudioWorkletProcessor {
     const opts = options?.processorOptions || {};
     this.threshold = typeof opts.threshold === "number" ? opts.threshold : 0.01;
     this.minSpeechMs = typeof opts.minSpeechMs === "number" ? opts.minSpeechMs : 120;
-    this.silenceMsToStop = typeof opts.silenceMsToStop === "number" ? opts.silenceMsToStop : 600;
+    this.silenceMsToStop = typeof opts.silenceMsToStop === "number" ? opts.silenceMsToStop : 2000;
     this.sampleRate = sampleRate;
 
     this.inSpeech = false;

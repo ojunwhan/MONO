@@ -16,7 +16,7 @@ export default class AudioProcessor {
     this.vad = {
       threshold: typeof vad.threshold === "number" ? vad.threshold : 0.01,
       minSpeechMs: typeof vad.minSpeechMs === "number" ? vad.minSpeechMs : 120,
-      silenceMsToStop: typeof vad.silenceMsToStop === "number" ? vad.silenceMsToStop : 600,
+      silenceMsToStop: typeof vad.silenceMsToStop === "number" ? vad.silenceMsToStop : 2000,
     };
 
     this.audioContext = null;

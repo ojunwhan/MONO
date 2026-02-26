@@ -139,6 +139,40 @@ function isGarbageText(text) {
   return false;
 }
 
+const STT_MIN_DURATION_SEC = 0.5;
+const STT_MIN_RMS = 0.012;
+const WHISPER_HALLUCINATION_PATTERNS = [
+  "시청해주셔서 감사합니다",
+  "구독과 좋아요",
+  "영상은 여기까지",
+  "thank you for watching",
+  "thanks for watching",
+  "please subscribe",
+  "subscribe and like",
+];
+
+function isWhisperHallucinationText(text) {
+  const s = String(text || "").trim();
+  if (!s) return true;
+  if (s.length <= 2) return true;
+  const lower = s.toLowerCase();
+  if (WHISPER_HALLUCINATION_PATTERNS.some((p) => lower.includes(p.toLowerCase()))) return true;
+  if (/\b(mbc|sbs|kbs)\b/i.test(s)) return true;
+  return false;
+}
+
+function calculatePcmRms(pcmBuffer) {
+  if (!pcmBuffer || pcmBuffer.length < 2) return 0;
+  const sampleCount = Math.floor(pcmBuffer.length / 2);
+  if (!sampleCount) return 0;
+  let sum = 0;
+  for (let i = 0; i < sampleCount; i++) {
+    const sample = pcmBuffer.readInt16LE(i * 2) / 32768;
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / sampleCount);
+}
+
 // ───────────────── DETECT ACTUAL LANGUAGE FROM TEXT ─────────────────
 function detectTextLang(text) {
   if (!text || text.length < 2) return null;
@@ -433,7 +467,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
   try {
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
-      model: "gpt-4o-mini-transcribe",
+      model: "whisper-1",
       ...(lang ? { language: lang } : {}),
     });
     return (result.text || "").trim();
@@ -1975,6 +2009,7 @@ io.on('connection', (socket) => {
     session.bytes = 0;
 
     const durationSec = pcm.length / (2 * (session.sampleRateHz || 16000));
+    const rms = calculatePcmRms(pcm);
     console.log(`[stt:segment] pid=${participantId} duration=${durationSec.toFixed(2)}s bytes=${pcm.length}`);
     socket.emit("stt:segment-received", {
       roomId,
@@ -1982,7 +2017,12 @@ io.on('connection', (socket) => {
       bytes: pcm.length,
       durationSec,
     });
-    if (durationSec < 0.25) { console.log("[stt:segment] ⏭ too short"); return; }
+    if (durationSec < STT_MIN_DURATION_SEC) { console.log("[stt:segment] ⏭ too short"); return; }
+    if (rms < STT_MIN_RMS) {
+      console.log(`[stt:segment] ⏭ low volume rms=${rms.toFixed(5)}`);
+      socket.emit("stt:no-voice", { roomId, participantId, message: "음성이 감지되지 않았습니다" });
+      return;
+    }
 
     let text = "";
     try {
@@ -1994,7 +2034,10 @@ io.on('connection', (socket) => {
       if (isQuotaExceededError(e)) emitQuotaWarning(socket);
       return;
     }
-    if (!text || isGarbageText(text)) { console.log("[stt:segment] ⏭ garbage/empty"); return; }
+    if (!text || isGarbageText(text) || isWhisperHallucinationText(text)) {
+      console.log("[stt:segment] ⏭ garbage/hallucination");
+      return;
+    }
     if (text.trim().length <= 2 && durationSec < 0.8) { console.log("[stt:segment] ⏭ too short text"); return; }
 
     const meta = ensureRoomMeta(roomId);
@@ -2003,9 +2046,9 @@ io.on('connection', (socket) => {
     const registeredLang = senderParticipant?.lang || (rec.role === "owner" ? meta.ownerLang : meta.guestLang);
     // ✅ 실제 발화 언어 감지: STT 결과의 스크립트를 분석하여 등록 언어와 다르면 실제 언어 사용
     const detectedLang = detectTextLang(text);
-    const fromLang = detectedLang || registeredLang;
+    const fromLang = registeredLang || detectedLang;
     if (detectedLang && detectedLang !== registeredLang) {
-      console.log(`[stt:lang] ⚠ registered=${registeredLang} detected=${detectedLang} → using ${fromLang}`);
+      console.log(`[stt:lang] ⚠ registered=${registeredLang} detected=${detectedLang} → keeping registered=${fromLang}`);
     }
     const siteCtx = meta.siteContext || "general";
     const senderCallSign = senderParticipant?.callSign || "";
@@ -2360,7 +2403,7 @@ io.on('connection', (socket) => {
 
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
     const detectedLang = detectTextLang(trimmedText);
-    const fromLang = detectedLang || registeredLang;
+    const fromLang = registeredLang || detectedLang;
 
     const roomContext = getRoomContext(roomId);
     addToRoomContext(roomId, { text: trimmedText, lang: fromLang, role: 'user' });
