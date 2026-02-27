@@ -293,10 +293,10 @@ export default function CsChatPage() {
               <div className="text-[18px] font-semibold inline-flex items-center gap-1">
                 <span>🤖</span>
                 <span>
-                  <span style={{ color: "#FF3B30", fontWeight: 800 }}>M</span>
-                  <span style={{ color: "#FF9500", fontWeight: 800 }}>O</span>
-                  <span style={{ color: "#34C759", fontWeight: 800 }}>N</span>
-                  <span style={{ color: "#007AFF", fontWeight: 800 }}>O</span>
+                  <span style={{ color: "#7C6FEB", fontWeight: 800 }}>M</span>
+                  <span style={{ color: "#F472B6", fontWeight: 800 }}>O</span>
+                  <span style={{ color: "#34D399", fontWeight: 800 }}>N</span>
+                  <span style={{ color: "#FBBF24", fontWeight: 800 }}>O</span>
                 </span>
                 <span>도우미</span>
               </div>
