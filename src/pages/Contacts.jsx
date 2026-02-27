@@ -5,8 +5,10 @@ import { getMyIdentity } from "../db";
 import { getLanguageProfileByCode } from "../constants/languageProfiles";
 import { UserRound, UserPlus, Phone, Send, Plus, Search, QrCode, Link2, ChevronDown, ChevronUp, ChevronLeft } from "lucide-react";
 import BottomSheet from "../components/BottomSheet";
+import { useTranslation } from "react-i18next";
 
 export default function Contacts() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [me, setMe] = useState(null);
   const [query, setQuery] = useState("");
@@ -280,7 +282,7 @@ export default function Contacts() {
   return (
     <div className="mx-auto w-full max-w-[480px] min-h-screen bg-[var(--color-bg)] pb-20">
       <div className="h-[52px] px-4 border-b border-[var(--color-border)] flex items-center justify-between">
-        <h1 className="text-[18px] font-semibold">연락처</h1>
+        <h1 className="text-[18px] font-semibold">{t("nav.contacts")}</h1>
         <button
           type="button"
           onClick={() => setShowAddSheet(true)}
@@ -395,13 +397,13 @@ export default function Contacts() {
               <div className="mx-auto w-12 h-12 rounded-full bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center">
                 <UserRound size={24} />
               </div>
-              <p className="mt-4 text-[16px] text-[var(--color-text)]">연락처가 없습니다</p>
+              <p className="mt-4 text-[16px] text-[var(--color-text)]">{t("contacts.noContacts")}</p>
               <button
                 type="button"
                 onClick={() => setShowAddSheet(true)}
                 className="mono-btn mt-5 h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[14px]"
               >
-                연락처 추가
+                {t("contacts.addContact")}
               </button>
             </div>
           ) : (

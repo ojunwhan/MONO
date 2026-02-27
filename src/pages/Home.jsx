@@ -7,6 +7,7 @@ import { getLanguageByCode } from "../constants/languages";
 import { ChevronLeft } from "lucide-react";
 import LanguageSelector from "../components/LanguageSelector";
 import { fetchAuthMe } from "../auth/session";
+import { useTranslation } from "react-i18next";
 
 function MonoLogo() {
   return (
@@ -20,6 +21,7 @@ function MonoLogo() {
 }
 
 export default function Home() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [authReady, setAuthReady] = useState(false);
@@ -129,13 +131,14 @@ export default function Home() {
               type="button"
               onClick={() => navigate(-1)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
-              aria-label="뒤로가기"
+              aria-label={t("common.back")}
             >
               <ChevronLeft size={24} />
             </button>
           </div>
         ) : null}
         <div className="mb-8"><MonoLogo /></div>
+        <p className="mb-3 text-[14px] text-[var(--color-text-secondary)]">{t("interpret.selectLanguage")}</p>
         <LanguageSelector
           value={selectedLang}
           onChange={isGuest ? setSelectedLang : handleHostLangChange}

@@ -5,8 +5,10 @@ import { LANGUAGE_PROFILES, getLanguageProfileByCode } from "../constants/langua
 import { useNavigate } from "react-router-dom";
 import LanguageSelector from "../components/LanguageSelector";
 import MonoLogo from "../components/MonoLogo";
+import { useTranslation } from "react-i18next";
 
 export default function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,7 +30,7 @@ export default function SettingsPage() {
     typeof window !== "undefined" && localStorage.getItem("mono.theme") === "dark"
   );
   const [preferredLang, setPreferredLang] = useState(localStorage.getItem("mono.preferredLang") || "en");
-  const [uiLang, setUiLang] = useState(localStorage.getItem("mono.uiLang") || "ko");
+  const [uiLang, setUiLang] = useState(localStorage.getItem("mono.uiLang") || i18n.resolvedLanguage || "en");
   const [ttsVoice, setTtsVoice] = useState(localStorage.getItem("mono.tts.voice") || "female");
   const [ttsSpeed, setTtsSpeed] = useState(Number(localStorage.getItem("mono.tts.speed") || "1"));
   const [autoPlay, setAutoPlay] = useState(localStorage.getItem("mono.tts.autoplay") !== "0");
@@ -228,10 +230,16 @@ export default function SettingsPage() {
     localStorage.setItem(key, value ? "1" : "0");
   };
 
+  useEffect(() => {
+    const normalized = String(uiLang || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
+    if (i18n.language !== normalized) i18n.changeLanguage(normalized);
+    localStorage.setItem("mono.uiLang", normalized);
+  }, [uiLang, i18n]);
+
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[420px] px-4 py-6">
-        <div className="mono-card p-5 text-[14px] text-[#666]">불러오는 중...</div>
+        <div className="mono-card p-5 text-[14px] text-[#666]">{t("common.loading")}</div>
       </div>
     );
   }
@@ -243,7 +251,7 @@ export default function SettingsPage() {
           <MonoLogo />
         </div>
         <div className="mono-card p-5">
-          <h1 className="text-[18px] font-semibold">설정</h1>
+          <h1 className="text-[18px] font-semibold">{t("nav.settings")}</h1>
           <p className="mt-2 text-[13px] text-[#666]">
             로그인하면 프로필, 언어, 저장관리, 알림 설정을 사용할 수 있습니다.
           </p>
@@ -258,7 +266,7 @@ export default function SettingsPage() {
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
               </svg>
-              Google로 계속하기
+              {t("login.googleLogin")}
             </a>
             <a
               href="/auth/kakao?next=/home"
@@ -267,13 +275,13 @@ export default function SettingsPage() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
                 <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
               </svg>
-              카카오로 계속하기
+              {t("login.kakaoLogin")}
             </a>
           </div>
         </div>
 
         <div className="mono-card p-5">
-          <h2 className="text-[14px] font-semibold">앱 버전</h2>
+          <h2 className="text-[14px] font-semibold">App Version</h2>
           <p className="mt-2 text-[13px] text-[#666]">
             {import.meta.env.VITE_APP_VERSION || "1.0.0"}
           </p>
@@ -284,7 +292,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[480px] px-4 py-5 space-y-4 bg-[var(--color-bg-secondary)]">
-      <div className="text-[18px] font-semibold px-1">설정</div>
+      <div className="text-[18px] font-semibold px-1">{t("nav.settings")}</div>
 
       <div className="mono-card p-4">
         <button type="button" onClick={() => {}} className="w-full text-left">
@@ -302,7 +310,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">언어 설정</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.language")}</div>
         <div className="space-y-2">
           <div>
             <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">모국어</label>
@@ -324,25 +332,23 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">앱 UI 언어</label>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.appLanguage")}</label>
             <select
               className="mono-input w-full h-[44px] px-3"
               value={uiLang}
               onChange={(e) => {
                 setUiLang(e.target.value);
-                localStorage.setItem("mono.uiLang", e.target.value);
               }}
             >
-              <option value="ko">한국어</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
+              <option value="ko">{t("settings.korean")}</option>
+              <option value="en">{t("settings.english")}</option>
             </select>
           </div>
         </div>
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">음성 설정</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.voice")}</div>
         <div>
           <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">TTS 음성</label>
           <select
@@ -431,7 +437,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">알림 설정</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.notifications")}</div>
         <button type="button" onClick={() => persistToggle("mono.notif.enabled", !notifEnabled, setNotifEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
           <span className="text-[15px]">알림</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${notifEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${notifEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
@@ -481,7 +487,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">저장 관리</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.storage")}</div>
         <p className="text-[13px] text-[var(--color-text-secondary)]">
           로컬 저장량: {storageUsage?.usageMB?.toFixed?.(2) || "0.00"} MB
           {storageUsage?.quotaMB ? ` / ${storageUsage.quotaMB.toFixed(2)} MB` : ""}
@@ -495,7 +501,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">프로필</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.profile")}</div>
         <div className="space-y-2">
           <input className="mono-input w-full h-[44px] px-3" value={form.nickname} onChange={(e) => onChange("nickname", e.target.value)} maxLength={40} placeholder="닉네임" />
           <input className="mono-input w-full h-[44px] px-3" value={form.monoId} onChange={(e) => onChange("monoId", e.target.value.toLowerCase())} maxLength={30} placeholder="MONO ID" />
@@ -508,8 +514,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-2">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">계정</div>
-        <button type="button" onClick={doLogout} disabled={saving} className="w-full text-left text-[15px] text-[#DC2626] h-[40px]">로그아웃</button>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.account")}</div>
+        <button type="button" onClick={doLogout} disabled={saving} className="w-full text-left text-[15px] text-[#DC2626] h-[40px]">{t("settings.logout")}</button>
         <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">계정 삭제</button>
         <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">차단 목록</button>
       </div>

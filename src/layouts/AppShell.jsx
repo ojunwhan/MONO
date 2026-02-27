@@ -3,12 +3,13 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { MessageCircle, Users, Mic, Settings } from "lucide-react";
 import { getAllRooms } from "../db";
 import useNetworkStatus from "../hooks/useNetworkStatus";
+import { useTranslation } from "react-i18next";
 
 const TABS = [
-  { to: "/interpret", label: "통역", icon: Mic, matchPrefixes: ["/interpret"] },
-  { to: "/home", label: "채팅", icon: MessageCircle, matchPrefixes: ["/home", "/room"] },
-  { to: "/contacts", label: "연락처", icon: Users, matchPrefixes: ["/contacts"] },
-  { to: "/settings", label: "설정", icon: Settings, matchPrefixes: ["/settings"] },
+  { to: "/interpret", labelKey: "nav.interpret", icon: Mic, matchPrefixes: ["/interpret"] },
+  { to: "/home", labelKey: "nav.chat", icon: MessageCircle, matchPrefixes: ["/home", "/room"] },
+  { to: "/contacts", labelKey: "nav.contacts", icon: Users, matchPrefixes: ["/contacts"] },
+  { to: "/settings", labelKey: "nav.settings", icon: Settings, matchPrefixes: ["/settings"] },
 ];
 
 const TAB_COLORS = {
@@ -19,6 +20,7 @@ const TAB_COLORS = {
 };
 
 export default function AppShell() {
+  const { t } = useTranslation();
   const location = useLocation();
   const [unreadTotal, setUnreadTotal] = React.useState(0);
   const { isOnline } = useNetworkStatus();
@@ -43,13 +45,13 @@ export default function AppShell() {
 
   React.useEffect(() => {
     if (!isOnline) {
-      setNetBanner("인터넷 연결이 끊어졌습니다");
+      setNetBanner(t("network.offline"));
       return;
     }
-    setNetBanner("연결되었습니다");
+    setNetBanner(t("network.online"));
     const timer = window.setTimeout(() => setNetBanner(""), 2000);
     return () => window.clearTimeout(timer);
-  }, [isOnline]);
+  }, [isOnline, t]);
 
   return (
     <div className="min-h-[100dvh] bg-[var(--color-bg-secondary)] text-[var(--color-text)]">
@@ -85,7 +87,7 @@ export default function AppShell() {
                   </span>
                 ) : null}
               </div>
-              <span style={{ color: TAB_COLORS[tab.to] }}>{tab.label}</span>
+              <span style={{ color: TAB_COLORS[tab.to] }}>{t(tab.labelKey)}</span>
             </NavLink>
           ))}
         </div>

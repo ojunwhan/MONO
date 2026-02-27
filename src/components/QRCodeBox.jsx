@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useCallback, useRef, useState } from "react"
 import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
 import socket from "../socket";
+import { useTranslation } from "react-i18next";
 
 const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const movedRef = useRef(false);
   const createdRef = useRef(false);
@@ -153,7 +155,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
     const moveToChat = (reason) => {
       console.log(`[HOST] move to chat: ${reason}`);
       if (movedRef.current) return;
-      notifyNative("참가자 입장", "대화를 시작합니다.");
+      notifyNative(t("interpret.guestJoined"), t("nav.chat"));
       setGuestJoined(true);
       movedRef.current = true;
       navigate(`/room/${roomIdRef.current}`, {
@@ -214,7 +216,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       socket.off("room-members", onRoomMembers);
       socket.off("heartbeat-ack", onHeartbeatAck);
     };
-  }, [navigate, emitHostCreateAndJoin]);
+  }, [navigate, emitHostCreateAndJoin, t]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -280,18 +282,18 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
         />
       </div>
 
-      <p className="mt-4 text-[14px] text-[var(--color-text-secondary)] text-center">상대방에게 보여주세요</p>
+      <p className="mt-4 text-[14px] text-[var(--color-text-secondary)] text-center">{t("interpret.showQR")}</p>
 
       <button
         type="button"
         onClick={copyToClipboard}
         className="mono-btn mt-3 h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-bg)] text-[var(--color-primary)] text-[14px]"
       >
-        {copied ? "✅ 복사됨!" : "📋 링크 복사"}
+        {copied ? `✅ ${t("interpret.copied")}` : `📋 ${t("interpret.copyLink")}`}
       </button>
 
       <p className="mt-3 text-[13px] text-[var(--color-text-secondary)] text-center">
-        {guestJoined ? "상대방이 입장했습니다." : "게스트가 입장하면 자동으로 대화방으로 이동합니다."}
+        {guestJoined ? t("interpret.guestJoined") : t("interpret.guestWillJoin")}
       </p>
     </div>
   );

@@ -23,6 +23,7 @@ import {
 } from "../audio/browserTts";
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
+import { useTranslation } from "react-i18next";
 
 // ─── Dedup utilities ───
 function dedupeRepeatTokens(s) {
@@ -91,6 +92,7 @@ function dedupeRepeats(s) {
 }
 
 export default function ChatScreen() {
+  const { t } = useTranslation();
   const { roomId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1335,7 +1337,7 @@ export default function ChatScreen() {
           {typingPeerName ? (
             <div className="w-full flex justify-start mb-2">
               <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-[var(--color-border)] bg-[var(--color-bubble-other)] px-3 py-2 text-[12px] text-[var(--color-text-secondary)] inline-flex items-center gap-1">
-                <span>{typingPeerName} 입력 중</span>
+                <span>{typingPeerName} {t("chat.typing")}</span>
                 <span className="typing-dot" />
                 <span className="typing-dot" />
                 <span className="typing-dot" />
@@ -1361,8 +1363,8 @@ export default function ChatScreen() {
               <button
                 type="button"
                 className="w-10 h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-secondary)] flex items-center justify-center shrink-0"
-                title="첨부"
-                aria-label="첨부"
+                title={t("chat.attach")}
+                aria-label={t("chat.attach")}
               >
                 <Plus size={20} />
               </button>
@@ -1370,7 +1372,7 @@ export default function ChatScreen() {
                 {replyTarget ? (
                   <div className="mb-1 rounded-[10px] bg-[var(--color-bg-secondary)] px-3 py-2 text-[13px] border-l-[3px] border-[var(--color-primary)] flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-semibold truncate">{replyTarget.mine ? "나" : (replyTarget.senderDisplayName || "상대")}</div>
+                      <div className="font-semibold truncate">{replyTarget.mine ? t("chat.replyMe") : (replyTarget.senderDisplayName || t("chat.replyOther"))}</div>
                       <div className="truncate text-[var(--color-text-secondary)]">
                         {replyTarget.translatedText || replyTarget.originalText || replyTarget.text}
                       </div>
@@ -1439,7 +1441,7 @@ export default function ChatScreen() {
                         resetHeight();
                       }
                     }}
-                    placeholder="메시지 입력..."
+                    placeholder={t("chat.messageInput")}
                   />
                 )}
               </div>
@@ -1448,7 +1450,7 @@ export default function ChatScreen() {
                 <button
                   type="submit"
                   className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center transition-colors duration-200 shrink-0"
-                  aria-label="전송"
+                  aria-label={t("chat.send")}
                 >
                   <SendHorizontal size={18} />
                 </button>

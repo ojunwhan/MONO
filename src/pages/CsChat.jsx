@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Mic, SendHorizontal } from "lucide-react";
 import MessageBubble from "../components/MessageBubble";
+import { useTranslation } from "react-i18next";
 
 function getGreetingByLang(lang = "ko") {
   const l = String(lang || "ko").toLowerCase();
@@ -21,6 +22,7 @@ function getGreetingByLang(lang = "ko") {
 }
 
 export default function CsChatPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
@@ -36,8 +38,8 @@ export default function CsChatPage() {
   const chunksRef = useRef([]);
 
   const quickChips = useMemo(
-    () => ["사용법이 궁금해요", "번역이 안 돼요", "요금제가 궁금해요", "QR 통역 방법"],
-    []
+    () => [t("csChat.usage"), t("csChat.translationIssue"), t("csChat.pricing"), t("csChat.qrMethod")],
+    [t]
   );
 
   useEffect(() => {
@@ -298,7 +300,7 @@ export default function CsChatPage() {
                   <span style={{ color: "#34D399", fontWeight: 800 }}>N</span>
                   <span style={{ color: "#FBBF24", fontWeight: 800 }}>O</span>
                 </span>
-                <span>도우미</span>
+                <span>{t("csChat.title").replace("MONO ", "")}</span>
               </div>
             </div>
             <div className="w-10 h-10 shrink-0" aria-hidden="true" />
@@ -368,7 +370,7 @@ export default function CsChatPage() {
               fontWeight: 500,
             }}
           >
-            듣고 있습니다...
+            {t("csChat.listening")}
           </div>
         )}
         <textarea
@@ -379,7 +381,7 @@ export default function CsChatPage() {
             setInput(e.target.value);
             autosize();
           }}
-          placeholder={sttBusy ? "음성 인식 중..." : "궁금한 점을 물어보세요..."}
+          placeholder={sttBusy ? t("csChat.sttBusy") : t("csChat.placeholder")}
           style={{
             flex: 1,
             resize: "none",

@@ -1,20 +1,21 @@
 import React, { useState } from "react";
-
-const SLIDES = [
-  { title: "언어가 달라도 대화가 됩니다", body: "실시간 번역으로 자연스럽게 대화해보세요.", icon: "💬" },
-  { title: "친구를 추가하고 대화를 시작하세요", body: "MONO ID 검색으로 빠르게 친구를 찾을 수 있습니다.", icon: "👥" },
-  { title: "QR코드 하나로 즉시 통역", body: "통역 탭에서 QR을 열고 바로 대화를 시작하세요.", icon: "🔳" },
-];
+import { useTranslation } from "react-i18next";
 
 export default function OnboardingSlides({ open, onClose }) {
+  const { t } = useTranslation();
   const [idx, setIdx] = useState(0);
+  const SLIDES = [
+    { title: t("onboarding.slide1Title"), body: t("onboarding.slide1Body"), icon: "💬" },
+    { title: t("onboarding.slide2Title"), body: t("onboarding.slide2Body"), icon: "👥" },
+    { title: t("onboarding.slide3Title"), body: t("onboarding.slide3Body"), icon: "🔳" },
+  ];
   if (!open) return null;
   const isLast = idx === SLIDES.length - 1;
   const current = SLIDES[idx];
   return (
     <div className="fixed inset-0 z-[120] bg-[var(--color-bg)]">
       <button type="button" onClick={onClose} className="absolute right-4 top-4 text-[14px] text-[var(--color-text-secondary)]">
-        건너뛰기
+        {t("onboarding.skip")}
       </button>
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[480px] flex-col items-center justify-center px-8 text-center">
         <div className="text-[56px]">{current.icon}</div>
@@ -30,7 +31,7 @@ export default function OnboardingSlides({ open, onClose }) {
           onClick={() => (isLast ? onClose() : setIdx((v) => v + 1))}
           className="mono-btn mt-8 h-[44px] w-full max-w-[280px] border border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
         >
-          {isLast ? "시작하기" : "다음"}
+          {isLast ? t("onboarding.start") : t("onboarding.next")}
         </button>
       </div>
     </div>

@@ -1,0 +1,92 @@
+{
+  "nav": {
+    "interpret": "Interpret",
+    "chat": "Chat",
+    "contacts": "Contacts",
+    "settings": "Settings"
+  },
+  "interpret": {
+    "showQR": "Show this to your partner",
+    "copyLink": "Copy Link",
+    "guestWillJoin": "When a guest joins, you'll be redirected to the chat room automatically.",
+    "selectLanguage": "Select Language",
+    "copied": "Copied!",
+    "guestJoined": "Your partner has joined."
+  },
+  "chat": {
+    "messageInput": "Type a message...",
+    "recording": "Recording",
+    "startRecording": "Start recording",
+    "stopRecording": "Stop recording",
+    "noMessages": "No messages yet",
+    "typing": "typing",
+    "attach": "Attach",
+    "send": "Send",
+    "replyMe": "Me",
+    "replyOther": "Other"
+  },
+  "contacts": {
+    "addContact": "Add Contact",
+    "search": "Search",
+    "noContacts": "No contacts yet"
+  },
+  "settings": {
+    "profile": "Profile",
+    "language": "Language",
+    "voice": "Voice",
+    "notifications": "Notifications",
+    "storage": "Storage",
+    "account": "Account",
+    "logout": "Logout",
+    "appLanguage": "App Language",
+    "korean": "Korean",
+    "english": "English"
+  },
+  "common": {
+    "confirm": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "back": "Back",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "guest": "Guest",
+    "close": "Close"
+  },
+  "csChat": {
+    "title": "MONO Helper",
+    "placeholder": "Ask anything...",
+    "usage": "How to use",
+    "translationIssue": "Translation not working",
+    "pricing": "Pricing info",
+    "qrMethod": "QR interpretation method",
+    "listening": "Listening...",
+    "sttBusy": "Recognizing speech..."
+  },
+  "onboarding": {
+    "slide1Title": "Talk naturally, even across languages",
+    "slide1Body": "Use real-time translation for smooth conversations.",
+    "slide2Title": "Add friends and start chatting",
+    "slide2Body": "Find friends quickly with MONO ID search.",
+    "slide3Title": "Instant interpretation with one QR code",
+    "slide3Body": "Open QR in the Interpret tab and start right away.",
+    "skip": "Skip",
+    "next": "Next",
+    "start": "Start"
+  },
+  "login": {
+    "loginWith": "Sign in",
+    "googleLogin": "Sign in with Google",
+    "kakaoLogin": "Sign in with Kakao",
+    "guestAccess": "Enter as Guest",
+    "subtitle": "AI Real-time Interpretation Messenger",
+    "termsAgree": "By signing in, you agree to the Terms and Privacy Policy.",
+    "terms": "Terms",
+    "privacy": "Privacy Policy",
+    "instantQR": "Instant interpretation with QR"
+  },
+  "network": {
+    "offline": "Internet connection lost",
+    "online": "Connected"
+  }
+}

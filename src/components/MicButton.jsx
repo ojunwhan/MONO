@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import AudioProcessor from "../utils/AudioProcessor";
 import socket from "../socket";
+import { useTranslation } from "react-i18next";
 
 export default function MicButton({
   roomId,
@@ -14,6 +15,7 @@ export default function MicButton({
   compact = false,
   className = "",
 }) {
+  const { t } = useTranslation();
   const [listening, setListening] = useState(false);
   const [pending, setPending] = useState(false);
   const processorRef = useRef(null);
@@ -444,7 +446,7 @@ export default function MicButton({
               pending ? "bg-[#9ca3af]" : listening ? "bg-[#FF3B30] mic-pulse" : "bg-[#111111]"
             } ${className}`
       }`}
-      title={listening ? "녹음 중지" : "녹음 시작"}
+      title={listening ? t("chat.stopRecording") : t("chat.startRecording")}
     >
       {pending ? (
         <span className="text-white text-[14px]">■</span>

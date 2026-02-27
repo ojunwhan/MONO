@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 function MonoLogo() {
   return (
@@ -12,12 +13,13 @@ function MonoLogo() {
 }
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-[100dvh] bg-[var(--color-bg)] text-[var(--color-text)]">
       <div className="mx-auto w-full max-w-[480px] min-h-[100dvh] px-6 py-8 flex flex-col">
         <div className="flex-[0_0_40%] flex flex-col items-center justify-center text-center">
           <MonoLogo />
-          <p className="mt-4 text-[16px] text-[var(--color-text-secondary)]">AI 실시간 통역 메신저</p>
+          <p className="mt-4 text-[16px] text-[var(--color-text-secondary)]">{t("login.subtitle")}</p>
         </div>
 
         <div className="flex-[0_0_60%] flex flex-col items-center justify-center">
@@ -32,7 +34,7 @@ export default function LoginPage() {
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
               </svg>
-              Google로 계속하기
+              {t("login.googleLogin")}
             </a>
             <a
               href="/auth/kakao?next=/home"
@@ -41,18 +43,19 @@ export default function LoginPage() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
                 <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
               </svg>
-              카카오로 계속하기
+              {t("login.kakaoLogin")}
             </a>
           </div>
 
           <a href="/interpret" className="mt-5 text-[14px] text-[var(--color-primary)]">
-            QR코드로 즉시 통역
+            {t("login.instantQR")}
           </a>
         </div>
 
         <div className="pt-4 text-center text-[12px] text-[var(--color-text-secondary)]">
-          로그인 시 <a href="/terms" className="underline">이용약관</a> 및{" "}
-          <a href="/privacy" className="underline">개인정보처리방침</a>에 동의합니다
+          {t("login.termsAgree")}{" "}
+          <a href="/terms" className="underline">{t("login.terms")}</a>{" / "}
+          <a href="/privacy" className="underline">{t("login.privacy")}</a>
         </div>
       </div>
     </div>
