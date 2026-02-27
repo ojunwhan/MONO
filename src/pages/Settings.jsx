@@ -37,7 +37,11 @@ export default function SettingsPage() {
   const [micSensitivity, setMicSensitivity] = useState(Number(localStorage.getItem("mono.mic.sensitivity") || "60"));
   const [fontSize, setFontSize] = useState(localStorage.getItem("mono.fontSize") || "normal");
   const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem("mono.notif.enabled") !== "0");
-  const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem("mono.notif.sound") !== "0");
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const v = localStorage.getItem("notificationSound");
+    if (v != null) return v !== "0" && v !== "false";
+    return localStorage.getItem("mono.notif.sound") !== "0";
+  });
   const [vibrationEnabled, setVibrationEnabled] = useState(localStorage.getItem("mono.notif.vibration") !== "0");
   const [storageUsage, setStorageUsage] = useState({ usageMB: 0, quotaMB: 0 });
 
@@ -228,6 +232,12 @@ export default function SettingsPage() {
   const persistToggle = (key, value, setter) => {
     setter(value);
     localStorage.setItem(key, value ? "1" : "0");
+  };
+
+  const persistNotificationSound = (value) => {
+    setSoundEnabled(value);
+    localStorage.setItem("notificationSound", value ? "1" : "0");
+    localStorage.setItem("mono.notif.sound", value ? "1" : "0");
   };
 
   useEffect(() => {
@@ -442,7 +452,7 @@ export default function SettingsPage() {
           <span className="text-[15px]">{t("settings.notifications")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${notifEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${notifEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
         </button>
-        <button type="button" onClick={() => persistToggle("mono.notif.sound", !soundEnabled, setSoundEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
+        <button type="button" onClick={() => persistNotificationSound(!soundEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
           <span className="text-[15px]">{t("settings.sound")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${soundEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${soundEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
         </button>

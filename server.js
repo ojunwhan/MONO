@@ -2661,7 +2661,11 @@ io.on('connection', (socket) => {
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
         addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
-        io.to(otherP.socketId).emit("notify", { title: senderDisplayName || "MONO", body: draft?.substring(0, 50) || "" });
+        io.to(otherP.socketId).emit("notify", {
+          title: senderDisplayName || "MONO",
+          body: draft?.substring(0, 50) || "",
+          roomId,
+        });
         socket.emit("message-status", {
           roomId,
           messageId: id,
@@ -2804,7 +2808,11 @@ io.on('connection', (socket) => {
             isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
           addToRoomContext(roomId, { text: draft || trimmedText, lang, role: 'assistant' });
-          io.to(listener.socketId).emit("notify", { title: "MONO", body: draft?.substring(0, 50) || "" });
+          io.to(listener.socketId).emit("notify", {
+            title: "MONO",
+            body: draft?.substring(0, 50) || "",
+            roomId,
+          });
         }
         if (listenerPid) {
           maybeSendPushToUser(listenerPid, {

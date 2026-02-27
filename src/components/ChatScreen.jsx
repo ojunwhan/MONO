@@ -21,6 +21,7 @@ import {
   speakText,
   cancelSpeech,
 } from "../audio/browserTts";
+import { playNotificationSound, unlockNotificationSound } from "../audio/notificationSound";
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { useTranslation } from "react-i18next";
@@ -520,6 +521,9 @@ export default function ChatScreen() {
       // Other's message → show translated text (my language)
       const incoming = dedupeRepeats(translatedText || originalText || "");
       if (!incoming) return;
+      if (document.visibilityState === "hidden") {
+        playNotificationSound();
+      }
       recordRoomActivity(roomIdRef.current, {
         roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
         lastMessagePreview: String(incoming).trim().slice(0, 120),
@@ -630,10 +634,20 @@ export default function ChatScreen() {
         text: t("chat.participantJoined"),
         system: true,
       }]);
+      playNotificationSound();
       console.log(`[HOST] Socket state: ${socket.connected}, Room: ${roomIdRef.current}, Peer: connected`);
     };
 
     const onNotify = (p) => {
+      const incomingRoomId = String(p?.roomId || "");
+      const currentRoomId = String(roomIdRef.current || "");
+      const shouldPlaySound =
+        !incomingRoomId ||
+        incomingRoomId !== currentRoomId ||
+        document.visibilityState === "hidden";
+      if (shouldPlaySound) {
+        playNotificationSound();
+      }
       try {
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           new Notification(p?.title || "MONO", { body: p?.body || "" });
@@ -1079,7 +1093,9 @@ export default function ChatScreen() {
     };
   }, [convertGuest, queryGuestId, roomId, isGuestMode]);
 
-  const handleUserGesture = useCallback(() => {}, []);
+  const handleUserGesture = useCallback(() => {
+    unlockNotificationSound();
+  }, []);
 
   // ── Voice output toggle ──
   const toggleVoice = useCallback(() => {

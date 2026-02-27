@@ -3,6 +3,7 @@ import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
 import socket from "../socket";
 import { useTranslation } from "react-i18next";
+import { playNotificationSound } from "../audio/notificationSound";
 
 const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType }) => {
   const { t } = useTranslation();
@@ -156,6 +157,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       console.log(`[HOST] move to chat: ${reason}`);
       if (movedRef.current) return;
       notifyNative(t("interpret.guestJoined"), t("nav.chat"));
+      playNotificationSound();
       setGuestJoined(true);
       movedRef.current = true;
       navigate(`/room/${roomIdRef.current}`, {
