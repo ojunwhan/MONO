@@ -370,7 +370,7 @@ export default function MicButton({
         onListeningChange?.(false);
         window.dispatchEvent(new Event("mro:mic:stop"));
       } finally {
-        if (!usingMediaRecorderRef.current) setPending(false);
+        setPending(false);
       }
     } else {
       setPending(true);
