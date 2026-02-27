@@ -615,6 +615,7 @@ if (VAPID_SUBJECT && VAPID_PUB_KEY && VAPID_PRIV_KEY) {
 // In-memory subscription store: userId → Set<PushSubscription>
 // One user can have multiple subscriptions (multi-device)
 const PUSH_SUBSCRIPTIONS = new Map(); // userId → Map<endpoint, subscription>
+const USER_PRESENCE = new Map(); // userId(participantId) -> { activeRoomId, visibilityState, socketId, updatedAt }
 const PUSH_STATE_DIR = path.join(__dirname, 'state');
 const PUSH_STATE_FILE = path.join(PUSH_STATE_DIR, 'push_subscriptions.json');
 let pushPersistTimer = null;
@@ -680,12 +681,22 @@ function countPushSubscriptions() {
   return { users, devices };
 }
 
-function savePushSubscription(userId, subscription) {
+function savePushSubscription(userId, subscription, deviceInfo = null) {
   if (!userId || !subscription?.endpoint) return false;
   if (!PUSH_SUBSCRIPTIONS.has(userId)) {
     PUSH_SUBSCRIPTIONS.set(userId, new Map());
   }
-  PUSH_SUBSCRIPTIONS.get(userId).set(subscription.endpoint, subscription);
+  const now = Date.now();
+  const prev = PUSH_SUBSCRIPTIONS.get(userId).get(subscription.endpoint);
+  const normalized = {
+    endpoint: subscription.endpoint,
+    keys: subscription.keys || prev?.keys || {},
+    expirationTime: subscription.expirationTime ?? prev?.expirationTime ?? null,
+    createdAt: prev?.createdAt || now,
+    updatedAt: now,
+    device: deviceInfo || prev?.device || null,
+  };
+  PUSH_SUBSCRIPTIONS.get(userId).set(subscription.endpoint, normalized);
   console.log(`[push] 📥 Saved subscription for ${userId} (${PUSH_SUBSCRIPTIONS.get(userId).size} device(s))`);
   schedulePersistPushSubscriptions();
   return true;
@@ -724,8 +735,18 @@ async function sendPushToUser(targetUserId, payload) {
 
   const stale = [];
   for (const [endpoint, sub] of subs.entries()) {
+    const webPushSub = {
+      endpoint: sub?.endpoint,
+      keys: sub?.keys || {},
+      expirationTime: sub?.expirationTime ?? null,
+    };
+    if (!webPushSub.endpoint || !webPushSub.keys?.p256dh || !webPushSub.keys?.auth) {
+      stale.push(endpoint);
+      continue;
+    }
     try {
-      await webpush.sendNotification(sub, payloadStr);
+      await webpush.sendNotification(webPushSub, payloadStr);
+      console.log(`[push] ✅ sent to ${targetUserId} endpoint=${endpoint.slice(0, 48)}...`);
     } catch (err) {
       if (err.statusCode === 404 || err.statusCode === 410) {
         // Subscription expired or invalid — remove it
@@ -744,6 +765,46 @@ async function sendPushToUser(targetUserId, payload) {
   if (stale.length > 0) schedulePersistPushSubscriptions();
 }
 
+function updateUserPresence(userId, { activeRoomId = null, visibilityState = "visible", socketId = "" } = {}) {
+  if (!userId) return;
+  USER_PRESENCE.set(String(userId), {
+    activeRoomId: activeRoomId ? String(activeRoomId) : null,
+    visibilityState: String(visibilityState || "visible"),
+    socketId: String(socketId || ""),
+    updatedAt: Date.now(),
+  });
+}
+
+function removeUserPresenceBySocket(socketId) {
+  if (!socketId) return;
+  for (const [userId, p] of USER_PRESENCE.entries()) {
+    if (p?.socketId === socketId) USER_PRESENCE.delete(userId);
+  }
+}
+
+function shouldSendPushToParticipant(targetUserId, roomId) {
+  const p = USER_PRESENCE.get(String(targetUserId || ""));
+  if (!p) return true;
+  if (p.visibilityState !== "visible") return true;
+  if (!roomId) return true;
+  return String(p.activeRoomId || "") !== String(roomId);
+}
+
+function maybeSendPushToUser(targetUserId, payload, context = {}) {
+  if (!targetUserId) return Promise.resolve(false);
+  const roomId = context?.roomId || payload?.roomId || "";
+  if (!shouldSendPushToParticipant(targetUserId, roomId)) {
+    console.log(`[push] ⏭ skipped user=${targetUserId} room=${roomId} (visible + active room)`);
+    return Promise.resolve(false);
+  }
+  return sendPushToUser(targetUserId, payload)
+    .then(() => true)
+    .catch((e) => {
+      console.warn(`[push] ❌ send failed user=${targetUserId} room=${roomId}:`, e?.message || e);
+      return false;
+    });
+}
+
 // ── REST API: Push subscription management ──
 
 // GET /api/push/vapid-key — return public VAPID key for client
@@ -756,11 +817,11 @@ app.get('/api/push/vapid-key', (req, res) => {
 
 // POST /api/push/subscribe — save subscription
 app.post('/api/push/subscribe', (req, res) => {
-  const { userId, subscription } = req.body;
+  const { userId, subscription, deviceInfo } = req.body;
   if (!userId || !subscription?.endpoint) {
     return res.status(400).json({ error: 'userId and subscription required' });
   }
-  const ok = savePushSubscription(userId, subscription);
+  const ok = savePushSubscription(userId, subscription, deviceInfo || null);
   res.json({ success: ok });
 });
 
@@ -1205,6 +1266,7 @@ io.on('connection', (socket) => {
     if (typeof canonicalName !== 'string' || !canonicalName.trim() || canonicalName.length > 60) return;
     const user = getOrCreateUser(userId, { canonicalName, lang, socketId: socket.id });
     socket.data.userId = userId;
+    updateUserPresence(userId, { socketId: socket.id, visibilityState: "visible", activeRoomId: socket.roomId || null });
     console.log(`[REGISTER] ${socket.id} → ${userId} "${canonicalName}" (${lang})`);
 
     // Send back confirmation
@@ -1217,14 +1279,24 @@ io.on('connection', (socket) => {
   });
 
   // ── Push subscription via Socket ──
-  socket.on("push-subscribe", ({ userId, subscription }) => {
+  socket.on("push-subscribe", ({ userId, subscription, deviceInfo }) => {
     if (!userId || !subscription?.endpoint) return;
-    savePushSubscription(userId, subscription);
+    savePushSubscription(userId, subscription, deviceInfo || null);
   });
 
   socket.on("push-unsubscribe", ({ userId, endpoint }) => {
     if (!userId || !endpoint) return;
     removePushSubscription(userId, endpoint);
+  });
+
+  socket.on("presence:update", ({ participantId, activeRoomId, visibilityState } = {}) => {
+    const uid = String(participantId || socket.data?.participantId || socket.data?.userId || "").trim();
+    if (!uid) return;
+    updateUserPresence(uid, {
+      activeRoomId: activeRoomId || null,
+      visibilityState: visibilityState || "visible",
+      socketId: socket.id,
+    });
   });
 
   // ═══════════════════════════════════════════════════════
@@ -1433,6 +1505,7 @@ io.on('connection', (socket) => {
     socket.join(rid);
     socket.roomId = rid;
     socket.data.participantId = participantId;
+    updateUserPresence(participantId, { activeRoomId: rid, visibilityState: "visible", socketId: socket.id });
     SOCKET_ROLES.set(socket.id, { role });
 
     const existing = meta.participants[participantId];
@@ -1481,6 +1554,7 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.data.participantId = userId;
+    updateUserPresence(userId, { activeRoomId: roomId, visibilityState: "visible", socketId: socket.id });
 
     const normalizedLang = mapLang(language || "en");
     const existing = meta.participants?.[userId];
@@ -1557,6 +1631,13 @@ io.on('connection', (socket) => {
     }
     socket.join(roomId);
     socket.roomId = roomId;
+    if (socket.data?.participantId) {
+      updateUserPresence(socket.data.participantId, {
+        activeRoomId: roomId,
+        visibilityState: "visible",
+        socketId: socket.id,
+      });
+    }
     socket.emit("room-status", { status: "rejoined", roomId });
   });
 
@@ -1709,6 +1790,7 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.data.participantId = participantId;
+    updateUserPresence(participantId, { activeRoomId: roomId, visibilityState: "visible", socketId: socket.id });
 
     let serverRole = meta.ownerPid && meta.ownerPid === participantId ? "owner" : "guest";
     if (roleHint === "owner") {
@@ -1801,9 +1883,9 @@ io.on('connection', (socket) => {
       // guest:joined
       if (serverRole === "guest") {
         console.log(`[GUEST] Joined room: ${roomId}, Socket: ${socket.id}`);
-        socket.to(roomId).emit("guest:joined", {
-          roomId, socketId: socket.id, lang: fromLang || "auto",
-        });
+        const joinPayload = { roomId, socketId: socket.id, lang: fromLang || "auto" };
+        socket.to(roomId).emit("guest:joined", joinPayload);
+        socket.to(roomId).emit("user-joined", joinPayload);
         socket.to(roomId).emit("partner-joined", {
           roomId,
           peerLang: pLang || fromLang || "en",
@@ -1815,6 +1897,23 @@ io.on('connection', (socket) => {
           roomId,
           memberCount: room?.size || 0,
         });
+        const hostPid = meta.ownerPid;
+        if (hostPid && hostPid !== participantId) {
+          const guestName = String(nativeName || localName || "Guest");
+          const guestLang = String(pLang || fromLang || "auto").toUpperCase();
+          maybeSendPushToUser(
+            hostPid,
+            {
+              title: "MONO",
+              body: `[${guestName}/${guestLang}]님이 대화방에 입장했습니다`,
+              roomId,
+              senderName: guestName,
+              url: `/room/${roomId}`,
+              tag: `mono-guest-join-${roomId}`,
+            },
+            { roomId }
+          );
+        }
       }
 
       // If both participants present → immediately send native names + generate adapted names
@@ -1898,9 +1997,31 @@ io.on('connection', (socket) => {
       });
 
       if (serverRole === "guest") {
-        socket.to(roomId).emit("guest:joined", {
-          roomId, socketId: socket.id, lang: fromLang || "auto", callSign,
-        });
+        const joinPayload = {
+          roomId,
+          socketId: socket.id,
+          lang: fromLang || "auto",
+          callSign,
+        };
+        socket.to(roomId).emit("guest:joined", joinPayload);
+        socket.to(roomId).emit("user-joined", joinPayload);
+        const hostPid = meta.ownerPid;
+        if (hostPid && hostPid !== participantId) {
+          const guestName = String(localName || callSign || "Guest");
+          const guestLang = String(pLang || fromLang || "auto").toUpperCase();
+          maybeSendPushToUser(
+            hostPid,
+            {
+              title: "MONO",
+              body: `[${guestName}/${guestLang}]님이 대화방에 입장했습니다`,
+              roomId,
+              senderName: guestName,
+              url: `/room/${roomId}`,
+              tag: `mono-guest-join-${roomId}`,
+            },
+            { roomId }
+          );
+        }
       }
     }
 
@@ -2549,14 +2670,14 @@ io.on('connection', (socket) => {
           at: Date.now(),
         });
       }
-      // Always send push for background/lock-screen reliability.
-      sendPushToUser(otherPid, {
+      // Push only when receiver is not actively viewing this room in foreground.
+      maybeSendPushToUser(otherPid, {
         title: senderDisplayName || 'MONO',
         body: draft?.substring(0, 80) || trimmedText?.substring(0, 80) || '',
         roomId,
         senderName: senderDisplayName,
         url: `/room/${roomId}`,
-      }).catch(() => {});
+      }, { roomId });
 
       let finalizedForTts = draft;
       try {
@@ -2620,13 +2741,13 @@ io.on('connection', (socket) => {
         });
         addToRoomContext(roomId, { text: draft || cleanText, lang: toLang, role: 'assistant' });
       }
-      sendPushToUser(csMatch.targetPid, {
+      maybeSendPushToUser(csMatch.targetPid, {
         title: senderCallSign || 'MONO',
         body: draft?.substring(0, 80) || cleanText?.substring(0, 80) || '',
         roomId,
         senderName: senderCallSign,
         url: `/room/${roomId}`,
-      }).catch(() => {});
+      }, { roomId });
       let finalizedForTts = draft;
       try {
         const hq = await hqTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext);
@@ -2686,13 +2807,13 @@ io.on('connection', (socket) => {
           io.to(listener.socketId).emit("notify", { title: "MONO", body: draft?.substring(0, 50) || "" });
         }
         if (listenerPid) {
-          sendPushToUser(listenerPid, {
+          maybeSendPushToUser(listenerPid, {
             title: senderCallSign || 'MONO',
             body: draft?.substring(0, 80) || '',
             roomId,
             senderName: senderCallSign,
             url: `/room/${roomId}`,
-          }).catch(() => {});
+          }, { roomId });
         }
       }
       let finalizedForTts = draft;
@@ -2728,6 +2849,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     const roomId = socket.roomId;
     console.log(`🔴 ${socket.id} disconnected from room ${roomId} (${reason})`);
+    removeUserPresenceBySocket(socket.id);
 
     // Clear socketId in USER_REGISTRY
     const uid = socket.data?.userId;

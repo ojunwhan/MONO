@@ -58,6 +58,12 @@ export async function subscribeToPush(userId) {
 
   try {
     const registration = await navigator.serviceWorker.ready;
+    const deviceInfo = {
+      ua: navigator.userAgent || "",
+      platform: navigator.platform || "",
+      language: navigator.language || "",
+      createdAt: Date.now(),
+    };
     
     // Check existing subscription
     let subscription = await registration.pushManager.getSubscription();
@@ -70,13 +76,17 @@ export async function subscribeToPush(userId) {
     }
 
     // Send subscription to server via both REST and socket
-    socket.emit("push-subscribe", { userId, subscription: subscription.toJSON() });
+    socket.emit("push-subscribe", {
+      userId,
+      subscription: subscription.toJSON(),
+      deviceInfo,
+    });
 
     try {
       await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, subscription: subscription.toJSON() }),
+        body: JSON.stringify({ userId, subscription: subscription.toJSON(), deviceInfo }),
       });
     } catch {}
 

@@ -36,9 +36,10 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
-  const targetUrl = data.url
-    ? data.url
-    : (data.roomId ? `/room/${data.roomId}` : '/rooms');
+  const targetPath = data.roomId
+    ? `/room/${data.roomId}`
+    : (data.url || "/interpret");
+  const targetUrl = new URL(targetPath, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

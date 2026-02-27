@@ -378,6 +378,30 @@ export default function ChatScreen() {
     }
   }, []);
 
+  // ─── Presence sync for push dedupe (server decides when to send Web Push) ───
+  useEffect(() => {
+    const pid = participantIdRef.current || participantId;
+    if (!pid) return;
+    const emitPresence = (activeRoomId) => {
+      socket.emit("presence:update", {
+        participantId: pid,
+        activeRoomId: activeRoomId ?? roomIdRef.current ?? roomId,
+        visibilityState: document.visibilityState || "visible",
+      });
+    };
+    emitPresence(roomIdRef.current || roomId);
+    const onVisibility = () => emitPresence(roomIdRef.current || roomId);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      socket.emit("presence:update", {
+        participantId: pid,
+        activeRoomId: null,
+        visibilityState: document.visibilityState || "hidden",
+      });
+    };
+  }, [roomId, participantId]);
+
   useEffect(() => {
     return () => {
       if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
