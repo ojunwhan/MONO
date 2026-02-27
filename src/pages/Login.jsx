@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { startKakaoLogin } from "../auth/kakaoLogin";
 
 function MonoLogo() {
   return (
@@ -36,15 +37,16 @@ export default function LoginPage() {
               </svg>
               {t("login.googleLogin")}
             </a>
-            <a
-              href="/auth/kakao?next=/home"
+            <button
+              type="button"
+              onClick={() => startKakaoLogin("/home")}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FEE500] text-[#000000D9] font-medium"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
                 <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
               </svg>
               {t("login.kakaoLogin")}
-            </a>
+            </button>
           </div>
 
           <a href="/interpret" className="mt-5 text-[14px] text-[var(--color-primary)]">

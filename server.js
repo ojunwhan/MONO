@@ -375,6 +375,33 @@ function emitParticipants(roomId) {
   io.to(roomId).emit("participants", list);
 }
 
+function convertOneToOneRoomToBroadcast(roomId, meta) {
+  if (!meta || meta.roomType !== "oneToOne") return meta;
+  const nextMeta = meta;
+  nextMeta.roomType = "broadcast";
+  if (!nextMeta.callSignCounters) nextMeta.callSignCounters = {};
+  for (const [pid, p] of Object.entries(nextMeta.participants || {})) {
+    if (!p) continue;
+    const role = p.role || "tech";
+    const callSign = p.callSign || assignCallSign(nextMeta, role);
+    nextMeta.participants[pid] = {
+      ...p,
+      role,
+      callSign,
+      localName: p.localName || p.nativeName || "",
+      phoneticVariants: p.phoneticVariants || generateCallSignPhonetics(callSign),
+    };
+  }
+  ROOMS.set(roomId, nextMeta);
+  io.to(roomId).emit("room-context", {
+    siteContext: nextMeta.siteContext,
+    locked: nextMeta.locked,
+    roomType: "broadcast",
+    roles: SITE_ROLES[nextMeta.siteContext] || SITE_ROLES.general,
+  });
+  return nextMeta;
+}
+
 function pcm16ToWavBuffer(pcmBuffer, sampleRateHz = 16000, channels = 1) {
   const byteRate = sampleRateHz * channels * 2;
   const blockAlign = channels * 2;
@@ -1776,14 +1803,13 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // ── 1:1 인원 제한: 방 타입이 oneToOne이면 최대 2명 ──
+    // ── 1:1 방에서 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
     if (meta.roomType === "oneToOne") {
       const currentPids = Object.keys(meta.participants);
       const isReconnect = currentPids.includes(participantId);
       if (!isReconnect && currentPids.length >= 2) {
-        console.log(`[JOIN] ❌ 1:1 room full: ${roomId} (${currentPids.length} ppl)`);
-        socket.emit("room-full", { roomId });
-        return;
+        console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${currentPids.length + 1} ppl)`);
+        convertOneToOneRoomToBroadcast(roomId, meta);
       }
     }
 

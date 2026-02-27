@@ -64,7 +64,13 @@
     "benefitReuse": "✅ You can interpret again anytime",
     "signupGoogle": "Sign up with Google",
     "signupKakao": "Sign up with Kakao",
-    "later": "Maybe later"
+    "later": "Maybe later",
+    "invite": "Invite",
+    "inviteRoom": "Invite to room",
+    "copyInviteLink": "Copy invite link",
+    "inviteCopied": "Link copied",
+    "showQr": "Show QR code",
+    "share": "Share"
   },
   "contacts": {
     "addContact": "Add Contact",

@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles/index.css";
 import "./i18n";
 import { initNotificationSound, unlockNotificationSound } from "./audio/notificationSound";
+import { initKakaoSdk } from "./auth/kakaoLogin";
 
 // ✅ React 앱 렌더링
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -14,6 +15,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 initNotificationSound();
+initKakaoSdk();
 const unlockOnce = () => {
   unlockNotificationSound();
   window.removeEventListener("pointerdown", unlockOnce);

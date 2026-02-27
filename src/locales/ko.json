@@ -64,7 +64,13 @@
     "benefitReuse": "✅ 언제든 다시 통역할 수 있어요",
     "signupGoogle": "Google로 가입",
     "signupKakao": "카카오로 가입",
-    "later": "나중에 할게요"
+    "later": "나중에 할게요",
+    "invite": "초대",
+    "inviteRoom": "대화방 초대",
+    "copyInviteLink": "초대 링크 복사",
+    "inviteCopied": "링크가 복사되었습니다",
+    "showQr": "QR 코드 보기",
+    "share": "공유하기"
   },
   "contacts": {
     "addContact": "연락처 추가",

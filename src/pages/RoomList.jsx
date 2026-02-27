@@ -28,10 +28,13 @@ export default function RoomList() {
   const [rooms, setRooms] = useState([]);
   const [friendCandidates, setFriendCandidates] = useState([]);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [actionRoom, setActionRoom] = useState(null);
   const [newChatStep, setNewChatStep] = useState("type");
   const [newChatType, setNewChatType] = useState("dm");
   const registeredRef = useRef(false);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
 
   const formatListTime = useCallback((ts) => {
     if (!ts) return "";
@@ -242,6 +245,29 @@ export default function RoomList() {
     });
   };
 
+  const copyRoomInviteLink = useCallback(async (room) => {
+    if (!room?.roomId) return;
+    const url = `https://lingora.chat/join/${encodeURIComponent(room.roomId)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert(t("chat.inviteCopied"));
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = url;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      alert(t("chat.inviteCopied"));
+    } finally {
+      setActionRoom(null);
+    }
+  }, [t]);
+
   // ── Delete room ──
   const handleDeleteRoom = async (roomId, e) => {
     e.stopPropagation();
@@ -332,7 +358,26 @@ export default function RoomList() {
               {rooms.map((room) => (
                 <div
                   key={room.roomId}
-                  onClick={() => openRoom(room)}
+                  onClick={() => {
+                    if (longPressTriggeredRef.current) {
+                      longPressTriggeredRef.current = false;
+                      return;
+                    }
+                    openRoom(room);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setActionRoom(room);
+                  }}
+                  onTouchStart={() => {
+                    window.clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = window.setTimeout(() => {
+                      longPressTriggeredRef.current = true;
+                      setActionRoom(room);
+                    }, 550);
+                  }}
+                  onTouchEnd={() => window.clearTimeout(longPressTimerRef.current)}
+                  onTouchCancel={() => window.clearTimeout(longPressTimerRef.current)}
                   className="relative h-[72px] px-4 flex items-center justify-between cursor-pointer hover:bg-[var(--color-bg-secondary)] transition-colors"
                 >
                   <div className="absolute left-[76px] right-0 top-0 h-px bg-[var(--color-border)]" />
@@ -441,6 +486,24 @@ export default function RoomList() {
                     ))}
                   </div>
                 )}
+          </div>
+        </BottomSheet>
+        <BottomSheet open={!!actionRoom} onClose={() => setActionRoom(null)} title={t("chat.inviteRoom")}>
+          <div className="px-2 pb-2">
+            <button
+              type="button"
+              onClick={() => copyRoomInviteLink(actionRoom)}
+              className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
+            >
+              🔗 {t("chat.copyInviteLink")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActionRoom(null)}
+              className="w-full h-[52px] px-3 text-left text-[15px]"
+            >
+              {t("common.close")}
+            </button>
           </div>
         </BottomSheet>
       </div>

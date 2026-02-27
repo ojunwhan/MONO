@@ -4,9 +4,10 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import socket from "../socket";
 import MicButton from "./MicButton";
 import AudioWaveform from "./AudioWaveform";
+import QRCode from "react-qr-code";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
-import { ChevronLeft, MoreVertical, SendHorizontal, Plus } from "lucide-react";
+import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode } from "lucide-react";
 import BottomSheet from "./BottomSheet";
 import ToastMessage from "./ToastMessage";
 import SITE_CONTEXTS from "../constants/siteContexts";
@@ -25,6 +26,7 @@ import { playNotificationSound, unlockNotificationSound } from "../audio/notific
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { useTranslation } from "react-i18next";
+import { startKakaoLogin } from "../auth/kakaoLogin";
 
 // ─── Dedup utilities ───
 function dedupeRepeatTokens(s) {
@@ -152,6 +154,8 @@ export default function ChatScreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState("");
   const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
+  const [showInviteQr, setShowInviteQr] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
   const roomMenuRef = useRef(null);
 
@@ -1232,6 +1236,44 @@ export default function ChatScreen() {
     () => participants.some((p) => p?.pid && p.pid !== participantId && p.online !== false),
     [participants, participantId]
   );
+  const inviteUrl = useMemo(
+    () => `https://lingora.chat/join/${encodeURIComponent(roomId || "")}`,
+    [roomId]
+  );
+  const canWebShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  const copyInviteLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      showToast(t("chat.inviteCopied"));
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = inviteUrl;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand("copy");
+        showToast(t("chat.inviteCopied"));
+      } finally {
+        document.body.removeChild(textArea);
+      }
+    }
+  }, [inviteUrl, showToast, t]);
+
+  const shareInviteLink = useCallback(async () => {
+    if (!canWebShare) return;
+    try {
+      await navigator.share({
+        title: "MONO 통역 대화방",
+        text: "MONO에서 실시간 통역 대화에 참여하세요",
+        url: inviteUrl,
+      });
+    } catch {}
+  }, [canWebShare, inviteUrl]);
 
   return (
     <div className="relative">
@@ -1285,6 +1327,14 @@ export default function ChatScreen() {
             </div>
 
             <div className="flex items-center gap-1 text-[12px] min-w-[92px] justify-end relative" ref={roomMenuRef}>
+              <button
+                onClick={() => setInviteSheetOpen(true)}
+                className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
+                title={t("chat.invite")}
+                aria-label={t("chat.invite")}
+              >
+                <UserPlus size={18} />
+              </button>
               <button
                 onClick={() => setRoomMenuOpen((v) => !v)}
                 className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
@@ -1613,6 +1663,44 @@ export default function ChatScreen() {
           </div>
         </div>
       ) : null}
+      <BottomSheet open={inviteSheetOpen} onClose={() => { setInviteSheetOpen(false); setShowInviteQr(false); }} title={t("chat.inviteRoom")}>
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={async () => {
+              await copyInviteLink();
+              setInviteSheetOpen(false);
+            }}
+            className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)] inline-flex items-center gap-2"
+          >
+            <Link2 size={16} /> {t("chat.copyInviteLink")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInviteQr((v) => !v)}
+            className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)] inline-flex items-center gap-2"
+          >
+            <QrCode size={16} /> {t("chat.showQr")}
+          </button>
+          {canWebShare ? (
+            <button
+              type="button"
+              onClick={shareInviteLink}
+              className="w-full h-[52px] px-3 text-left text-[15px] inline-flex items-center gap-2"
+            >
+              <Share2 size={16} /> {t("chat.share")}
+            </button>
+          ) : null}
+          {showInviteQr ? (
+            <div className="pt-3 pb-2 flex flex-col items-center gap-2">
+              <div className="p-3 bg-white rounded-[12px] border border-[var(--color-border)]">
+                <QRCode value={inviteUrl} size={180} bgColor="#FFFFFF" fgColor="#3B82F6" />
+              </div>
+              <p className="text-[12px] text-[var(--color-text-secondary)] break-all text-center">{inviteUrl}</p>
+            </div>
+          ) : null}
+        </div>
+      </BottomSheet>
       <BottomSheet open={showGuestSignupPrompt} onClose={() => setShowGuestSignupPrompt(false)} title={t("chat.signupQuestion")}>
         <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
           <div className="text-[14px] text-[var(--color-text-secondary)] leading-6">
@@ -1633,15 +1721,24 @@ export default function ChatScreen() {
             </svg>
             {t("chat.signupGoogle")}
           </a>
-          <a
-            href={`/auth/kakao?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`}
+          <button
+            type="button"
+            onClick={() =>
+              startKakaoLogin(
+                `/room/${encodeURIComponent(roomId || "")}?convertGuest=1&guestId=${encodeURIComponent(
+                  participantIdRef.current || ""
+                )}&fromLang=${encodeURIComponent(fromLangRef.current || "en")}&localName=${encodeURIComponent(
+                  localNameRef.current || ""
+                )}`
+              )
+            }
             className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FEE500] text-[#000000D9] font-medium"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
               <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
             </svg>
             {t("chat.signupKakao")}
-          </a>
+          </button>
           <button
             type="button"
             onClick={leaveAsGuestNow}
