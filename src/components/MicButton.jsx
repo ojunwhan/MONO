@@ -136,7 +136,7 @@ export default function MicButton({
     recognition.lang = toWebSpeechLocale(lang);
     // Mobile Chrome can repeatedly re-emit finalized segments in continuous mode.
     // Keep manual-stop UX by auto-restarting onend while button is still active.
-    recognition.continuous = !isMobile;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     webSpeechCommittedRef.current = "";
