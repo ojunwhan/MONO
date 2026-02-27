@@ -150,8 +150,8 @@ export default function MicButton({
       }
       const interimTrimmed = interim.trim();
       webSpeechInterimRef.current = interimTrimmed;
-      const preview = `${webSpeechCommittedRef.current} ${webSpeechInterimRef.current}`.trim();
-      onSpeechInterim?.(preview);
+      // Interim is for live preview only; do not accumulate it into final payload.
+      onSpeechInterim?.(interimTrimmed);
     };
     recognition.onerror = (e) => {
       console.warn("[MONO] webspeech error:", e?.error || "unknown");
@@ -171,7 +171,7 @@ export default function MicButton({
       }
       if (webSpeechManualStopRef.current && !webSpeechEmittedRef.current) {
         webSpeechEmittedRef.current = true;
-        const finalText = `${webSpeechCommittedRef.current} ${webSpeechInterimRef.current}`.trim();
+        const finalText = String(webSpeechCommittedRef.current || "").trim();
         if (finalText) onSpeechFinal?.(finalText);
       }
       onSpeechInterim?.("");
