@@ -581,15 +581,15 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: ["https://lingora.chat", "http://localhost:3174", "http://127.0.0.1:3174"],
     methods: ["GET", "POST"],
     credentials: true,
   },
   allowEIO3: true,
-  transports: ["websocket"],
-  allowUpgrades: false,
+  transports: ["websocket", "polling"],
+  allowUpgrades: true,
   pingInterval: 25000,
-  pingTimeout: 10000,
+  pingTimeout: 20000,
   connectTimeout: 20000,
   maxHttpBufferSize: 5e6,
   path: "/socket.io/",
