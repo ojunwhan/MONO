@@ -21,6 +21,7 @@ export default function MicButton({
   const listeningRef = useRef(false);
   const webSpeechCommittedRef = useRef("");
   const webSpeechInterimRef = useRef("");
+  const webSpeechFinalByIndexRef = useRef(new Map());
   const webSpeechManualStopRef = useRef(false);
   const webSpeechEmittedRef = useRef(false);
   const webSpeechRestartTimerRef = useRef(null);
@@ -130,12 +131,17 @@ export default function MicButton({
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return false;
     const recognition = new Ctor();
+    const isMobile =
+      typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
     recognition.lang = toWebSpeechLocale(lang);
-    recognition.continuous = true;
+    // Mobile Chrome can repeatedly re-emit finalized segments in continuous mode.
+    // Keep manual-stop UX by auto-restarting onend while button is still active.
+    recognition.continuous = !isMobile;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     webSpeechCommittedRef.current = "";
     webSpeechInterimRef.current = "";
+    webSpeechFinalByIndexRef.current = new Map();
     webSpeechManualStopRef.current = false;
     webSpeechEmittedRef.current = false;
 
@@ -145,9 +151,17 @@ export default function MicButton({
         const r = event.results[i];
         const transcript = String(r?.[0]?.transcript || "").trim();
         if (!transcript) continue;
-        if (r.isFinal) webSpeechCommittedRef.current += `${transcript} `;
+        if (r.isFinal) {
+          webSpeechFinalByIndexRef.current.set(i, transcript);
+        }
         else interim += `${transcript} `;
       }
+      const committed = Array.from(webSpeechFinalByIndexRef.current.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([, txt]) => txt)
+        .join(" ")
+        .trim();
+      webSpeechCommittedRef.current = committed;
       const interimTrimmed = interim.trim();
       webSpeechInterimRef.current = interimTrimmed;
       // Interim is for live preview only; do not accumulate it into final payload.
