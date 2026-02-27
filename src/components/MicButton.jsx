@@ -175,11 +175,33 @@ export default function MicButton({
       if (listeningRef.current && !webSpeechManualStopRef.current) {
         // Browser can end recognition after silence. Keep listening until user taps mic again.
         webSpeechRestartTimerRef.current = setTimeout(() => {
-          if (!listeningRef.current || webSpeechManualStopRef.current) return;
+          if (!listeningRef.current || webSpeechManualStopRef.current) {
+            // User already stopped — ensure cleanup if not yet done
+            if (webSpeechManualStopRef.current && !webSpeechEmittedRef.current) {
+              webSpeechEmittedRef.current = true;
+              const finalText = String(webSpeechCommittedRef.current || "").trim();
+              if (finalText) onSpeechFinal?.(finalText);
+            }
+            onSpeechInterim?.("");
+            setListening(false);
+            onListeningChange?.(false);
+            window.dispatchEvent(new Event("mro:mic:stop"));
+            window.dispatchEvent(new Event("mro:mic:level:reset"));
+            setPending(false);
+            return;
+          }
           try {
             recognition.start();
             recognitionRef.current = recognition;
-          } catch {}
+          } catch {
+            // Failed to restart — clean up
+            onSpeechInterim?.("");
+            setListening(false);
+            onListeningChange?.(false);
+            window.dispatchEvent(new Event("mro:mic:stop"));
+            window.dispatchEvent(new Event("mro:mic:level:reset"));
+            setPending(false);
+          }
         }, 60);
         return;
       }
@@ -261,7 +283,28 @@ export default function MicButton({
       setPending(true);
       if (usingWebSpeechRef.current) {
         webSpeechManualStopRef.current = true;
-        try { recognitionRef.current?.stop?.(); } catch {}
+        // Clear any pending restart timer first
+        if (webSpeechRestartTimerRef.current) {
+          clearTimeout(webSpeechRestartTimerRef.current);
+          webSpeechRestartTimerRef.current = null;
+        }
+        if (recognitionRef.current) {
+          // Recognition is active → stop() will trigger onend → cleanup happens there
+          try { recognitionRef.current.stop(); } catch {}
+        } else {
+          // Recognition already ended (mobile auto-stop gap) → manual cleanup
+          if (!webSpeechEmittedRef.current) {
+            webSpeechEmittedRef.current = true;
+            const finalText = String(webSpeechCommittedRef.current || "").trim();
+            if (finalText) onSpeechFinal?.(finalText);
+          }
+          onSpeechInterim?.("");
+          setListening(false);
+          onListeningChange?.(false);
+          window.dispatchEvent(new Event("mro:mic:stop"));
+          window.dispatchEvent(new Event("mro:mic:level:reset"));
+          setPending(false);
+        }
       } else {
         stopCapture();
         socket.emit("stt:close", { roomId, participantId });
