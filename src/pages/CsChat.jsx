@@ -274,59 +274,39 @@ export default function CsChatPage() {
   }, []);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100dvh",
-        maxWidth: "480px",
-        margin: "0 auto",
-        width: "100%",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          flexShrink: 0,
-          height: "56px",
-          padding: "0 16px",
-          display: "flex",
-          alignItems: "center",
-          borderBottom: "1px solid #E5E5EA",
-          backgroundColor: "#fff",
-          boxSizing: "border-box",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            console.log("뒤로가기 클릭됨");
-            handleBack();
-          }}
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center"
-          style={{ position: "relative", zIndex: 10, cursor: "pointer", minWidth: "44px", minHeight: "44px" }}
-          aria-label="뒤로가기"
-        >
-          <ChevronLeft size={24} />
-        </button>
-        <div className="flex-1 text-center -ml-11">
-          <div className="text-[16px] font-semibold inline-flex items-center gap-1">
-            <span>🤖</span>
-            <span>MONO 도우미</span>
+    <div className="relative">
+      <div className="h-screen w-full max-w-[480px] mx-auto flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
+        <div className="fixed top-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-[var(--color-bg)] border-b border-[var(--color-border)] z-10">
+          <div className="h-[56px] px-4 flex items-center">
+            <button
+              type="button"
+              onClick={() => {
+                console.log("뒤로가기 클릭됨");
+                handleBack();
+              }}
+              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+              aria-label="뒤로가기"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <div className="flex-1 text-center -ml-10">
+              <div className="text-[16px] font-semibold inline-flex items-center gap-1">
+                <span>🤖</span>
+                <span>
+                  <span style={{ color: "#FF3B30", fontWeight: 800 }}>M</span>
+                  <span style={{ color: "#FF9500", fontWeight: 800 }}>O</span>
+                  <span style={{ color: "#34C759", fontWeight: 800 }}>N</span>
+                  <span style={{ color: "#007AFF", fontWeight: 800 }}>O</span>
+                </span>
+                <span>도우미</span>
+              </div>
+              <div className="text-[12px] text-[var(--color-text-secondary)]">AI 고객지원</div>
+            </div>
+            <div className="w-10 h-10 shrink-0" aria-hidden="true" />
           </div>
-          <div className="text-[12px] text-[var(--color-text-secondary)]">AI 고객지원</div>
         </div>
-      </div>
 
-      <div
-        className="mono-scroll"
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "16px",
-          backgroundColor: "#F5F5F5",
-        }}
-      >
+        <div className="mono-scroll flex-1 overflow-y-auto px-4 pt-[64px] pb-[112px] bg-[var(--color-bg-secondary)]">
         {messages.map((m, idx) => {
           const prev = idx > 0 ? messages[idx - 1] : null;
           const groupedWithPrev = !!prev && prev.senderId === m.senderId;
@@ -371,24 +351,13 @@ export default function CsChatPage() {
       </div>
 
       <form
-        style={{
-          flexShrink: 0,
-          padding: "8px 16px",
-          minHeight: "56px",
-          paddingBottom: "calc(8px + env(safe-area-inset-bottom))",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          borderTop: "1px solid #E5E5EA",
-          backgroundColor: "#fff",
-          boxSizing: "border-box",
-          position: "relative",
-        }}
+        className="fixed bottom-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-[var(--color-bg)] z-10 border-t border-[var(--color-border)]"
         onSubmit={(e) => {
           e.preventDefault();
           sendMessage(input);
         }}
       >
+        <div className="px-4 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] min-h-[56px] flex items-center gap-2 relative">
         {isRecording && (
           <div
             style={{
@@ -459,7 +428,9 @@ export default function CsChatPage() {
         >
           {input.trim() ? <SendHorizontal size={18} /> : <Mic size={18} />}
         </button>
+        </div>
       </form>
+      </div>
     </div>
   );
 }
