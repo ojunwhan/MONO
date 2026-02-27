@@ -1,6 +1,7 @@
 // src/components/MessageBubble.jsx
 import React, { useMemo, useState } from "react";
 import { Check, CheckCheck, Clock3, Volume2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 function MessageBubble({
   message,
@@ -10,6 +11,7 @@ function MessageBubble({
   roomType = "oneToOne",
   groupedWithPrev = false,
 }) {
+  const { t } = useTranslation();
   const {
     text,
     originalText,
@@ -45,7 +47,7 @@ function MessageBubble({
   const targetText = (translatedText || text || "").trim();
   const title = senderDisplayName && !["unknown", "null", "undefined"].includes(String(senderDisplayName).toLowerCase())
     ? senderDisplayName
-    : "알 수 없는 사용자";
+    : t("messageBubble.unknownUser");
   const canToggle = sourceText && targetText && sourceText !== targetText;
   const timeText = useMemo(() => {
     if (!timestamp) return "";
@@ -117,7 +119,7 @@ function MessageBubble({
             <div className={`mb-2 rounded-[8px] border-l-[3px] px-2 py-1 text-[12px] ${
               isMine ? "border-white/70 bg-white/15 text-white/90" : "border-[#3B82F6] bg-white/60 text-[#8E8E93]"
             }`}>
-              <div className="font-semibold">{replyAuthor || "답장"}</div>
+              <div className="font-semibold">{replyAuthor || t("messageBubble.reply")}</div>
               <div className="truncate">{replySnippet}</div>
             </div>
           ) : null}
@@ -137,8 +139,8 @@ function MessageBubble({
                 type="button"
                 onClick={onPlay}
                 className={`${isMine ? "text-white/90 hover:text-white" : "text-[#8E8E93] hover:text-[#1A1A1A]"}`}
-                title="메시지 음성 재생"
-                aria-label="메시지 음성 재생"
+                title={t("messageBubble.playVoice")}
+                aria-label={t("messageBubble.playVoice")}
               >
                 <Volume2 size={16} />
               </button>
@@ -153,7 +155,7 @@ function MessageBubble({
                 size={12}
                 className={`${status === "read" ? "text-[#3B82F6]" : "text-[#8E8E93]"} inline-block`}
               />
-              {queued ? <span>전송 대기 중</span> : null}
+              {queued ? <span>{t("messageBubble.queued")}</span> : null}
             </>
           ) : (
             <span>{timeText}</span>

@@ -28,7 +28,17 @@
   "contacts": {
     "addContact": "Add Contact",
     "search": "Search",
-    "noContacts": "No contacts yet"
+    "noContacts": "No contacts yet",
+    "monoFriends": "MONO Friends",
+    "inviteFromContacts": "Invite from Contacts",
+    "inviteFromContactsDesc": "Find MONO users from your contacts and send invite links to non-users.",
+    "phonePlaceholder": "Enter phone number (e.g. 01012345678)",
+    "searchMonoId": "Search MONO ID",
+    "unknownUser": "Unknown User",
+    "loadFailed": "Failed to load contacts.",
+    "idMin2": "Please enter at least 2 characters for MONO ID.",
+    "searchFailed": "Search failed.",
+    "searchNoResult": "No search results."
   },
   "settings": {
     "profile": "Profile",
@@ -40,7 +50,24 @@
     "logout": "Logout",
     "appLanguage": "App Language",
     "korean": "Korean",
-    "english": "English"
+    "english": "English",
+    "ttsVoice": "TTS Voice",
+    "female": "Female",
+    "male": "Male",
+    "ttsSpeed": "TTS Speed",
+    "micSensitivity": "Mic Sensitivity",
+    "autoPlay": "Auto Play",
+    "display": "Display",
+    "darkMode": "Dark Mode",
+    "fontSize": "Font Size",
+    "fontSmall": "Small",
+    "fontNormal": "Normal",
+    "fontLarge": "Large",
+    "sound": "Sound",
+    "vibration": "Vibration",
+    "requestNotifPermission": "Request notification permission (current: {{status}})",
+    "notifRequestCancelled": "Notification permission request was cancelled.",
+    "notifRequestFailed": "Failed to request notification permission."
   },
   "common": {
     "confirm": "OK",
@@ -88,5 +115,29 @@
   "network": {
     "offline": "Internet connection lost",
     "online": "Connected"
+  },
+  "roomList": {
+    "unknownUser": "Unknown User",
+    "searchSoon": "Search will be available soon.",
+    "internetUnstable": "Internet connection is unstable.",
+    "noConversation": "No conversations yet",
+    "startWithFriend": "Add friends and start chatting",
+    "addFriend": "Add Friend",
+    "noMessage": "No messages",
+    "mePrefix": "Me: ",
+    "newChat": "New Chat",
+    "selectPartner": "Select Chat Partner",
+    "dm": "1:1 Chat",
+    "group": "Group Chat",
+    "groupSoon": "Group chat creation UI is coming soon.",
+    "loadingFriends": "Loading friends...",
+    "noFriends": "No friends yet.",
+    "addFriendsInContacts": "Please add friends in Contacts tab."
+  },
+  "messageBubble": {
+    "unknownUser": "Unknown User",
+    "reply": "Reply",
+    "playVoice": "Play voice",
+    "queued": "Queued"
   }
 }

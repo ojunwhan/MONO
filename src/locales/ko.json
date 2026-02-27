@@ -28,7 +28,17 @@
   "contacts": {
     "addContact": "연락처 추가",
     "search": "검색",
-    "noContacts": "연락처가 없습니다"
+    "noContacts": "연락처가 없습니다",
+    "monoFriends": "MONO 친구",
+    "inviteFromContacts": "연락처에서 초대",
+    "inviteFromContactsDesc": "휴대폰 연락처로 MONO 가입자를 찾고, 미가입자에게 초대 링크를 보낼 수 있습니다.",
+    "phonePlaceholder": "전화번호 입력 (예: 01012345678)",
+    "searchMonoId": "MONO ID 검색",
+    "unknownUser": "알 수 없는 사용자",
+    "loadFailed": "연락처를 불러오지 못했습니다.",
+    "idMin2": "MONO ID 2글자 이상 입력해주세요.",
+    "searchFailed": "검색에 실패했습니다.",
+    "searchNoResult": "검색 결과가 없습니다."
   },
   "settings": {
     "profile": "프로필",
@@ -40,7 +50,24 @@
     "logout": "로그아웃",
     "appLanguage": "앱 언어",
     "korean": "한국어",
-    "english": "English"
+    "english": "English",
+    "ttsVoice": "TTS 음성",
+    "female": "여성",
+    "male": "남성",
+    "ttsSpeed": "TTS 속도",
+    "micSensitivity": "마이크 감도",
+    "autoPlay": "자동재생",
+    "display": "표시 설정",
+    "darkMode": "다크모드",
+    "fontSize": "글자 크기",
+    "fontSmall": "작게",
+    "fontNormal": "보통",
+    "fontLarge": "크게",
+    "sound": "소리",
+    "vibration": "진동",
+    "requestNotifPermission": "알림 권한 요청 (현재: {{status}})",
+    "notifRequestCancelled": "알림 권한 요청이 취소되었습니다.",
+    "notifRequestFailed": "알림 권한 요청에 실패했습니다."
   },
   "common": {
     "confirm": "확인",
@@ -88,5 +115,29 @@
   "network": {
     "offline": "인터넷 연결이 끊어졌습니다",
     "online": "연결되었습니다"
+  },
+  "roomList": {
+    "unknownUser": "알 수 없는 사용자",
+    "searchSoon": "검색 기능은 곧 제공됩니다.",
+    "internetUnstable": "인터넷 연결이 불안정합니다.",
+    "noConversation": "아직 대화가 없습니다",
+    "startWithFriend": "친구를 추가하고 대화를 시작해보세요",
+    "addFriend": "친구 추가",
+    "noMessage": "메시지 없음",
+    "mePrefix": "나: ",
+    "newChat": "새 대화",
+    "selectPartner": "대화 상대 선택",
+    "dm": "1:1 대화",
+    "group": "그룹 대화",
+    "groupSoon": "그룹 대화 생성 UI는 곧 연결됩니다.",
+    "loadingFriends": "친구 목록 불러오는 중...",
+    "noFriends": "친구가 없습니다.",
+    "addFriendsInContacts": "연락처 탭에서 친구를 추가해주세요."
+  },
+  "messageBubble": {
+    "unknownUser": "알 수 없는 사용자",
+    "reply": "답장",
+    "playVoice": "메시지 음성 재생",
+    "queued": "전송 대기 중"
   }
 }

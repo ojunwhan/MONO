@@ -18,8 +18,10 @@ import socket from "../socket";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import { subscribeToPush } from "../push";
 import { fetchAuthMe } from "../auth/session";
+import { useTranslation } from "react-i18next";
 
 export default function RoomList() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isConnected } = useNetworkStatus();
   const [me, setMe] = useState(null);
@@ -48,7 +50,7 @@ export default function RoomList() {
       d.getFullYear() === yesterday.getFullYear() &&
       d.getMonth() === yesterday.getMonth() &&
       d.getDate() === yesterday.getDate();
-    if (sameYesterday) return "어제";
+      if (sameYesterday) return "Yesterday";
     return d.toLocaleDateString();
   }, []);
 
@@ -286,9 +288,9 @@ export default function RoomList() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => alert("검색 기능은 곧 제공됩니다.")}
+      onClick={() => alert(t("roomList.searchSoon"))}
               className="h-[44px] w-[44px] -mr-2 flex items-center justify-center text-[var(--color-text)]"
-              aria-label="검색"
+              aria-label={t("contacts.search")}
             >
               <Search size={24} />
             </button>
@@ -296,7 +298,7 @@ export default function RoomList() {
               type="button"
               onClick={openNewChat}
               className="h-[44px] w-[44px] -mr-2 flex items-center justify-center text-[var(--color-text)]"
-              aria-label="새 대화"
+              aria-label={t("roomList.newChat")}
             >
               <SquarePen size={24} />
             </button>
@@ -307,7 +309,7 @@ export default function RoomList() {
         <div className="mono-scroll flex-1 overflow-y-auto">
           {!isConnected ? (
             <div className="px-4 py-2 text-[12px] text-[#B42318] bg-[#FEE4E2] border-b border-[#FECACA]">
-              인터넷 연결이 불안정합니다.
+              {t("roomList.internetUnstable")}
             </div>
           ) : null}
           {rooms.length === 0 ? (
@@ -315,14 +317,14 @@ export default function RoomList() {
               <div className="mx-auto w-12 h-12 rounded-full bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center">
                 <MessageCircle size={24} />
               </div>
-              <p className="mt-4 text-[16px] text-[var(--color-text)]">아직 대화가 없습니다</p>
-              <p className="mt-1 text-[14px] text-[var(--color-text-secondary)]">친구를 추가하고 대화를 시작해보세요</p>
+              <p className="mt-4 text-[16px] text-[var(--color-text)]">{t("roomList.noConversation")}</p>
+              <p className="mt-1 text-[14px] text-[var(--color-text-secondary)]">{t("roomList.startWithFriend")}</p>
               <button
                 type="button"
                 onClick={() => navigate("/contacts")}
                 className="mono-btn mt-5 h-[40px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[14px]"
               >
-                친구 추가
+                {t("roomList.addFriend")}
               </button>
             </div>
           ) : (
@@ -344,12 +346,12 @@ export default function RoomList() {
                     </div>
                     <div className="min-w-0">
                       <div className="text-[15px] font-semibold truncate">
-                        {room.peerAlias || room.peerCanonicalName || "알 수 없는 사용자"}
+                        {room.peerAlias || room.peerCanonicalName || t("roomList.unknownUser")}
                       </div>
                       <div className="text-[14px] text-[var(--color-text-secondary)] truncate">
                         {room.lastMessagePreview
-                          ? `${room.lastMessageMine ? "나: " : ""}${room.lastMessagePreview}`
-                          : "메시지 없음"}
+                          ? `${room.lastMessageMine ? t("roomList.mePrefix") : ""}${room.lastMessagePreview}`
+                          : t("roomList.noMessage")}
                       </div>
                     </div>
                   </div>
@@ -378,7 +380,7 @@ export default function RoomList() {
         </div>
 
         {/* New Chat Modal */}
-        <BottomSheet open={showNewChat} onClose={() => setShowNewChat(false)} title={newChatStep === "type" ? "새 대화" : "대화 상대 선택"}>
+        <BottomSheet open={showNewChat} onClose={() => setShowNewChat(false)} title={newChatStep === "type" ? t("roomList.newChat") : t("roomList.selectPartner")}>
           <div className="mono-scroll max-h-[78vh] overflow-y-auto">
                 {newChatStep === "type" ? (
                   <div className="p-4 space-y-3">
@@ -387,30 +389,30 @@ export default function RoomList() {
                       onClick={() => selectNewChatType("dm")}
                       className="w-full h-[52px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left text-[15px] font-medium"
                     >
-                      1:1 대화
+                      {t("roomList.dm")}
                     </button>
                     <button
                       type="button"
                       onClick={() => selectNewChatType("group")}
                       className="w-full h-[52px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left text-[15px] font-medium"
                     >
-                      그룹 대화
+                      {t("roomList.group")}
                     </button>
                     {newChatType === "group" ? (
                       <p className="text-[13px] text-[var(--color-text-secondary)]">
-                        그룹 대화 생성 UI는 곧 연결됩니다.
+                        {t("roomList.groupSoon")}
                       </p>
                     ) : null}
                   </div>
                 ) : loadingFriends ? (
                   <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-secondary)]">
-                    친구 목록 불러오는 중...
+                    {t("roomList.loadingFriends")}
                   </div>
                 ) : friendCandidates.length === 0 ? (
                   <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-secondary)]">
-                    친구가 없습니다.
+                    {t("roomList.noFriends")}
                     <br />
-                    연락처 탭에서 친구를 추가해주세요.
+                    {t("roomList.addFriendsInContacts")}
                   </div>
                 ) : (
                   <div className="divide-y divide-[var(--color-border)]">
@@ -428,7 +430,7 @@ export default function RoomList() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-[15px] font-medium truncate">
-                            {u.nickname || "알 수 없는 사용자"}
+                            {u.nickname || t("roomList.unknownUser")}
                           </div>
                           <div className="text-[13px] text-[var(--color-text-secondary)] truncate">
                             @{u.monoId || ""}

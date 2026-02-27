@@ -52,9 +52,9 @@ export default function Contacts() {
         setRequests(Array.isArray(data?.requests) ? data.requests : []);
       }
     } catch {
-      setMessage("연락처를 불러오지 못했습니다.");
+      setMessage(t("contacts.loadFailed"));
     }
-  }, [authFetch]);
+  }, [authFetch, t]);
 
   useEffect(() => {
     getMyIdentity().then((identity) => {
@@ -75,7 +75,7 @@ export default function Contacts() {
     setMessage("");
     if (query.trim().length < 2) {
       setSearchResults([]);
-      setMessage("MONO ID 2글자 이상 입력해주세요.");
+      setMessage(t("contacts.idMin2"));
       return;
     }
     setBusy(true);
@@ -83,17 +83,17 @@ export default function Contacts() {
       const res = await authFetch(`/api/contacts/search?q=${encodeURIComponent(query.trim())}`);
       const data = await res.json();
       if (!res.ok) {
-        setMessage("검색에 실패했습니다.");
+        setMessage(t("contacts.searchFailed"));
         return;
       }
       setSearchResults(Array.isArray(data?.users) ? data.users : []);
-      if (!data?.users?.length) setMessage("검색 결과가 없습니다.");
+      if (!data?.users?.length) setMessage(t("contacts.searchNoResult"));
     } catch {
-      setMessage("검색 중 오류가 발생했습니다.");
+      setMessage(t("common.error"));
     } finally {
       setBusy(false);
     }
-  }, [authFetch, query]);
+  }, [authFetch, query, t]);
 
   const sendRequest = useCallback(
     async (targetMonoId) => {
@@ -300,19 +300,19 @@ export default function Contacts() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
-            placeholder="MONO ID 검색"
+            placeholder={t("contacts.searchMonoId")}
             className="w-full h-[40px] pl-9 pr-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[14px]"
           />
         </div>
         {(searchFocused || query.trim()) && (
           <div className="absolute left-4 right-4 top-[58px] max-h-[280px] overflow-y-auto rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
             {filteredSearchResults.length === 0 ? (
-              <div className="px-4 py-3 text-[13px] text-[var(--color-text-secondary)]">검색 결과가 없습니다.</div>
+              <div className="px-4 py-3 text-[13px] text-[var(--color-text-secondary)]">{t("contacts.noContacts")}</div>
             ) : (
               filteredSearchResults.map((u) => (
                 <div key={`search-${u.id}`} className="px-4 py-3 border-b last:border-b-0 border-[var(--color-border)] flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[14px] font-medium truncate">{u.nickname || "알 수 없는 사용자"}</div>
+                    <div className="text-[14px] font-medium truncate">{u.nickname || t("contacts.unknownUser")}</div>
                     <div className="text-[12px] text-[var(--color-text-secondary)] truncate">@{u.monoId} · {renderLang(u.nativeLanguage)}</div>
                   </div>
                   {u.relation === "accepted" ? (
@@ -324,7 +324,7 @@ export default function Contacts() {
                       }}
                       className="mono-btn h-[34px] px-3 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[12px]"
                     >
-                      대화
+                      {t("nav.chat")}
                     </button>
                   ) : (
                     <button
@@ -332,7 +332,7 @@ export default function Contacts() {
                       onClick={() => sendRequest(u.monoId)}
                       className="mono-btn h-[34px] px-3 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[12px]"
                     >
-                      {u.relation === "pending_sent" ? "재요청" : "추가"}
+                      {u.relation === "pending_sent" ? t("common.save") : t("contacts.addContact")}
                     </button>
                   )}
                 </div>
@@ -343,7 +343,7 @@ export default function Contacts() {
               onClick={() => setSearchFocused(false)}
               className="w-full py-2 text-[12px] text-[var(--color-text-secondary)] border-t border-[var(--color-border)]"
             >
-              닫기
+              {t("common.close")}
             </button>
           </div>
         )}
@@ -358,14 +358,14 @@ export default function Contacts() {
               onClick={() => setRequestOpen((v) => !v)}
               className="w-full flex items-center justify-between"
             >
-              <h2 className="text-[14px] font-semibold">친구 요청 ({pendingCount})</h2>
+              <h2 className="text-[14px] font-semibold">Friends Request ({pendingCount})</h2>
               {requestOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
             {requestOpen && (
               <div className="mt-3 space-y-2">
                 {requests.map((u) => (
                   <div key={`req-${u.id}`} className="border border-[var(--color-border)] rounded-[10px] p-3">
-                    <div className="text-[14px] font-medium">{u.nickname || "알 수 없는 사용자"}</div>
+                    <div className="text-[14px] font-medium">{u.nickname || t("contacts.unknownUser")}</div>
                     <div className="text-[12px] text-[var(--color-text-secondary)]">@{u.monoId} · {renderLang(u.nativeLanguage)}</div>
                     <div className="mt-2 flex gap-2">
                       <button
@@ -391,7 +391,7 @@ export default function Contacts() {
         )}
 
         <div className="mono-card p-0 overflow-hidden">
-          <div className="px-4 pt-4 pb-2 text-[14px] font-semibold">MONO 친구 ({sortedFriends.length})</div>
+          <div className="px-4 pt-4 pb-2 text-[14px] font-semibold">{t("contacts.monoFriends")} ({sortedFriends.length})</div>
           {sortedFriends.length === 0 ? (
             <div className="px-6 py-14 text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center">
@@ -426,7 +426,7 @@ export default function Contacts() {
                           {(u.nickname || "M").charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[15px] font-medium truncate">{u.nickname || "알 수 없는 사용자"}</div>
+                          <div className="text-[15px] font-medium truncate">{u.nickname || t("contacts.unknownUser")}</div>
                           <div className="text-[13px] text-[var(--color-text-secondary)] truncate">
                             {u.statusMessage || `@${u.monoId}`}
                           </div>
@@ -443,10 +443,10 @@ export default function Contacts() {
 
         <div className="mono-card p-4">
           <h2 className="text-[14px] font-semibold flex items-center gap-2">
-            <Phone size={15} /> 연락처에서 초대
+            <Phone size={15} /> {t("contacts.inviteFromContacts")}
           </h2>
           <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-            휴대폰 연락처로 MONO 가입자를 찾고, 미가입자에게 초대 링크를 보낼 수 있습니다.
+            {t("contacts.inviteFromContactsDesc")}
           </p>
 
           {supportsContactPicker ? (
@@ -463,7 +463,7 @@ export default function Contacts() {
               <input
                 value={phoneInput}
                 onChange={(e) => setPhoneInput(e.target.value)}
-                placeholder="전화번호 입력 (예: 01012345678)"
+                placeholder={t("contacts.phonePlaceholder")}
                 className="mono-input flex-1 h-[44px] px-3"
               />
               <button
@@ -472,7 +472,7 @@ export default function Contacts() {
                 disabled={busy}
                 className="mono-btn h-[44px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
               >
-                검색
+                {t("contacts.search")}
               </button>
             </div>
           )}
@@ -481,7 +481,7 @@ export default function Contacts() {
             {phoneMembers.map((u) => (
               <div key={`phone-member-${u.id}`} className="border border-[var(--color-border)] rounded-[10px] p-3 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[14px] font-medium truncate">{u.nickname || "알 수 없는 사용자"}</div>
+                  <div className="text-[14px] font-medium truncate">{u.nickname || t("contacts.unknownUser")}</div>
                   <div className="text-[12px] text-[var(--color-text-secondary)] truncate">@{u.monoId} · {u.phoneNumber}</div>
                 </div>
                 <button
@@ -529,7 +529,7 @@ export default function Contacts() {
             </div>
             <div className="space-y-2">
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
-                <Search size={18} /> MONO ID 검색
+                <Search size={18} /> {t("contacts.searchMonoId")}
               </button>
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
                 <QrCode size={18} /> QR 코드
@@ -554,7 +554,7 @@ export default function Contacts() {
               {(activeFriend?.nickname || "M").charAt(0).toUpperCase()}
             </div>
             <div className="mt-3 text-center">
-              <div className="text-[17px] font-semibold">{activeFriend?.nickname || "알 수 없는 사용자"}</div>
+              <div className="text-[17px] font-semibold">{activeFriend?.nickname || t("contacts.unknownUser")}</div>
               <div className="text-[14px] text-[var(--color-text-secondary)] mt-1">@{activeFriend?.monoId || ""}</div>
               <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">모국어: {renderLang(activeFriend?.nativeLanguage)}</div>
               <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">{activeFriend?.statusMessage || "상태메시지가 없습니다."}</div>

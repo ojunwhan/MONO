@@ -35,7 +35,7 @@ export default function SettingsPage() {
   const [ttsSpeed, setTtsSpeed] = useState(Number(localStorage.getItem("mono.tts.speed") || "1"));
   const [autoPlay, setAutoPlay] = useState(localStorage.getItem("mono.tts.autoplay") !== "0");
   const [micSensitivity, setMicSensitivity] = useState(Number(localStorage.getItem("mono.mic.sensitivity") || "60"));
-  const [fontSize, setFontSize] = useState(localStorage.getItem("mono.fontSize") || "보통");
+  const [fontSize, setFontSize] = useState(localStorage.getItem("mono.fontSize") || "normal");
   const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem("mono.notif.enabled") !== "0");
   const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem("mono.notif.sound") !== "0");
   const [vibrationEnabled, setVibrationEnabled] = useState(localStorage.getItem("mono.notif.vibration") !== "0");
@@ -191,10 +191,10 @@ export default function SettingsPage() {
           ? "알림이 허용되었습니다."
           : perm === "denied"
           ? "알림이 차단되었습니다."
-          : "알림 권한 요청이 취소되었습니다."
+          : t("settings.notifRequestCancelled")
       );
     } catch {
-      setError("알림 권한 요청에 실패했습니다.");
+      setError(t("settings.notifRequestFailed"));
     }
   };
 
@@ -350,7 +350,7 @@ export default function SettingsPage() {
       <div className="mono-card p-4 space-y-3">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.voice")}</div>
         <div>
-          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">TTS 음성</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.ttsVoice")}</label>
           <select
             className="mono-input w-full h-[44px] px-3"
             value={ttsVoice}
@@ -359,12 +359,12 @@ export default function SettingsPage() {
               localStorage.setItem("mono.tts.voice", e.target.value);
             }}
           >
-            <option value="female">여성</option>
-            <option value="male">남성</option>
+            <option value="female">{t("settings.female")}</option>
+            <option value="male">{t("settings.male")}</option>
           </select>
         </div>
         <div>
-          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">TTS 속도 ({ttsSpeed.toFixed(1)}x)</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.ttsSpeed")} ({ttsSpeed.toFixed(1)}x)</label>
           <input
             type="range"
             min="0.5"
@@ -380,7 +380,7 @@ export default function SettingsPage() {
           />
         </div>
         <div>
-          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">마이크 감도 ({micSensitivity})</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.micSensitivity")} ({micSensitivity})</label>
           <input
             type="range"
             min="1"
@@ -400,7 +400,7 @@ export default function SettingsPage() {
           onClick={() => persistToggle("mono.tts.autoplay", !autoPlay, setAutoPlay)}
           className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between"
         >
-          <span className="text-[15px]">자동재생</span>
+          <span className="text-[15px]">{t("settings.autoPlay")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${autoPlay ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}>
             <span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${autoPlay ? "translate-x-[23px]" : "translate-x-[3px]"}`} />
           </span>
@@ -408,19 +408,19 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">표시 설정</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.display")}</div>
         <button
           type="button"
           onClick={toggleDarkMode}
           className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between"
         >
-          <span className="text-[15px]">다크모드</span>
+          <span className="text-[15px]">{t("settings.darkMode")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${darkMode ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}>
             <span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${darkMode ? "translate-x-[23px]" : "translate-x-[3px]"}`} />
           </span>
         </button>
         <div>
-          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">글자 크기</label>
+          <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.fontSize")}</label>
           <select
             className="mono-input w-full h-[44px] px-3"
             value={fontSize}
@@ -429,9 +429,9 @@ export default function SettingsPage() {
               localStorage.setItem("mono.fontSize", e.target.value);
             }}
           >
-            <option>작게</option>
-            <option>보통</option>
-            <option>크게</option>
+            <option value="small">{t("settings.fontSmall")}</option>
+            <option value="normal">{t("settings.fontNormal")}</option>
+            <option value="large">{t("settings.fontLarge")}</option>
           </select>
         </div>
       </div>
@@ -439,19 +439,19 @@ export default function SettingsPage() {
       <div className="mono-card p-4 space-y-3">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.notifications")}</div>
         <button type="button" onClick={() => persistToggle("mono.notif.enabled", !notifEnabled, setNotifEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
-          <span className="text-[15px]">알림</span>
+          <span className="text-[15px]">{t("settings.notifications")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${notifEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${notifEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
         </button>
         <button type="button" onClick={() => persistToggle("mono.notif.sound", !soundEnabled, setSoundEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
-          <span className="text-[15px]">소리</span>
+          <span className="text-[15px]">{t("settings.sound")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${soundEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${soundEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
         </button>
         <button type="button" onClick={() => persistToggle("mono.notif.vibration", !vibrationEnabled, setVibrationEnabled)} className="w-full h-[48px] px-3 border border-[var(--color-border)] rounded-[12px] bg-[var(--color-bg)] flex items-center justify-between">
-          <span className="text-[15px]">진동</span>
+          <span className="text-[15px]">{t("settings.vibration")}</span>
           <span className={`relative inline-flex h-[30px] w-[50px] rounded-full transition-colors ${vibrationEnabled ? "bg-[var(--color-primary)]" : "bg-[#E5E5EA]"}`}><span className={`absolute top-[3px] h-[24px] w-[24px] rounded-full bg-white transition-transform ${vibrationEnabled ? "translate-x-[23px]" : "translate-x-[3px]"}`} /></span>
         </button>
         <button type="button" onClick={requestNotificationPermission} className="mono-btn h-[40px] px-4 border border-[var(--color-border)] bg-[var(--color-bg)]">
-          알림 권한 요청 (현재: {notificationPermission})
+          {t("settings.requestNotifPermission", { status: notificationPermission })}
         </button>
       </div>
 
