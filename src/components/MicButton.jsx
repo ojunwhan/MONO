@@ -7,6 +7,7 @@ export default function MicButton({
   participantId,
   lang = "auto",
   onListeningChange,
+  onMediaStream,
   onUserGesture,
   onSpeechInterim,
   onSpeechFinal,
@@ -43,6 +44,7 @@ export default function MicButton({
       hasAudioRef.current = false;
       try { mediaRecorderRef.current?.stop?.(); } catch {}
       try { mediaStreamRef.current?.getTracks?.().forEach((t) => t.stop()); } catch {}
+      onMediaStream?.(null);
       mediaRecorderRef.current = null;
       mediaStreamRef.current = null;
       if (webSpeechRestartTimerRef.current) {
@@ -147,6 +149,7 @@ export default function MicButton({
 
   const cleanupMediaRecorder = () => {
     try { mediaStreamRef.current?.getTracks?.().forEach((t) => t.stop()); } catch {}
+    onMediaStream?.(null);
     mediaRecorderRef.current = null;
     mediaStreamRef.current = null;
     audioChunksRef.current = [];
@@ -163,6 +166,7 @@ export default function MicButton({
     mediaMimeTypeRef.current = recorder.mimeType || mimeType || "audio/webm";
     mediaRecorderRef.current = recorder;
     mediaStreamRef.current = stream;
+    onMediaStream?.(stream);
     audioChunksRef.current = [];
 
     recorder.ondataavailable = (e) => {

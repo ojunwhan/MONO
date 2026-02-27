@@ -3,6 +3,7 @@ import MessageBubble from "./MessageBubble";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import socket from "../socket";
 import MicButton from "./MicButton";
+import AudioWaveform from "./AudioWaveform";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
 import { ChevronLeft, MoreVertical, SendHorizontal, Plus } from "lucide-react";
@@ -137,6 +138,8 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState("");
   const [sttInterimText, setSttInterimText] = useState("");
   const [micListening, setMicListening] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
+  const [mobileRecordSeconds, setMobileRecordSeconds] = useState(0);
   const [participants, setParticipants] = useState([]);
   const [typingPeerName, setTypingPeerName] = useState("");
   const [serverWarning, setServerWarning] = useState("");
@@ -1074,6 +1077,27 @@ export default function ChatScreen() {
   }, [canSpeakCurrentLang]);
 
   const canSend = inputText.trim().length > 0;
+  const isMobileClient = useMemo(
+    () => typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""),
+    []
+  );
+  const isMobileListeningWave = isMobileClient && micListening && !!mediaStream;
+  const mobileRecordTimeLabel = useMemo(() => {
+    const mm = Math.floor(mobileRecordSeconds / 60);
+    const ss = mobileRecordSeconds % 60;
+    return `${mm}:${String(ss).padStart(2, "0")}`;
+  }, [mobileRecordSeconds]);
+
+  useEffect(() => {
+    if (!isMobileListeningWave) {
+      setMobileRecordSeconds(0);
+      return;
+    }
+    const iv = setInterval(() => {
+      setMobileRecordSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [isMobileListeningWave]);
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -1360,54 +1384,64 @@ export default function ChatScreen() {
                     </button>
                   </div>
                 ) : null}
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  className="mono-input w-full resize-none min-h-[40px] max-h-[132px] px-4 py-[9px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
-                  value={sttInterimText || inputText}
-                  onChange={(e) => {
-                    const nextText = e.target.value;
-                    if (sttInterimText) setSttInterimText("");
-                    setInputText(nextText);
-                    autosize();
-                    if (!nextText.trim()) {
-                      if (typingActiveRef.current) {
-                        socket.emit("typing-stop", { roomId, participantId });
-                        typingActiveRef.current = false;
+                {isMobileListeningWave ? (
+                  <div className="mono-input w-full min-h-[40px] px-3 py-[2px] bg-[var(--color-bg-secondary)] flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <AudioWaveform stream={mediaStream} isActive={isMobileListeningWave} height={36} />
+                    </div>
+                    <span className="text-[12px] text-[#9CA3AF] font-mono tabular-nums shrink-0">{mobileRecordTimeLabel}</span>
+                  </div>
+                ) : (
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    className="mono-input w-full resize-none min-h-[40px] max-h-[132px] px-4 py-[9px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
+                    value={sttInterimText || inputText}
+                    onChange={(e) => {
+                      const nextText = e.target.value;
+                      if (sttInterimText) setSttInterimText("");
+                      setInputText(nextText);
+                      autosize();
+                      if (!nextText.trim()) {
+                        if (typingActiveRef.current) {
+                          socket.emit("typing-stop", { roomId, participantId });
+                          typingActiveRef.current = false;
+                        }
+                        if (typingStopTimerRef.current) {
+                          clearTimeout(typingStopTimerRef.current);
+                          typingStopTimerRef.current = null;
+                        }
+                        return;
                       }
-                      if (typingStopTimerRef.current) {
-                        clearTimeout(typingStopTimerRef.current);
-                        typingStopTimerRef.current = null;
+                      if (!typingActiveRef.current) {
+                        socket.emit("typing-start", {
+                          roomId,
+                          participantId,
+                          displayName: localNameRef.current || "상대방",
+                        });
+                        typingActiveRef.current = true;
                       }
-                      return;
-                    }
-                    if (!typingActiveRef.current) {
-                      socket.emit("typing-start", {
-                        roomId,
-                        participantId,
-                        displayName: localNameRef.current || "상대방",
-                      });
-                      typingActiveRef.current = true;
-                    }
-                    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
-                    typingStopTimerRef.current = setTimeout(() => {
-                      if (typingActiveRef.current) {
-                        socket.emit("typing-stop", { roomId, participantId });
-                        typingActiveRef.current = false;
+                      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+                      typingStopTimerRef.current = setTimeout(() => {
+                        if (typingActiveRef.current) {
+                          socket.emit("typing-stop", { roomId, participantId });
+                          typingActiveRef.current = false;
+                        }
+                      }, 3000);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!canSend) return;
+                        sendTypedMessage(inputText);
+                        setInputText("");
+                        resetHeight();
                       }
-                    }, 3000);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!canSend) return;
-                      sendTypedMessage(inputText);
-                      setInputText("");
-                      resetHeight();
-                    }
-                  }}
-                  placeholder="메시지 입력..."
-                />
+                    }}
+                    placeholder="메시지 입력..."
+                  />
+                )}
               </div>
               <div className="transition-all duration-200">
               {canSend ? (
@@ -1424,6 +1458,7 @@ export default function ChatScreen() {
                   participantId={participantId}
                   lang={fromLang}
                   onListeningChange={onMicListeningChange}
+                  onMediaStream={setMediaStream}
                   onUserGesture={handleUserGesture}
                   onSpeechInterim={(text) => {
                     setSttInterimText(text || "");
