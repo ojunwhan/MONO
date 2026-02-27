@@ -217,7 +217,6 @@ export default function ChatScreen() {
   const messagesEndRef = useRef(null);
   const seenIdsRef = useRef(new Set());
   const wakeLockRef = useRef(null);
-  const joinedRef = useRef(false);
   const historyLoadedRef = useRef(false);
 
   // Stable refs
@@ -353,12 +352,11 @@ export default function ChatScreen() {
     el.style.height = "40px";
   };
 
-  // ─── Join once ───
+  // ─── Join room and leave on cleanup (room switch-safe) ───
   useEffect(() => {
-    if (!roomId || joinedRef.current) return;
+    if (!roomId) return;
     // Defer join one tick so socket listeners are attached first.
     const timer = setTimeout(() => {
-      joinedRef.current = true;
       console.log("[MONO] join →", roomId, participantId, selectedRole, roleHint);
       socket.emit("join", {
         roomId,
@@ -373,8 +371,15 @@ export default function ChatScreen() {
       // Subscribe to push notifications (bind to this participantId)
       subscribeToPush(participantId).catch(() => {});
     }, 0);
-    return () => clearTimeout(timer);
-  }, [roomId]);
+    return () => {
+      clearTimeout(timer);
+      socket.emit("leave-room", {
+        roomId,
+        participantId,
+        reason: "chat-screen-cleanup",
+      });
+    };
+  }, [roomId, participantId]);
 
   // ─── Notification permission ───
   useEffect(() => {

@@ -1284,6 +1284,51 @@ async function emitRoutes(roomId) {
 io.on('connection', (socket) => {
   console.log('🟢 New client connected:', socket.id);
 
+  const leaveRoomInternal = ({ roomId, participantId, reason } = {}) => {
+    const rid = String(roomId || socket.roomId || "").trim();
+    if (!rid) return;
+    const pid = String(participantId || socket.data?.participantId || "").trim();
+
+    try {
+      socket.leave(rid);
+    } catch {}
+
+    const meta = ROOMS.get(rid);
+    if (meta?.participants && pid && meta.participants[pid]?.socketId === socket.id) {
+      delete meta.participants[pid];
+      if (meta.ownerPid === pid) {
+        const nextOwner = Object.keys(meta.participants)[0] || null;
+        meta.ownerPid = nextOwner;
+      }
+      ROOMS.set(rid, meta);
+      emitParticipants(rid);
+      emitRoutes(rid).catch(() => {});
+    }
+
+    SOCKET_ROLES.delete(socket.id);
+    if (socket.roomId === rid) socket.roomId = null;
+    if (socket.data?.participantId === pid) socket.data.participantId = null;
+    if (pid) {
+      updateUserPresence(pid, {
+        activeRoomId: null,
+        visibilityState: "visible",
+        socketId: socket.id,
+      });
+    }
+    console.log(`[LEAVE] ${socket.id} room=${rid} pid=${pid || "-"} reason=${reason || "manual"}`);
+  };
+
+  const leaveBeforeJoin = ({ nextRoomId, participantId, reason } = {}) => {
+    const prevRoomId = String(socket.roomId || "").trim();
+    if (!prevRoomId) return;
+    if (prevRoomId === String(nextRoomId || "").trim()) return;
+    leaveRoomInternal({
+      roomId: prevRoomId,
+      participantId: participantId || socket.data?.participantId,
+      reason: reason || "switch-room",
+    });
+  };
+
   // ═══════════════════════════════════════════════════════
   // REGISTER USER — global identity registration
   // ═══════════════════════════════════════════════════════
@@ -1324,6 +1369,14 @@ io.on('connection', (socket) => {
       visibilityState: visibilityState || "visible",
       socketId: socket.id,
     });
+  });
+
+  socket.on("leave-room", ({ roomId, participantId, reason } = {}) => {
+    leaveRoomInternal({ roomId, participantId, reason: reason || "client-leave-room" });
+  });
+
+  socket.on("manual-leave", ({ roomId, participantId } = {}) => {
+    leaveRoomInternal({ roomId, participantId, reason: "manual-leave" });
   });
 
   // ═══════════════════════════════════════════════════════
@@ -1369,7 +1422,8 @@ io.on('connection', (socket) => {
     meta.ownerPid = myUserId;
     ROOMS.set(roomId, meta);
 
-    // Join socket room
+    // Join socket room (leave previous room first)
+    leaveBeforeJoin({ nextRoomId: roomId, participantId: myUserId, reason: "create-1to1" });
     socket.join(roomId);
     socket.roomId = roomId;
     socket.data.participantId = myUserId;
@@ -1443,6 +1497,7 @@ io.on('connection', (socket) => {
     };
 
     if (participantId) {
+      leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
       const callSign = assignCallSign(meta, hostRole);
       meta.participants[participantId] = {
         callSign,
@@ -1529,6 +1584,7 @@ io.on('connection', (socket) => {
     const roleName = isOwner ? "Manager" : "Tech";
     const langCode = mapLang(fromLang || "en");
 
+    leaveBeforeJoin({ nextRoomId: rid, participantId, reason: "join-global" });
     socket.join(rid);
     socket.roomId = rid;
     socket.data.participantId = participantId;
@@ -1561,6 +1617,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('joinRoom', (roomId) => {
+    leaveBeforeJoin({ nextRoomId: roomId, participantId: socket.data?.participantId, reason: "joinRoom" });
     socket.join(roomId);
     socket.roomId = roomId;
     console.log(`👥 ${socket.id} joined room ${roomId}`);
@@ -1578,6 +1635,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    leaveBeforeJoin({ nextRoomId: roomId, participantId: userId, reason: "rejoin-room" });
     socket.join(roomId);
     socket.roomId = roomId;
     socket.data.participantId = userId;
@@ -1656,6 +1714,7 @@ io.on('connection', (socket) => {
       socket.emit("room-status", { status: "ok", roomId });
       return;
     }
+    leaveBeforeJoin({ nextRoomId: roomId, participantId: socket.data?.participantId, reason: "check-room" });
     socket.join(roomId);
     socket.roomId = roomId;
     if (socket.data?.participantId) {
@@ -1796,6 +1855,8 @@ io.on('connection', (socket) => {
       }
       return;
     }
+
+    leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "join" });
 
     const meta = ensureRoomMeta(roomId);
     if (meta.expiresAt && Date.now() > Number(meta.expiresAt)) {
