@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /room/
+Disallow: /join/
+Disallow: /cs-chat
+Sitemap: https://lingora.chat/sitemap.xml
