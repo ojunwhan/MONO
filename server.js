@@ -479,6 +479,36 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
   }
 }
 
+function extFromMimeType(mimeType = "") {
+  const m = String(mimeType || "").toLowerCase();
+  if (m.includes("webm")) return "webm";
+  if (m.includes("mp4") || m.includes("m4a")) return "m4a";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  if (m.includes("wav")) return "wav";
+  return "webm";
+}
+
+async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
+  if (!openai || isOpenAIBlocked()) return "";
+  const ext = extFromMimeType(mimeType);
+  const tmpFile = path.join(os.tmpdir(), `${uuidv4()}.${ext}`);
+  fs.writeFileSync(tmpFile, audioBuffer);
+  try {
+    const language = lang && lang !== "auto" ? mapLang(lang) : undefined;
+    const result = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tmpFile),
+      model: "whisper-1",
+      ...(language ? { language } : {}),
+    });
+    return (result.text || "").trim();
+  } catch (e) {
+    markOpenAIQuotaBlocked(e);
+    throw e;
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch {}
+  }
+}
+
 // ───────────────── TTS VOICE + INSTRUCTION ─────────────────
 const TTS_INSTRUCTION = `Speak clearly and calmly, like a human supervisor on a work site. Do not sound cheerful or robotic. Use a neutral command tone. Pause slightly between sentences.`;
 const TTS_DEFAULT_VOICE = "echo"; // neutral, steady, mid-range
@@ -794,9 +824,11 @@ const MAX_CONTEXT_MESSAGES = 10;
 const LIMITS = {
   MAX_MESSAGE_CHARS: 500,
   MAX_AUDIO_BASE64_CHARS: 360000, // ~270KB base64 payload cap per chunk
+  MAX_WHISPER_AUDIO_BASE64_CHARS: 30000000, // ~22MB binary cap for mobile media blobs
   SEND_MESSAGE_PER_10S: 60,
   STT_AUDIO_PER_10S: 300,
   STT_SEGMENT_END_PER_30S: 60,
+  STT_WHISPER_PER_30S: 30,
 };
 
 function consumeRate(socketId, eventName, limit, windowMs) {
@@ -2340,6 +2372,68 @@ io.on('connection', (socket) => {
       if (buffered?.timer) clearTimeout(buffered.timer);
       STT_TEXT_BUFFER.delete(key);
     }
+  });
+
+  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType } = {}, ack) => {
+    const ackReply = (payload) => {
+      if (typeof ack === "function") {
+        try { ack(payload); } catch {}
+      }
+    };
+    if (!consumeRate(socket.id, "stt:whisper", LIMITS.STT_WHISPER_PER_30S, 30000)) {
+      ackReply({ ok: false, error: "rate_limited" });
+      return;
+    }
+    if (!roomId || !participantId || typeof audio !== "string" || !audio.trim()) {
+      ackReply({ ok: false, error: "invalid_payload" });
+      return;
+    }
+    if (!isAuthorizedParticipant(socket, roomId, participantId)) {
+      console.warn(`[auth] stt:whisper rejected room=${roomId} pid=${participantId} sid=${socket.id}`);
+      ackReply({ ok: false, error: "unauthorized" });
+      return;
+    }
+    if (audio.length > LIMITS.MAX_WHISPER_AUDIO_BASE64_CHARS) {
+      console.warn(`[stt:whisper] payload too large sid=${socket.id} len=${audio.length}`);
+      ackReply({ ok: false, error: "payload_too_large" });
+      return;
+    }
+
+    let audioBuffer = null;
+    try {
+      audioBuffer = Buffer.from(audio, "base64");
+    } catch {
+      ackReply({ ok: false, error: "invalid_base64" });
+      return;
+    }
+    if (!audioBuffer?.length) {
+      ackReply({ ok: false, error: "empty_audio" });
+      return;
+    }
+
+    let text = "";
+    try {
+      text = await transcribeEncodedAudioBuffer(audioBuffer, mimeType || "audio/webm", lang);
+      text = normalizeRepeats(text);
+    } catch (e) {
+      console.warn("[stt:whisper] transcribe error:", e?.message || e);
+      if (isQuotaExceededError(e)) emitQuotaWarning(socket);
+      ackReply({ ok: false, error: "transcribe_failed" });
+      return;
+    }
+
+    const normalized = String(text || "").trim();
+    if (!normalized || isGarbageText(normalized) || isWhisperHallucinationText(normalized)) {
+      ackReply({ ok: true, text: "" });
+      return;
+    }
+    if (normalized.length <= 2) {
+      ackReply({ ok: true, text: "" });
+      return;
+    }
+
+    socket.emit("stt:result", { roomId, participantId, text: normalized, final: true });
+    ackReply({ ok: true, text: normalized });
   });
 
   // --- send-message 핸들러 (room-type aware) ---

@@ -16,8 +16,13 @@ export default function MicButton({
   const [listening, setListening] = useState(false);
   const [pending, setPending] = useState(false);
   const processorRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const mediaMimeTypeRef = useRef("audio/webm");
   const recognitionRef = useRef(null);
   const usingWebSpeechRef = useRef(false);
+  const usingMediaRecorderRef = useRef(false);
   const listeningRef = useRef(false);
   const webSpeechCommittedRef = useRef("");
   const webSpeechInterimRef = useRef("");
@@ -36,6 +41,10 @@ export default function MicButton({
   useEffect(() => {
     return () => {
       hasAudioRef.current = false;
+      try { mediaRecorderRef.current?.stop?.(); } catch {}
+      try { mediaStreamRef.current?.getTracks?.().forEach((t) => t.stop()); } catch {}
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
       if (webSpeechRestartTimerRef.current) {
         clearTimeout(webSpeechRestartTimerRef.current);
         webSpeechRestartTimerRef.current = null;
@@ -93,10 +102,9 @@ export default function MicButton({
     return btoa(bin);
   };
 
-  const startCapture = async () => {
-    onUserGesture?.();
+  const getMicStream = async () => {
     const devId = await getPreferredDeviceId();
-    const stream = await navigator.mediaDevices.getUserMedia({
+    return navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: devId ? { exact: devId } : undefined,
         channelCount: { ideal: 1 },
@@ -105,6 +113,9 @@ export default function MicButton({
         autoGainControl: true,
       },
     });
+  };
+
+  const startCaptureWorklet = async (stream) => {
     try {
       const track = stream.getAudioTracks?.()[0];
       console.log("[MONO] ✅ Microphone access granted");
@@ -124,6 +135,77 @@ export default function MicButton({
     });
 
     await processorRef.current.start(stream);
+  };
+
+  const toBase64FromBlob = async (blob) => {
+    const buf = await blob.arrayBuffer();
+    const u8 = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < u8.byteLength; i++) bin += String.fromCharCode(u8[i]);
+    return btoa(bin);
+  };
+
+  const cleanupMediaRecorder = () => {
+    try { mediaStreamRef.current?.getTracks?.().forEach((t) => t.stop()); } catch {}
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current = null;
+    audioChunksRef.current = [];
+    mediaMimeTypeRef.current = "audio/webm";
+  };
+
+  const startCaptureMediaRecorder = async (stream) => {
+    const candidates = ["audio/webm;codecs=opus", "audio/webm"];
+    const mimeType =
+      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+        ? candidates.find((m) => MediaRecorder.isTypeSupported(m)) || "audio/webm"
+        : "audio/webm";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaMimeTypeRef.current = recorder.mimeType || mimeType || "audio/webm";
+    mediaRecorderRef.current = recorder;
+    mediaStreamRef.current = stream;
+    audioChunksRef.current = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e?.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    recorder.onstop = async () => {
+      try {
+        const chunks = audioChunksRef.current || [];
+        if (chunks.length) {
+          const blob = new Blob(chunks, { type: mediaMimeTypeRef.current || "audio/webm" });
+          if (blob.size > 0 && roomId && participantId) {
+            const audio = await toBase64FromBlob(blob);
+            await new Promise((resolve) => {
+              socket.emit(
+                "stt:whisper",
+                {
+                  roomId,
+                  participantId,
+                  lang,
+                  audio,
+                  mimeType: mediaMimeTypeRef.current || "audio/webm",
+                },
+                (ack) => {
+                  if (ack?.ok && ack?.text) onSpeechFinal?.(String(ack.text).trim());
+                  resolve();
+                }
+              );
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[MONO] mobile recorder stop error:", e?.message || e);
+      } finally {
+        cleanupMediaRecorder();
+        setListening(false);
+        onListeningChange?.(false);
+        window.dispatchEvent(new Event("mro:mic:stop"));
+        window.dispatchEvent(new Event("mro:mic:level:reset"));
+        setPending(false);
+      }
+    };
+
+    recorder.start(300);
   };
 
   const startWebSpeech = async () => {
@@ -266,20 +348,29 @@ export default function MicButton({
           "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
         if (!isMobile && hasWebSpeech) {
           usingWebSpeechRef.current = true;
+          usingMediaRecorderRef.current = false;
           const started = await startWebSpeech();
           if (!started) throw new Error("webspeech_unavailable");
+        } else if (isMobile) {
+          usingWebSpeechRef.current = false;
+          usingMediaRecorderRef.current = true;
+          const stream = await getMicStream();
+          await startCaptureMediaRecorder(stream);
         } else {
           usingWebSpeechRef.current = false;
-          await startCapture();
+          usingMediaRecorderRef.current = false;
+          const stream = await getMicStream();
+          await startCaptureWorklet(stream);
           socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000 });
         }
       } catch (e) {
         console.error("[MONO] ❌ Microphone access denied:", e?.name, e?.message);
+        cleanupMediaRecorder();
         setListening(false);
         onListeningChange?.(false);
         window.dispatchEvent(new Event("mro:mic:stop"));
       } finally {
-        setPending(false);
+        if (!usingMediaRecorderRef.current) setPending(false);
       }
     } else {
       setPending(true);
@@ -301,6 +392,22 @@ export default function MicButton({
             if (finalText) onSpeechFinal?.(finalText);
           }
           onSpeechInterim?.("");
+          setListening(false);
+          onListeningChange?.(false);
+          window.dispatchEvent(new Event("mro:mic:stop"));
+          window.dispatchEvent(new Event("mro:mic:level:reset"));
+          setPending(false);
+        }
+      } else if (usingMediaRecorderRef.current) {
+        if (webSpeechRestartTimerRef.current) {
+          clearTimeout(webSpeechRestartTimerRef.current);
+          webSpeechRestartTimerRef.current = null;
+        }
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== "inactive") {
+          try { recorder.stop(); } catch {}
+        } else {
+          cleanupMediaRecorder();
           setListening(false);
           onListeningChange?.(false);
           window.dispatchEvent(new Event("mro:mic:stop"));
