@@ -6,7 +6,7 @@ module.exports = function attachKakaoAuth(app) {
   function getCallbackUrl() {
     const explicit = String(process.env.KAKAO_CALLBACK_URL || '').trim();
     if (explicit) return explicit;
-    return 'http://localhost:3174/auth/kakao/callback';
+    return 'http://localhost:3174/api/auth/kakao/callback';
   }
 
   function getKakaoClientId() {
@@ -48,7 +48,7 @@ module.exports = function attachKakaoAuth(app) {
   });
 
   // 2) 콜백 → 토큰 교환 → 사용자 조회 → JWT 발급 → next로 이동
-  app.get('/auth/kakao/callback', async (req, res) => {
+  app.get('/api/auth/kakao/callback', async (req, res) => {
     try {
       const { code, state } = req.query;
       const callbackUrl = getCallbackUrl();
@@ -153,8 +153,8 @@ module.exports = function attachKakaoAuth(app) {
       return res.status(500).send('KAKAO_CALLBACK_ERROR');
     }
   });
-  app.get('/api/auth/kakao/callback', (req, res) => {
+  app.get('/auth/kakao/callback', (req, res) => {
     const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    return res.redirect(`/auth/kakao/callback${q}`);
+    return res.redirect(`/api/auth/kakao/callback${q}`);
   });
 };

@@ -25,9 +25,9 @@ module.exports = function attachGoogleAuth(app) {
     const localCb = (process.env.GOOGLE_CALLBACK_URL_LOCAL || '').trim();
     const defaultCb = (process.env.GOOGLE_CALLBACK_URL || '').trim();
     if (isLocalRequest(req)) {
-      return localCb || 'http://localhost:3174/auth/google/callback';
+      return localCb || 'http://localhost:3174/api/auth/google/callback';
     }
-    return defaultCb || 'https://lingora.chat/auth/google/callback';
+    return defaultCb || 'https://lingora.chat/api/auth/google/callback';
   }
 
   function createOAuthClient(req) {
@@ -56,7 +56,7 @@ module.exports = function attachGoogleAuth(app) {
   });
 
   // 2) 콜백 → JWT 발급 → next로 이동
-  app.get('/auth/google/callback', async (req, res) => {
+  app.get('/api/auth/google/callback', async (req, res) => {
     try {
       const client = createOAuthClient(req);
       const { code, state } = req.query;
@@ -120,8 +120,8 @@ module.exports = function attachGoogleAuth(app) {
       return res.status(500).send('GOOGLE_CALLBACK_ERROR');
     }
   });
-  app.get('/api/auth/google/callback', (req, res) => {
+  app.get('/auth/google/callback', (req, res) => {
     const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    return res.redirect(`/auth/google/callback${q}`);
+    return res.redirect(`/api/auth/google/callback${q}`);
   });
 };
