@@ -23,7 +23,48 @@
     "attach": "첨부",
     "send": "전송",
     "replyMe": "나",
-    "replyOther": "상대"
+    "replyOther": "상대",
+    "unknownPartner": "상대방",
+    "participantJoined": "참가자 입장",
+    "noVoice": "음성이 감지되지 않았습니다",
+    "roomFull": "이 방은 이미 정원이 찼습니다.",
+    "sessionExpired": "이 통역 세션이 만료되었습니다.",
+    "hostEnded": "호스트가 통역을 종료했습니다.",
+    "roomClosed": "방이 종료되었습니다.",
+    "backToList": "대화목록으로",
+    "online": "온라인",
+    "lastSeenUnknown": "마지막 접속 정보 없음",
+    "waiting": "대기 중...",
+    "roomMenu": "방 메뉴",
+    "notifSoon": "알림 설정 준비 중",
+    "pinDone": "대화방 고정됨",
+    "searchSoon": "대화 내 검색 준비 중",
+    "leaveRoom": "대화방 나가기",
+    "voiceOn": "음성 출력 ON",
+    "voiceOff": "음성 출력 OFF",
+    "listenersCount": "{{count}}명 수신 중",
+    "reconnectTap": "연결이 끊어졌습니다. 탭하여 재연결",
+    "listenOnlyMode": "수신 전용 모드",
+    "messageMenu": "메시지 메뉴",
+    "copyDone": "복사 완료",
+    "copyFail": "복사 실패",
+    "copy": "복사",
+    "reply": "답장",
+    "forwardSoon": "전달 기능 준비 중",
+    "starred": "즐겨찾기에 추가됨",
+    "retranslateSoon": "재번역 요청 준비 중",
+    "feedbackSent": "피드백 전송됨",
+    "deleteQuestion": "메시지를 삭제할까요?",
+    "cannotUndo": "이 작업은 취소할 수 없습니다.",
+    "deleted": "삭제됨",
+    "signupQuestion": "MONO에 가입하시겠어요?",
+    "signupBenefits": "가입하면",
+    "benefitHistory": "✅ 대화 기록이 저장됩니다",
+    "benefitFriends": "✅ 친구 추가가 가능합니다",
+    "benefitReuse": "✅ 언제든 다시 통역할 수 있어요",
+    "signupGoogle": "Google로 가입",
+    "signupKakao": "카카오로 가입",
+    "later": "나중에 할게요"
   },
   "contacts": {
     "addContact": "연락처 추가",
@@ -67,7 +108,53 @@
     "vibration": "진동",
     "requestNotifPermission": "알림 권한 요청 (현재: {{status}})",
     "notifRequestCancelled": "알림 권한 요청이 취소되었습니다.",
-    "notifRequestFailed": "알림 권한 요청에 실패했습니다."
+    "notifRequestFailed": "알림 권한 요청에 실패했습니다.",
+    "preferredLanguage": "선호 번역 언어"
+  },
+  "guestJoin": {
+    "subtitle": "AI 실시간 통역 메신저",
+    "selectLanguage": "사용할 언어를 선택해주세요",
+    "startInterpret": "통역 시작",
+    "noInstall": "앱 설치 없이 바로 통역이 시작됩니다",
+    "linkInfo": "링크 입장 시 즉시 통역 화면으로 이동합니다"
+  },
+  "languageSelector": {
+    "searchPlaceholder": "언어 검색...",
+    "frequent": "자주 사용하는 언어",
+    "all": "모든 언어",
+    "noResults": "검색 결과가 없습니다"
+  },
+  "bottomSheet": {
+    "closeAria": "닫기"
+  },
+  "installBanner": {
+    "desc": "홈 화면에 추가하면 더 편리하게 사용할 수 있어요.",
+    "addToHome": "홈 화면에 추가"
+  },
+  "inAppBlocker": {
+    "title": "외부 브라우저로 열어주세요",
+    "body1": "현재 브라우저에서는 통화/번역 연결이 자주 끊깁니다.",
+    "body2": "아래 버튼을 눌러 Safari 또는 Chrome에서 다시 열어주세요.",
+    "openBrowser": "브라우저에서 열기",
+    "hint": "카톡 우측 상단 ··· → 다른 브라우저에서 열기도 가능합니다"
+  },
+  "global": {
+    "title": "글로벌",
+    "needLogin": "로그인이 필요합니다.",
+    "loadMeFailed": "내 정보 로드 실패",
+    "connectPreparing": "채널 연결 준비 중...",
+    "timeout": "응답 지연: 네트워크 상태를 확인하고 다시 시도해주세요.",
+    "joining": "글로벌 채널 입장 요청 중...",
+    "joinFail": "글로벌 채널 준비 실패",
+    "joinedMoving": "채널 입장 완료. 이동 중...",
+    "createSoon": "방 만들기 UI는 다음 단계에서 연결됩니다.",
+    "createRoomAria": "방 만들기",
+    "noPublicRooms": "공개 채팅방이 없습니다",
+    "createNewRoom": "새로운 방을 만들어보세요"
+  },
+  "setup": {
+    "participant": "참여자{{seq}}",
+    "selectMyLanguage": "내 언어 선택"
   },
   "common": {
     "confirm": "확인",
@@ -88,7 +175,9 @@
     "pricing": "요금제가 궁금해요",
     "qrMethod": "QR 통역 방법",
     "listening": "듣고 있습니다...",
-    "sttBusy": "음성 인식 중..."
+    "sttBusy": "음성 인식 중...",
+    "botName": "모노봇",
+    "fallback": "이 문의는 담당자에게 전달해드리겠습니다. 이메일(support@lingora.chat)로 연락 주시면 빠르게 도움드리겠습니다."
   },
   "onboarding": {
     "slide1Title": "언어가 달라도 대화가 됩니다",

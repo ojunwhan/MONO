@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 function detectInApp() {
   const ua = navigator.userAgent || "";
@@ -13,6 +14,7 @@ function isAndroid() {
 }
 
 export default function InAppBlocker() {
+  const { t } = useTranslation();
   const { isInApp, isKakao } = useMemo(detectInApp, []);
   const android = useMemo(isAndroid, []);
 
@@ -46,11 +48,11 @@ export default function InAppBlocker() {
     >
       <div>
         <h2 style={{ marginBottom: 12, fontSize: 20, fontWeight: 700 }}>
-          외부 브라우저로 열어주세요
+          {t("inAppBlocker.title")}
         </h2>
         <p style={{ fontSize: 14 }}>
-          현재 브라우저에서는 통화/번역 연결이 자주 끊깁니다.<br />
-          아래 버튼을 눌러 Safari 또는 Chrome에서 다시 열어주세요.
+          {t("inAppBlocker.body1")}<br />
+          {t("inAppBlocker.body2")}
         </p>
 
         <button
@@ -69,11 +71,11 @@ export default function InAppBlocker() {
             window.open(window.location.href, "_blank");
           }}
         >
-          브라우저에서 열기
+          {t("inAppBlocker.openBrowser")}
         </button>
 
         <p style={{ marginTop: 16, fontSize: 14 }}>
-          카톡 우측 상단 ··· → 다른 브라우저에서 열기도 가능합니다
+          {t("inAppBlocker.hint")}
         </p>
       </div>
     </div>

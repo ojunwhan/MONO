@@ -1,6 +1,8 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 export default function BottomSheet({ open, onClose, title, children }) {
+  const { t } = useTranslation();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center">
@@ -8,7 +10,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
         type="button"
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
-        aria-label="닫기"
+        aria-label={t("bottomSheet.closeAria")}
       />
       <div className="relative w-full max-w-[480px] rounded-t-[16px] bg-[var(--color-bg)] pb-[calc(14px+env(safe-area-inset-bottom))] shadow-2xl">
         <div className="pt-2">

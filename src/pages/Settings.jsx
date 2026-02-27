@@ -116,11 +116,11 @@ export default function SettingsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data?.error === "mono_id_taken") {
-          setError("이미 사용 중인 MONO ID입니다.");
+          setError(t("common.error"));
         } else if (data?.error === "invalid_mono_id") {
-          setError("MONO ID는 영문/숫자/._- 만 사용할 수 있습니다.");
+          setError(t("common.error"));
         } else {
-          setError("프로필 저장에 실패했습니다.");
+          setError(t("common.error"));
         }
         return;
       }
@@ -141,9 +141,9 @@ export default function SettingsPage() {
           });
         }
       }
-      setMessage("저장되었습니다.");
+      setMessage(t("common.save"));
     } catch {
-      setError("프로필 저장 중 오류가 발생했습니다.");
+      setError(t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -159,7 +159,7 @@ export default function SettingsPage() {
     await clearMyIdentity().catch(() => {});
     setIsAuthenticated(false);
     setSaving(false);
-    setMessage("로그아웃되었습니다.");
+    setMessage(t("settings.logout"));
   };
 
   const clearLocalData = async () => {
@@ -169,9 +169,9 @@ export default function SettingsPage() {
     try {
       await clearQueue();
       clearAllHistory();
-      setMessage("로컬 저장 데이터가 정리되었습니다.");
+      setMessage(t("settings.storage"));
     } catch {
-      setError("로컬 데이터 정리에 실패했습니다.");
+      setError(t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -180,7 +180,7 @@ export default function SettingsPage() {
   const requestNotificationPermission = async () => {
     if (typeof Notification === "undefined") {
       setNotificationPermission("unsupported");
-      setError("이 브라우저는 알림을 지원하지 않습니다.");
+      setError(t("common.error"));
       return;
     }
     try {
@@ -188,9 +188,9 @@ export default function SettingsPage() {
       setNotificationPermission(perm);
       setMessage(
         perm === "granted"
-          ? "알림이 허용되었습니다."
+          ? t("settings.notifications")
           : perm === "denied"
-          ? "알림이 차단되었습니다."
+          ? t("common.cancel")
           : t("settings.notifRequestCancelled")
       );
     } catch {
@@ -253,7 +253,7 @@ export default function SettingsPage() {
         <div className="mono-card p-5">
           <h1 className="text-[18px] font-semibold">{t("nav.settings")}</h1>
           <p className="mt-2 text-[13px] text-[#666]">
-            로그인하면 프로필, 언어, 저장관리, 알림 설정을 사용할 수 있습니다.
+            Login to manage profile, language, storage and notifications.
           </p>
           <div className="mt-4 space-y-2">
             <a
@@ -303,7 +303,7 @@ export default function SettingsPage() {
             <div className="min-w-0">
               <div className="text-[17px] font-semibold truncate">{form.nickname || "MONO User"}</div>
               <div className="text-[14px] text-[var(--color-text-secondary)] truncate">@{form.monoId || "mono_id"}</div>
-              <div className="text-[14px] text-[var(--color-text-secondary)] truncate">{form.statusMessage || "상태메시지가 없습니다."}</div>
+              <div className="text-[14px] text-[var(--color-text-secondary)] truncate">{form.statusMessage || "No status message"}</div>
             </div>
           </div>
         </button>
@@ -313,22 +313,22 @@ export default function SettingsPage() {
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.language")}</div>
         <div className="space-y-2">
           <div>
-            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">모국어</label>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">{t("settings.language")}</label>
             <LanguageSelector
               value={form.nativeLanguage}
               onChange={(code) => onChange("nativeLanguage", code)}
-              placeholder="모국어 검색..."
+              placeholder={t("languageSelector.searchPlaceholder")}
             />
           </div>
           <div>
-            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">선호 번역 언어</label>
+            <label className="block text-[12px] text-[var(--color-text-secondary)] mb-1">Preferred Translation Language</label>
             <LanguageSelector
               value={preferredLang}
               onChange={(code) => {
                 setPreferredLang(code);
                 localStorage.setItem("mono.preferredLang", code);
               }}
-              placeholder="선호 언어 검색..."
+              placeholder={t("languageSelector.searchPlaceholder")}
             />
           </div>
           <div>
@@ -456,10 +456,10 @@ export default function SettingsPage() {
       </div>
 
       <div className="mono-card p-4 space-y-3">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">구독 관리</div>
-        <p className="text-[14px]">현재 플랜: <span className="font-semibold uppercase">{subscription?.plan || "free"}</span></p>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">Subscription</div>
+        <p className="text-[14px]">Plan: <span className="font-semibold uppercase">{subscription?.plan || "free"}</span></p>
         <p className="text-[13px] text-[var(--color-text-secondary)]">
-          이번 달 번역: {(subscription?.usageCount ?? 0)}회{subscription?.monthlyLimit != null ? ` / ${subscription.monthlyLimit}회` : " (무제한)"}
+          This month: {(subscription?.usageCount ?? 0)}{subscription?.monthlyLimit != null ? ` / ${subscription.monthlyLimit}` : " (unlimited)"}
         </p>
         <div className="h-2 rounded-full bg-[var(--color-bg-secondary)] overflow-hidden">
           <div className="h-full bg-[var(--color-primary)]" style={{ width: `${usagePercent}%` }} />
@@ -475,74 +475,74 @@ export default function SettingsPage() {
               const d = await r.json().catch(() => ({}));
               if (!r.ok) throw new Error("checkout_failed");
               if (d?.checkoutUrl) window.location.href = d.checkoutUrl;
-              else setMessage("준비 중입니다.");
+              else setMessage("Coming soon.");
             } catch {
-              setMessage("준비 중입니다.");
+              setMessage("Coming soon.");
             }
           }}
           className="mono-btn w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
         >
-          Pro 업그레이드
+          Upgrade to Pro
         </button>
       </div>
 
       <div className="mono-card p-4 space-y-3">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.storage")}</div>
         <p className="text-[13px] text-[var(--color-text-secondary)]">
-          로컬 저장량: {storageUsage?.usageMB?.toFixed?.(2) || "0.00"} MB
+          Local storage: {storageUsage?.usageMB?.toFixed?.(2) || "0.00"} MB
           {storageUsage?.quotaMB ? ` / ${storageUsage.quotaMB.toFixed(2)} MB` : ""}
         </p>
         <div className="h-2 rounded-full bg-[var(--color-bg-secondary)] overflow-hidden">
           <div className="h-full bg-[var(--color-primary)]" style={{ width: `${storagePercent}%` }} />
         </div>
         <button type="button" onClick={clearLocalData} disabled={saving} className="mono-btn h-[40px] px-4 border border-[var(--color-border)] bg-[var(--color-bg)]">
-          로컬 데이터 정리
+          Clear Local Data
         </button>
       </div>
 
       <div className="mono-card p-4 space-y-3">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.profile")}</div>
         <div className="space-y-2">
-          <input className="mono-input w-full h-[44px] px-3" value={form.nickname} onChange={(e) => onChange("nickname", e.target.value)} maxLength={40} placeholder="닉네임" />
+          <input className="mono-input w-full h-[44px] px-3" value={form.nickname} onChange={(e) => onChange("nickname", e.target.value)} maxLength={40} placeholder="Nickname" />
           <input className="mono-input w-full h-[44px] px-3" value={form.monoId} onChange={(e) => onChange("monoId", e.target.value.toLowerCase())} maxLength={30} placeholder="MONO ID" />
-          <input className="mono-input w-full h-[44px] px-3" value={form.statusMessage} onChange={(e) => onChange("statusMessage", e.target.value)} maxLength={160} placeholder="상태 메시지" />
+          <input className="mono-input w-full h-[44px] px-3" value={form.statusMessage} onChange={(e) => onChange("statusMessage", e.target.value)} maxLength={160} placeholder="Status message" />
           <input className="mono-input w-full h-[44px] px-3" value={form.phoneNumber || ""} onChange={(e) => onChange("phoneNumber", e.target.value)} placeholder="+82..." maxLength={24} />
         </div>
         <button type="button" onClick={saveProfile} disabled={saving} className="mono-btn w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]">
-          프로필 저장
+          {t("common.save")}
         </button>
       </div>
 
       <div className="mono-card p-4 space-y-2">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.account")}</div>
         <button type="button" onClick={doLogout} disabled={saving} className="w-full text-left text-[15px] text-[#DC2626] h-[40px]">{t("settings.logout")}</button>
-        <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">계정 삭제</button>
-        <button type="button" onClick={() => setMessage("준비 중입니다.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">차단 목록</button>
+        <button type="button" onClick={() => setMessage("Coming soon.")} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">Delete Account</button>
+        <button type="button" onClick={() => setMessage("Coming soon.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">Blocked Users</button>
       </div>
 
       <div className="mono-card p-4 space-y-2">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">고객센터</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">Support</div>
         <button
           type="button"
           onClick={() => navigate("/cs-chat")}
           className="w-full text-left h-[44px] text-[15px] inline-flex items-center justify-between"
         >
-          <span>💬 MONO 도우미</span>
+          <span>💬 MONO Helper</span>
           <span className="text-[var(--color-text-secondary)]">›</span>
         </button>
         <a
           href="mailto:support@lingora.chat"
           className="block h-[44px] leading-[44px] text-[15px]"
         >
-          📧 이메일 문의
+          📧 Email Support
         </a>
       </div>
 
       <div className="mono-card p-4 space-y-2">
-        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">앱 정보</div>
-        <a href="/terms" className="block text-[14px] text-[var(--color-text)]">이용약관</a>
-        <a href="/privacy" className="block text-[14px] text-[var(--color-text)]">개인정보처리방침</a>
-        <div className="text-[13px] text-[var(--color-text-secondary)]">앱 버전: {import.meta.env.VITE_APP_VERSION || "1.0.0"}</div>
+        <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">App</div>
+        <a href="/terms" className="block text-[14px] text-[var(--color-text)]">{t("login.terms")}</a>
+        <a href="/privacy" className="block text-[14px] text-[var(--color-text)]">{t("login.privacy")}</a>
+        <div className="text-[13px] text-[var(--color-text-secondary)]">Version: {import.meta.env.VITE_APP_VERSION || "1.0.0"}</div>
       </div>
 
       {error ? <p className="text-[12px] text-[#DC2626]">{error}</p> : null}

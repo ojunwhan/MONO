@@ -3,20 +3,22 @@ import { useNavigate } from "react-router-dom";
 import socket from "../socket";
 import { getMyIdentity, upsertRoom } from "../db";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function GlobalPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("");
   const [identity, setIdentity] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState("전체");
-  const categories = ["전체", "자유토론", "언어교환", "여행", "비즈니스", "문화"];
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const categories = ["All", "Free Talk", "Language Exchange", "Travel", "Business", "Culture"];
   const mockRooms = [
-    { id: "global-lobby", name: "Global Lobby", category: "자유토론", members: 23, preview: "환영합니다! 다국어 대화를 시작해보세요." },
+    { id: "global-lobby", name: "Global Lobby", category: "Free Talk", members: 23, preview: "Welcome! Start multilingual conversations." },
   ];
   const filteredRooms =
-    selectedCategory === "전체" ? mockRooms : mockRooms.filter((r) => r.category === selectedCategory);
+    selectedCategory === "All" ? mockRooms : mockRooms.filter((r) => r.category === selectedCategory);
   const GLOBAL_ROOM_ID = "global-lobby";
 
   useEffect(() => {
@@ -25,25 +27,25 @@ export default function GlobalPage() {
       .then((me) => {
         if (cancelled) return;
         if (!me?.userId) {
-          setError("로그인이 필요합니다.");
+          setError(t("global.needLogin"));
           return;
         }
         setIdentity(me);
       })
       .catch(() => {
         if (cancelled) return;
-        setError("내 정보 로드 실패");
+        setError(t("global.loadMeFailed"));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const enterGlobal = () => {
     if (!identity?.userId || loading) return;
     setLoading(true);
     setError("");
-    setStatusText("채널 연결 준비 중...");
+    setStatusText(t("global.connectPreparing"));
 
     const lang = identity?.lang || "en";
     if (!socket.connected) {
@@ -57,10 +59,10 @@ export default function GlobalPage() {
       setError(msg);
     };
     timeout = setTimeout(() => {
-      fail("응답 지연: 네트워크 상태를 확인하고 다시 시도해주세요.");
+      fail(t("global.timeout"));
     }, 5000);
 
-    setStatusText("글로벌 채널 입장 요청 중...");
+    setStatusText(t("global.joining"));
     socket.emit(
       "join-global",
       {
@@ -72,10 +74,10 @@ export default function GlobalPage() {
       (ack) => {
         clearTimeout(timeout);
         if (!ack?.ok || !ack?.roomId) {
-          fail("글로벌 채널 준비 실패");
+          fail(t("global.joinFail"));
           return;
         }
-        setStatusText("채널 입장 완료. 이동 중...");
+        setStatusText(t("global.joinedMoving"));
         upsertRoom({
           roomId: ack.roomId,
           roomType: "broadcast",
@@ -104,12 +106,12 @@ export default function GlobalPage() {
   return (
     <div className="mx-auto w-full max-w-[480px] min-h-screen bg-[var(--color-bg)]">
       <div className="h-[52px] px-4 border-b border-[var(--color-border)] flex items-center justify-between">
-        <h1 className="text-[18px] font-semibold">글로벌</h1>
+        <h1 className="text-[18px] font-semibold">{t("global.title")}</h1>
         <button
           type="button"
-          onClick={() => alert("방 만들기 UI는 다음 단계에서 연결됩니다.")}
+          onClick={() => alert(t("global.createSoon"))}
           className="w-10 h-10 flex items-center justify-center text-[var(--color-text)]"
-          aria-label="방 만들기"
+          aria-label={t("global.createRoomAria")}
         >
           <Plus size={22} />
         </button>
@@ -139,8 +141,8 @@ export default function GlobalPage() {
         <div className="mt-3 space-y-3">
           {filteredRooms.length === 0 ? (
             <div className="mono-card p-8 text-center">
-              <p className="text-[15px]">공개 채팅방이 없습니다</p>
-              <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">새로운 방을 만들어보세요</p>
+              <p className="text-[15px]">{t("global.noPublicRooms")}</p>
+              <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">{t("global.createNewRoom")}</p>
             </div>
           ) : (
             filteredRooms.map((room) => (

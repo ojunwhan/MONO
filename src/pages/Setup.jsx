@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMyIdentity, setMyIdentity } from "../db";
 import socket from "../socket";
+import { useTranslation } from "react-i18next";
 import {
   LANGUAGE_PROFILES,
   detectUserLanguage,
@@ -10,6 +11,7 @@ import {
 } from "../constants/languageProfiles";
 
 export default function Setup() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const detected = useMemo(() => detectUserLanguage(), []);
   const [lang, setLang] = useState(detected?.code || "ko");
@@ -32,7 +34,7 @@ export default function Setup() {
     const userId = crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 14);
     const seq = Number(localStorage.getItem("mono.autoNameSeq") || "0") + 1;
     localStorage.setItem("mono.autoNameSeq", String(seq));
-    const canonicalName = `참여자${seq}`;
+    const canonicalName = t("setup.participant", { seq });
 
     await setMyIdentity({ userId, canonicalName, lang: selectedLang });
 
@@ -83,7 +85,7 @@ export default function Setup() {
         ) : (
           <section className="mono-card p-6">
             <div className="text-center mb-4">
-              <div className="text-[16px] font-semibold">내 언어 선택</div>
+              <div className="text-[16px] font-semibold">{t("setup.selectMyLanguage")}</div>
               <div className="text-[13px] text-[#666]">Select Language</div>
             </div>
             <div className="grid grid-cols-4 gap-3">

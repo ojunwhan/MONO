@@ -18,7 +18,7 @@ function getGreetingByLang(lang = "ko") {
   if (l.startsWith("vi")) {
     return "Xin chao! Toi la tro ly MONO 😊\nBan co the hoi bat ky dieu gi ve cach su dung.";
   }
-  return "안녕하세요! MONO 도우미입니다 😊\n사용법이나 궁금한 점을 자유롭게 물어보세요.";
+  return "Hello! I'm MONO Helper 😊\nFeel free to ask any questions about how to use MONO.";
 }
 
 export default function CsChatPage() {
@@ -59,7 +59,7 @@ export default function CsChatPage() {
           {
             id: `bot-welcome-${Date.now()}`,
             senderId: "monobot",
-            senderDisplayName: "모노봇",
+            senderDisplayName: t("csChat.botName"),
             senderAvatarText: "🤖",
             text: getGreetingByLang(lang),
             translatedText: getGreetingByLang(lang),
@@ -145,7 +145,7 @@ export default function CsChatPage() {
         const botMsg = {
           id: `bot-${Date.now()}`,
           senderId: "monobot",
-          senderDisplayName: "모노봇",
+          senderDisplayName: t("csChat.botName"),
           senderAvatarText: "🤖",
           text: replyText,
           translatedText: replyText,
@@ -157,14 +157,13 @@ export default function CsChatPage() {
         setMessages((prev) => [...prev, botMsg]);
         setHistory((prev) => [...prev, { role: "assistant", content: replyText }].slice(-10));
       } catch {
-        const fallback =
-          "이 문의는 담당자에게 전달해드리겠습니다. 이메일(support@lingora.chat)로 연락 주시면 빠르게 도움드리겠습니다.";
+        const fallback = t("csChat.fallback");
         setMessages((prev) => [
           ...prev,
           {
             id: `bot-fallback-${Date.now()}`,
             senderId: "monobot",
-            senderDisplayName: "모노봇",
+            senderDisplayName: t("csChat.botName"),
             senderAvatarText: "🤖",
             text: fallback,
             translatedText: fallback,
@@ -178,11 +177,11 @@ export default function CsChatPage() {
         setLoading(false);
       }
     },
-    [history, loading, userLang]
+    [history, loading, t, userLang]
   );
 
   const handleBack = useCallback(() => {
-    console.log("뒤로가기 클릭됨");
+    console.log("back clicked");
     if (window.history.length > 1) {
       navigate(-1);
     } else {
@@ -248,7 +247,7 @@ export default function CsChatPage() {
           setInput(recognized);
           await sendMessage(recognized);
         } catch (err) {
-          console.error("STT 실패:", err);
+          console.error("STT failed:", err);
         } finally {
           setSttBusy(false);
           setIsRecording(false);
@@ -258,7 +257,7 @@ export default function CsChatPage() {
       recorder.start(250);
       setIsRecording(true);
     } catch (err) {
-      console.error("마이크 접근 실패:", err);
+      console.error("mic access failed:", err);
       setIsRecording(false);
     }
   }, [loading, sendMessage, sttBusy, userLang]);
@@ -283,11 +282,11 @@ export default function CsChatPage() {
             <button
               type="button"
               onClick={() => {
-                console.log("뒤로가기 클릭됨");
+                console.log("back clicked");
                 handleBack();
               }}
               className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-              aria-label="뒤로가기"
+              aria-label={t("common.back")}
             >
               <ChevronLeft size={24} />
             </button>

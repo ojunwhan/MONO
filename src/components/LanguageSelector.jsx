@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronDown } from "lucide-react";
 import { LANGUAGES, getTier1Languages, getTier2Languages, getLanguageByCode } from "../constants/languages";
+import { useTranslation } from "react-i18next";
 
 function flagToTwemojiUrl(flag) {
   const codePoints = Array.from(String(flag || ""))
@@ -16,7 +17,8 @@ function FlagIcon({ flag, alt }) {
   return <img src={src} alt={alt || "flag"} className="w-[18px] h-[18px] shrink-0" loading="lazy" />;
 }
 
-export default function LanguageSelector({ value, onChange, placeholder = "언어 검색..." }) {
+export default function LanguageSelector({ value, onChange, placeholder }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapRef = useRef(null);
@@ -81,7 +83,7 @@ export default function LanguageSelector({ value, onChange, placeholder = "언�
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={placeholder}
+              placeholder={placeholder || t("languageSelector.searchPlaceholder")}
               className="w-full text-[14px] outline-none bg-transparent text-[var(--color-text)]"
               autoFocus
             />
@@ -92,7 +94,7 @@ export default function LanguageSelector({ value, onChange, placeholder = "언�
               <>
                 {!search.trim() ? (
                   <div className="px-3 py-1.5 text-[12px] text-[var(--color-text-secondary)] font-medium bg-[var(--color-bg-secondary)]">
-                    자주 사용하는 언어
+                    {t("languageSelector.frequent")}
                   </div>
                 ) : null}
                 {tier1Filtered.map((lang) => (
@@ -120,7 +122,7 @@ export default function LanguageSelector({ value, onChange, placeholder = "언�
               <>
                 {!search.trim() ? (
                   <div className="px-3 py-1.5 text-[12px] text-[var(--color-text-secondary)] font-medium bg-[var(--color-bg-secondary)]">
-                    모든 언어
+                    {t("languageSelector.all")}
                   </div>
                 ) : null}
                 {tier2Filtered.map((lang) => (
@@ -141,7 +143,7 @@ export default function LanguageSelector({ value, onChange, placeholder = "언�
             ) : null}
 
             {tier1Filtered.length === 0 && tier2Filtered.length === 0 ? (
-              <div className="px-3 py-4 text-[14px] text-[var(--color-text-secondary)] text-center">검색 결과가 없습니다</div>
+              <div className="px-3 py-4 text-[14px] text-[var(--color-text-secondary)] text-center">{t("languageSelector.noResults")}</div>
             ) : null}
           </div>
         </div>

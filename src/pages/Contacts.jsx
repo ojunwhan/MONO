@@ -106,19 +106,19 @@ export default function Contacts() {
         });
         const data = await res.json();
         if (!res.ok) {
-          setMessage("친구 요청 실패");
+          setMessage(t("common.error"));
           return;
         }
-        setMessage(data.relation === "accepted" ? "친구가 추가되었습니다." : "친구 요청을 보냈습니다.");
+        setMessage(data.relation === "accepted" ? "Added" : "Requested");
         await loadLists();
         await onSearch();
       } catch {
-        setMessage("친구 요청 중 오류가 발생했습니다.");
+        setMessage(t("common.error"));
       } finally {
         setBusy(false);
       }
     },
-    [authFetch, loadLists, onSearch]
+    [authFetch, loadLists, onSearch, t]
   );
 
   const respondRequest = useCallback(
@@ -130,17 +130,17 @@ export default function Contacts() {
           body: JSON.stringify({ requesterUserId, action }),
         });
         if (!res.ok) {
-          setMessage("요청 처리 실패");
+          setMessage(t("common.error"));
           return;
         }
         await loadLists();
       } catch {
-        setMessage("요청 처리 중 오류가 발생했습니다.");
+        setMessage(t("common.error"));
       } finally {
         setBusy(false);
       }
     },
-    [authFetch, loadLists]
+    [authFetch, loadLists, t]
   );
 
   const removeFriend = useCallback(
@@ -152,17 +152,17 @@ export default function Contacts() {
           body: JSON.stringify({ peerUserId }),
         });
         if (!res.ok) {
-          setMessage("친구 삭제 실패");
+          setMessage(t("common.error"));
           return;
         }
         await loadLists();
       } catch {
-        setMessage("친구 삭제 중 오류가 발생했습니다.");
+        setMessage(t("common.error"));
       } finally {
         setBusy(false);
       }
     },
-    [authFetch, loadLists]
+    [authFetch, loadLists, t]
   );
 
   const startDm = useCallback(
@@ -234,7 +234,7 @@ export default function Contacts() {
           .map((p) => String(p || "").replace(/[^\d+]/g, "").trim())
           .filter((p) => p.length >= 8);
         if (!cleaned.length) {
-          setMessage("전화번호를 확인해주세요.");
+          setMessage(t("common.error"));
           return;
         }
         const res = await authFetch("/api/contacts/lookup-phone", {
@@ -243,21 +243,21 @@ export default function Contacts() {
         });
         const data = await res.json();
         if (!res.ok) {
-          setMessage("연락처 검색 실패");
+          setMessage(t("common.error"));
           return;
         }
         setPhoneMembers(Array.isArray(data?.members) ? data.members : []);
         setNonMembers(Array.isArray(data?.nonMembers) ? data.nonMembers : []);
         if (!data?.members?.length && !data?.nonMembers?.length) {
-          setMessage("검색 결과가 없습니다.");
+          setMessage(t("contacts.searchNoResult"));
         }
       } catch {
-        setMessage("연락처 검색 중 오류가 발생했습니다.");
+        setMessage(t("common.error"));
       } finally {
         setBusy(false);
       }
     },
-    [authFetch]
+    [authFetch, t]
   );
 
   const pickContacts = useCallback(async () => {
@@ -271,9 +271,9 @@ export default function Contacts() {
         .filter(Boolean);
       await lookupPhones(phones);
     } catch {
-      setMessage("연락처 선택이 취소되었거나 실패했습니다.");
+      setMessage(t("common.error"));
     }
-  }, [lookupPhones, supportsContactPicker]);
+  }, [lookupPhones, supportsContactPicker, t]);
 
   const lookupManualPhone = useCallback(async () => {
     await lookupPhones([phoneInput]);
@@ -287,7 +287,7 @@ export default function Contacts() {
           type="button"
           onClick={() => setShowAddSheet(true)}
           className="w-10 h-10 flex items-center justify-center text-[var(--color-text)]"
-          aria-label="친구 추가 메뉴"
+          aria-label={t("contacts.addContact")}
         >
           <Plus size={22} />
         </button>
@@ -373,14 +373,14 @@ export default function Contacts() {
                         onClick={() => respondRequest(u.id, "accept")}
                         className="mono-btn h-[34px] px-3 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[12px]"
                       >
-                        수락
+                        {t("common.confirm")}
                       </button>
                       <button
                         type="button"
                         onClick={() => respondRequest(u.id, "reject")}
                         className="mono-btn h-[34px] px-3 border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[12px]"
                       >
-                        거절
+                        {t("common.cancel")}
                       </button>
                     </div>
                   </div>
@@ -456,7 +456,7 @@ export default function Contacts() {
               disabled={busy}
               className="mono-btn mt-3 h-[44px] px-4 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
             >
-              연락처에서 친구 찾기
+              {t("contacts.inviteFromContacts")}
             </button>
           ) : (
             <div className="mt-3 flex gap-2">
@@ -489,7 +489,7 @@ export default function Contacts() {
                   onClick={() => sendRequest(u.monoId)}
                   className="mono-btn h-[34px] px-3 border border-[var(--color-primary)] bg-[var(--color-primary)] text-white text-[12px]"
                 >
-                  친구추가
+                  {t("contacts.addContact")}
                 </button>
               </div>
             ))}
@@ -501,12 +501,12 @@ export default function Contacts() {
                   type="button"
                   onClick={() => {
                     const inviteUrl = `${window.location.origin}/interpret`;
-                    const smsUrl = `sms:${phone}?body=${encodeURIComponent(`MONO 초대 링크: ${inviteUrl}`)}`;
+                    const smsUrl = `sms:${phone}?body=${encodeURIComponent(`MONO Invite Link: ${inviteUrl}`)}`;
                     window.location.href = smsUrl;
                   }}
                   className="mono-btn h-[34px] px-3 border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] inline-flex items-center gap-1 text-[12px]"
                 >
-                  <Send size={13} /> 초대
+                  <Send size={13} /> {t("contacts.inviteFromContacts")}
                 </button>
               </div>
             ))}
@@ -521,21 +521,21 @@ export default function Contacts() {
                 type="button"
                 onClick={() => setShowAddSheet(false)}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
-                aria-label="뒤로가기"
+                aria-label={t("common.back")}
               >
                 <ChevronLeft size={22} />
               </button>
-              <div className="ml-1 text-[15px] font-semibold">연락처 추가</div>
+              <div className="ml-1 text-[15px] font-semibold">{t("contacts.addContact")}</div>
             </div>
             <div className="space-y-2">
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
                 <Search size={18} /> {t("contacts.searchMonoId")}
               </button>
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
-                <QrCode size={18} /> QR 코드
+                <QrCode size={18} /> QR
               </button>
               <button className="w-full h-[52px] rounded-[12px] border border-[var(--color-border)] px-4 text-left inline-flex items-center gap-2">
-                <Link2 size={18} /> 초대 링크 공유
+                <Link2 size={18} /> Share Invite Link
               </button>
             </div>
             <button
@@ -543,7 +543,7 @@ export default function Contacts() {
               onClick={() => setShowAddSheet(false)}
               className="mt-3 w-full h-[44px] rounded-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
             >
-              닫기
+              {t("common.close")}
             </button>
           </div>
       </BottomSheet>
@@ -556,8 +556,8 @@ export default function Contacts() {
             <div className="mt-3 text-center">
               <div className="text-[17px] font-semibold">{activeFriend?.nickname || t("contacts.unknownUser")}</div>
               <div className="text-[14px] text-[var(--color-text-secondary)] mt-1">@{activeFriend?.monoId || ""}</div>
-              <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">모국어: {renderLang(activeFriend?.nativeLanguage)}</div>
-              <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">{activeFriend?.statusMessage || "상태메시지가 없습니다."}</div>
+              <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">Lang: {renderLang(activeFriend?.nativeLanguage)}</div>
+              <div className="text-[13px] text-[var(--color-text-secondary)] mt-1">{activeFriend?.statusMessage || "No status message"}</div>
             </div>
             <button
               type="button"
@@ -568,7 +568,7 @@ export default function Contacts() {
               }}
               className="mono-btn mt-5 w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
             >
-              대화 시작
+              {t("nav.chat")}
             </button>
             <button
               type="button"
@@ -579,7 +579,7 @@ export default function Contacts() {
               }}
               className="mt-3 w-full text-[14px] text-[#DC2626]"
             >
-              친구 삭제
+              {t("common.delete")}
             </button>
           </div>
       </BottomSheet>

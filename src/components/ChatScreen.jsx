@@ -310,7 +310,7 @@ export default function ChatScreen() {
           id: m.id,
           roomId,
           senderId: m.mine ? participantIdRef.current : (m.senderId || ""),
-          senderName: m.mine ? (localNameRef.current || "나") : (m.senderDisplayName || ""),
+          senderName: m.mine ? (localNameRef.current || t("chat.replyMe")) : (m.senderDisplayName || ""),
           originalText: m.originalText || "",
           translatedText: m.translatedText || m.text || "",
           originalLang: m.mine ? fromLangRef.current : "",
@@ -424,7 +424,7 @@ export default function ChatScreen() {
     const onTypingStart = (payload) => {
       const pid = payload?.participantId;
       if (!pid || pid === participantIdRef.current) return;
-      const name = payload?.displayName || partnerNameRef.current || "상대방";
+      const name = payload?.displayName || partnerNameRef.current || t("chat.unknownPartner");
       setTypingPeerName(name);
     };
 
@@ -603,7 +603,7 @@ export default function ChatScreen() {
       }
       setMessages((prev) => [...prev, {
         id: uuidv4(),
-        text: "참가자 입장",
+        text: t("chat.participantJoined"),
         system: true,
       }]);
       console.log(`[HOST] Socket state: ${socket.connected}, Room: ${roomIdRef.current}, Peer: connected`);
@@ -625,12 +625,12 @@ export default function ChatScreen() {
       setTimeout(() => setServerWarning(""), 10000);
     };
     const onSttNoVoice = (payload) => {
-      const msg = payload?.message || "음성이 감지되지 않았습니다";
+      const msg = payload?.message || t("chat.noVoice");
       showToast(msg);
     };
 
     const onRoomFull = () => {
-      alert("이 방은 이미 정원이 찼습니다.");
+      alert(t("chat.roomFull"));
       navigate("/");
     };
 
@@ -967,7 +967,7 @@ export default function ChatScreen() {
       if (payload?.status === "room-gone") {
         setReconnectState("disconnected");
       } else if (payload?.status === "room-expired") {
-        pushToast("이 통역 세션이 만료되었습니다.");
+        pushToast(t("chat.sessionExpired"));
         if (isGuestMode) {
           try {
             sessionStorage.removeItem("mono_guest");
@@ -980,11 +980,11 @@ export default function ChatScreen() {
     };
     const onHostLeft = () => {
       if (!isGuestMode) return;
-      pushToast("호스트가 통역을 종료했습니다.");
+      pushToast(t("chat.hostEnded"));
     };
     const onRoomClosed = () => {
       if (!isGuestMode) return;
-      pushToast("방이 종료되었습니다.");
+      pushToast(t("chat.roomClosed"));
       leaveAsGuestNow();
     };
     socket.on("mono-pong", onPong);
@@ -1137,7 +1137,7 @@ export default function ChatScreen() {
       senderFlagUrl: myFlagRef.current,
       senderLabel: myShortRef.current,
       replySnippet: replyTarget?.translatedText || replyTarget?.originalText || replyTarget?.text || "",
-      replyAuthor: replyTarget?.mine ? "나" : (replyTarget?.senderDisplayName || "상대"),
+      replyAuthor: replyTarget?.mine ? t("chat.replyMe") : (replyTarget?.senderDisplayName || t("chat.replyOther")),
       replyTo: replyTarget?.id || null,
     }]);
     setReplyTarget(null);
@@ -1167,8 +1167,12 @@ export default function ChatScreen() {
   const formatDateDivider = useCallback((ts) => {
     if (!ts) return "";
     const d = new Date(ts);
-    const week = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][d.getDay()];
-    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${week}`;
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+    }).format(d);
   }, []);
 
   const sameCalendarDay = useCallback((a, b) => {
@@ -1199,8 +1203,8 @@ export default function ChatScreen() {
               <button
                 onClick={handleLeave}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
-                aria-label="뒤로가기"
-                title="대화목록으로"
+                aria-label={t("common.back")}
+                title={t("chat.backToList")}
               >
                 <ChevronLeft size={24} />
               </button>
@@ -1209,12 +1213,12 @@ export default function ChatScreen() {
             <div className="flex-1 text-center text-[13px] font-medium text-[var(--color-text)]">
               {roomType === "oneToOne" && (
                 <div className="text-[16px] font-semibold truncate">
-                  {partnerName || "상대방"}
+                  {partnerName || t("chat.unknownPartner")}
                 </div>
               )}
               {roomType === "oneToOne" && (
                 <div className={`text-[12px] truncate ${partnerOnline ? "text-[var(--color-online)]" : "text-[var(--color-text-secondary)]"}`}>
-                  {partnerOnline ? "온라인" : "마지막 접속 정보 없음"}
+                  {partnerOnline ? t("chat.online") : t("chat.lastSeenUnknown")}
                 </div>
               )}
               {roomType === "oneToOne" ? (
@@ -1228,7 +1232,7 @@ export default function ChatScreen() {
                       <span>{resolvedPartnerShort}</span>
                     </>
                   ) : (
-                    <span className="text-[var(--color-text-secondary)]">대기 중...</span>
+                    <span className="text-[var(--color-text-secondary)]">{t("chat.waiting")}</span>
                   )}
                 </span>
               ) : (
@@ -1244,24 +1248,24 @@ export default function ChatScreen() {
               <button
                 onClick={() => setRoomMenuOpen((v) => !v)}
                 className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
-                title="방 메뉴"
-                aria-label="방 메뉴"
+                title={t("chat.roomMenu")}
+                aria-label={t("chat.roomMenu")}
               >
                 <MoreVertical size={18} />
               </button>
               {roomMenuOpen ? (
                 <div className="absolute right-0 top-[44px] w-[176px] rounded-[8px] border border-[var(--color-border)] bg-white shadow-lg z-[70] overflow-hidden">
-                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("알림 설정 준비 중"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
-                    🔔 알림 설정
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast(t("chat.notifSoon")); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    🔔 {t("settings.notifications")}
                   </button>
-                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("대화방 고정됨"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
-                    📌 대화방 고정
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast(t("chat.pinDone")); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    📌 {t("chat.roomMenu")}
                   </button>
-                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast("대화 내 검색 준비 중"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
-                    🔍 대화 내 검색
+                  <button type="button" onClick={() => { setRoomMenuOpen(false); showToast(t("chat.searchSoon")); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
+                    🔍 {t("contacts.search")}
                   </button>
                   <button type="button" onClick={() => { setRoomMenuOpen(false); handleLeave(); }} className="w-full h-[42px] px-3 text-left text-[14px] text-[#DC2626] hover:bg-[var(--color-bg-secondary)]">
-                    🚪 대화방 나가기
+                    🚪 {t("chat.leaveRoom")}
                   </button>
                 </div>
               ) : null}
@@ -1272,7 +1276,7 @@ export default function ChatScreen() {
                     ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
                     : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)] opacity-50"
                 }`}
-                title={voiceEnabled ? "음성 출력 ON" : "음성 출력 OFF"}
+                title={voiceEnabled ? t("chat.voiceOn") : t("chat.voiceOff")}
                 disabled={!canSpeakCurrentLang}
               >
                 {voiceEnabled ? "🔊" : "🔇"}
@@ -1283,7 +1287,7 @@ export default function ChatScreen() {
           {roomType === "broadcast" && participants.length > 1 && (
             <div className="px-4 pb-2">
               <span className="text-[11px] text-[var(--color-text-secondary)]">
-                {participants.length - 1}명 수신 중
+                {t("chat.listenersCount", { count: participants.length - 1 })}
               </span>
             </div>
           )}
@@ -1297,7 +1301,7 @@ export default function ChatScreen() {
               onClick={() => socket.connect()}
               className="mb-2 w-full rounded-lg border border-[#ef4444] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#991b1b]"
             >
-              연결이 끊어졌습니다. 탭하여 재연결
+              {t("chat.reconnectTap")}
             </button>
           )}
           {serverWarning && (
@@ -1420,7 +1424,7 @@ export default function ChatScreen() {
                         socket.emit("typing-start", {
                           roomId,
                           participantId,
-                          displayName: localNameRef.current || "상대방",
+                          displayName: localNameRef.current || t("chat.unknownPartner"),
                         });
                         typingActiveRef.current = true;
                       }
@@ -1484,12 +1488,12 @@ export default function ChatScreen() {
         {/* Broadcast listener: listen-only indicator */}
         {isBroadcastListener && (
           <div className="fixed bottom-0 left-0 right-0 w-full max-w-[480px] mx-auto px-4 py-2 pb-[calc(8px+env(safe-area-inset-bottom))] bg-[var(--color-bg)] z-10 border-t border-[var(--color-border)] text-center min-h-[56px] flex items-center justify-center">
-            <span className="text-[13px] text-[var(--color-text-secondary)]">수신 전용 모드</span>
+            <span className="text-[13px] text-[var(--color-text-secondary)]">{t("chat.listenOnlyMode")}</span>
           </div>
         )}
       </div>
       <InstallBanner />
-      <BottomSheet open={!!menuMessage} onClose={closeMessageMenu} title="메시지 메뉴">
+      <BottomSheet open={!!menuMessage} onClose={closeMessageMenu} title={t("chat.messageMenu")}>
         <div className="px-2 pb-2">
           <button
             type="button"
@@ -1497,15 +1501,15 @@ export default function ChatScreen() {
               const copied = menuMessage?.translatedText || menuMessage?.originalText || menuMessage?.text || "";
               try {
                 await navigator.clipboard.writeText(copied);
-                showToast("복사 완료");
+                showToast(t("chat.copyDone"));
               } catch {
-                showToast("복사 실패");
+                showToast(t("chat.copyFail"));
               }
               closeMessageMenu();
             }}
             className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
           >
-            📋 복사
+            📋 {t("chat.copy")}
           </button>
           <button
             type="button"
@@ -1515,19 +1519,19 @@ export default function ChatScreen() {
             }}
             className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
           >
-            ↩️ 답장
+            ↩️ {t("chat.reply")}
           </button>
-          <button type="button" onClick={() => { showToast("전달 기능 준비 중"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
-            ↗️ 전달
+          <button type="button" onClick={() => { showToast(t("chat.forwardSoon")); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            ↗️ Forward
           </button>
-          <button type="button" onClick={() => { showToast("즐겨찾기에 추가됨"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
-            ⭐ 즐겨찾기 추가
+          <button type="button" onClick={() => { showToast(t("chat.starred")); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            ⭐ Star
           </button>
-          <button type="button" onClick={() => { showToast("재번역 요청 준비 중"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
-            🔄 번역 다시하기
+          <button type="button" onClick={() => { showToast(t("chat.retranslateSoon")); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]">
+            🔄 Retranslate
           </button>
-          <button type="button" onClick={() => { showToast("피드백 전송됨"); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px]">
-            👍 번역 피드백
+          <button type="button" onClick={() => { showToast(t("chat.feedbackSent")); closeMessageMenu(); }} className="w-full h-[52px] px-3 text-left text-[15px]">
+            👍 Feedback
           </button>
           {menuMessage?.mine ? (
             <button
@@ -1538,7 +1542,7 @@ export default function ChatScreen() {
               }}
               className="w-full h-[52px] px-3 text-left text-[15px] text-[#DC2626]"
             >
-              🗑️ 삭제
+              🗑️ {t("common.delete")}
             </button>
           ) : null}
         </div>
@@ -1547,11 +1551,11 @@ export default function ChatScreen() {
       {showDeleteConfirm ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40">
           <div className="w-[280px] rounded-[14px] bg-[var(--color-bg)] p-4">
-            <div className="text-[17px] font-semibold">메시지를 삭제할까요?</div>
-            <div className="mt-1 text-[14px] text-[var(--color-text-secondary)]">이 작업은 취소할 수 없습니다.</div>
+            <div className="text-[17px] font-semibold">{t("chat.deleteQuestion")}</div>
+            <div className="mt-1 text-[14px] text-[var(--color-text-secondary)]">{t("chat.cannotUndo")}</div>
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={() => setShowDeleteConfirm(false)} className="flex-1 h-[40px] rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-                취소
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1559,23 +1563,23 @@ export default function ChatScreen() {
                   setMessages((prev) => prev.filter((m) => m.id !== menuMessage?.id));
                   setShowDeleteConfirm(false);
                   setMenuMessage(null);
-                  showToast("삭제됨");
+                  showToast(t("chat.deleted"));
                 }}
                 className="flex-1 h-[40px] rounded-[10px] bg-[#DC2626] text-white"
               >
-                삭제
+                {t("common.delete")}
               </button>
             </div>
           </div>
         </div>
       ) : null}
-      <BottomSheet open={showGuestSignupPrompt} onClose={() => setShowGuestSignupPrompt(false)} title="MONO에 가입하시겠어요?">
+      <BottomSheet open={showGuestSignupPrompt} onClose={() => setShowGuestSignupPrompt(false)} title={t("chat.signupQuestion")}>
         <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
           <div className="text-[14px] text-[var(--color-text-secondary)] leading-6">
-            가입하면
-            <br />✅ 대화 기록이 저장됩니다
-            <br />✅ 친구 추가가 가능합니다
-            <br />✅ 언제든 다시 통역할 수 있어요
+            {t("chat.signupBenefits")}
+            <br />{t("chat.benefitHistory")}
+            <br />{t("chat.benefitFriends")}
+            <br />{t("chat.benefitReuse")}
           </div>
           <a
             href={`/auth/google?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`}
@@ -1587,7 +1591,7 @@ export default function ChatScreen() {
               <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
               <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
             </svg>
-            Google로 가입
+            {t("chat.signupGoogle")}
           </a>
           <a
             href={`/auth/kakao?next=/room/${encodeURIComponent(roomId || "")}%3FconvertGuest%3D1%26guestId%3D${encodeURIComponent(participantIdRef.current || "")}%26fromLang%3D${encodeURIComponent(fromLangRef.current || "en")}%26localName%3D${encodeURIComponent(localNameRef.current || "")}`}
@@ -1596,14 +1600,14 @@ export default function ChatScreen() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
               <path d="M12 3C6.48 3 2 6.58 2 10.9c0 2.78 1.86 5.22 4.65 6.6-.15.53-.96 3.41-.99 3.63 0 0-.02.17.09.24.11.06.24.01.24.01.32-.04 3.7-2.44 4.28-2.86.55.08 1.13.12 1.73.12 5.52 0 10-3.58 10-7.9C22 6.58 17.52 3 12 3z"/>
             </svg>
-            카카오로 가입
+            {t("chat.signupKakao")}
           </a>
           <button
             type="button"
             onClick={leaveAsGuestNow}
             className="mt-3 w-full h-[44px] rounded-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
           >
-            나중에 할게요
+            {t("chat.later")}
           </button>
         </div>
       </BottomSheet>

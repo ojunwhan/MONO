@@ -23,7 +23,48 @@
     "attach": "Attach",
     "send": "Send",
     "replyMe": "Me",
-    "replyOther": "Other"
+    "replyOther": "Other",
+    "unknownPartner": "Partner",
+    "participantJoined": "Participant Joined",
+    "noVoice": "No voice detected.",
+    "roomFull": "This room is already full.",
+    "sessionExpired": "This interpretation session has expired.",
+    "hostEnded": "The host ended the interpretation.",
+    "roomClosed": "Room has been closed.",
+    "backToList": "Back to chat list",
+    "online": "Online",
+    "lastSeenUnknown": "No last seen info",
+    "waiting": "Waiting...",
+    "roomMenu": "Room menu",
+    "notifSoon": "Notification settings coming soon",
+    "pinDone": "Pinned chat room",
+    "searchSoon": "In-chat search coming soon",
+    "leaveRoom": "Leave room",
+    "voiceOn": "Voice output ON",
+    "voiceOff": "Voice output OFF",
+    "listenersCount": "{{count}} listeners",
+    "reconnectTap": "Disconnected. Tap to reconnect",
+    "listenOnlyMode": "Listen-only mode",
+    "messageMenu": "Message menu",
+    "copyDone": "Copied",
+    "copyFail": "Copy failed",
+    "copy": "Copy",
+    "reply": "Reply",
+    "forwardSoon": "Forward feature coming soon",
+    "starred": "Added to favorites",
+    "retranslateSoon": "Retranslate request coming soon",
+    "feedbackSent": "Feedback sent",
+    "deleteQuestion": "Delete this message?",
+    "cannotUndo": "This action cannot be undone.",
+    "deleted": "Deleted",
+    "signupQuestion": "Would you like to sign up for MONO?",
+    "signupBenefits": "If you sign up",
+    "benefitHistory": "✅ Chat history is saved",
+    "benefitFriends": "✅ You can add friends",
+    "benefitReuse": "✅ You can interpret again anytime",
+    "signupGoogle": "Sign up with Google",
+    "signupKakao": "Sign up with Kakao",
+    "later": "Maybe later"
   },
   "contacts": {
     "addContact": "Add Contact",
@@ -67,7 +108,53 @@
     "vibration": "Vibration",
     "requestNotifPermission": "Request notification permission (current: {{status}})",
     "notifRequestCancelled": "Notification permission request was cancelled.",
-    "notifRequestFailed": "Failed to request notification permission."
+    "notifRequestFailed": "Failed to request notification permission.",
+    "preferredLanguage": "Preferred Translation Language"
+  },
+  "guestJoin": {
+    "subtitle": "AI Real-time Interpretation Messenger",
+    "selectLanguage": "Please select your language",
+    "startInterpret": "Start Interpreting",
+    "noInstall": "Interpretation starts instantly without app install",
+    "linkInfo": "You will move to the interpretation screen immediately from the link"
+  },
+  "languageSelector": {
+    "searchPlaceholder": "Search language...",
+    "frequent": "Frequently used languages",
+    "all": "All languages",
+    "noResults": "No results found"
+  },
+  "bottomSheet": {
+    "closeAria": "Close"
+  },
+  "installBanner": {
+    "desc": "Add to Home Screen for a better experience.",
+    "addToHome": "Add to Home Screen"
+  },
+  "inAppBlocker": {
+    "title": "Please open in an external browser",
+    "body1": "Call/translation connection is unstable in this in-app browser.",
+    "body2": "Tap the button below to reopen in Safari or Chrome.",
+    "openBrowser": "Open in browser",
+    "hint": "KakaoTalk: top-right ⋯ → Open in other browser"
+  },
+  "global": {
+    "title": "Global",
+    "needLogin": "Login is required.",
+    "loadMeFailed": "Failed to load my profile",
+    "connectPreparing": "Preparing channel connection...",
+    "timeout": "Response timeout: Check network and try again.",
+    "joining": "Requesting to join global channel...",
+    "joinFail": "Failed to prepare global channel",
+    "joinedMoving": "Joined channel. Moving...",
+    "createSoon": "Create room UI will be connected in the next step.",
+    "createRoomAria": "Create room",
+    "noPublicRooms": "No public chat rooms",
+    "createNewRoom": "Create a new room"
+  },
+  "setup": {
+    "participant": "Participant{{seq}}",
+    "selectMyLanguage": "Select My Language"
   },
   "common": {
     "confirm": "OK",
@@ -88,7 +175,9 @@
     "pricing": "Pricing info",
     "qrMethod": "QR interpretation method",
     "listening": "Listening...",
-    "sttBusy": "Recognizing speech..."
+    "sttBusy": "Recognizing speech...",
+    "botName": "MONO Bot",
+    "fallback": "We will forward this inquiry to our team. Please contact support@lingora.chat for faster help."
   },
   "onboarding": {
     "slide1Title": "Talk naturally, even across languages",
