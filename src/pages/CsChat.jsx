@@ -289,8 +289,8 @@ export default function CsChatPage() {
             >
               <ChevronLeft size={24} />
             </button>
-            <div className="flex-1 text-center -ml-10">
-              <div className="text-[16px] font-semibold inline-flex items-center gap-1">
+            <div className="flex-1 text-center">
+              <div className="text-[18px] font-semibold inline-flex items-center gap-1">
                 <span>🤖</span>
                 <span>
                   <span style={{ color: "#FF3B30", fontWeight: 800 }}>M</span>
@@ -300,7 +300,6 @@ export default function CsChatPage() {
                 </span>
                 <span>도우미</span>
               </div>
-              <div className="text-[12px] text-[var(--color-text-secondary)]">AI 고객지원</div>
             </div>
             <div className="w-10 h-10 shrink-0" aria-hidden="true" />
           </div>
