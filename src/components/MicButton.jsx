@@ -260,9 +260,11 @@ export default function MicButton({
       onListeningChange?.(true);
       window.dispatchEvent(new Event("mro:mic:start"));
       try {
+        const isMobile =
+          typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
         const hasWebSpeech =
           "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
-        if (hasWebSpeech) {
+        if (!isMobile && hasWebSpeech) {
           usingWebSpeechRef.current = true;
           const started = await startWebSpeech();
           if (!started) throw new Error("webspeech_unavailable");
