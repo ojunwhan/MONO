@@ -1379,6 +1379,27 @@ io.on('connection', (socket) => {
     leaveRoomInternal({ roomId, participantId, reason: "manual-leave" });
   });
 
+  socket.on("delete-room", ({ roomId, participantId } = {}) => {
+    const rid = String(roomId || "").trim();
+    const pid = String(participantId || socket.data?.participantId || "").trim();
+    if (!rid || !pid) return;
+    const meta = ROOMS.get(rid);
+    if (!meta) return;
+
+    // 1:1 room: remove the room for everyone
+    if (meta.roomType === "oneToOne") {
+      io.to(rid).emit("room-deleted", { roomId: rid, by: pid });
+      try { io.in(rid).socketsLeave(rid); } catch {}
+      ROOMS.delete(rid);
+      delete messageBuffer[rid];
+      console.log(`[ROOM:DELETE] oneToOne room removed room=${rid} by=${pid}`);
+      return;
+    }
+
+    // group/broadcast: requester only leaves
+    leaveRoomInternal({ roomId: rid, participantId: pid, reason: "delete-room-leave-self" });
+  });
+
   // ═══════════════════════════════════════════════════════
   // AUTO-CREATE 1:1 ROOM — select a user to chat with
   // ═══════════════════════════════════════════════════════

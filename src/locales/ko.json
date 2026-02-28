@@ -227,7 +227,9 @@
     "groupSoon": "그룹 대화 생성 UI는 곧 연결됩니다.",
     "loadingFriends": "친구 목록 불러오는 중...",
     "noFriends": "친구가 없습니다.",
-    "addFriendsInContacts": "연락처 탭에서 친구를 추가해주세요."
+    "addFriendsInContacts": "연락처 탭에서 친구를 추가해주세요.",
+    "deleteRoom": "대화방 삭제",
+    "deleteRoomConfirm": "이 대화방을 삭제하시겠습니까?"
   },
   "messageBubble": {
     "unknownUser": "알 수 없는 사용자",

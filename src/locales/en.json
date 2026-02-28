@@ -227,7 +227,9 @@
     "groupSoon": "Group chat creation UI is coming soon.",
     "loadingFriends": "Loading friends...",
     "noFriends": "No friends yet.",
-    "addFriendsInContacts": "Please add friends in Contacts tab."
+    "addFriendsInContacts": "Please add friends in Contacts tab.",
+    "deleteRoom": "Delete room",
+    "deleteRoomConfirm": "Are you sure you want to delete this room?"
   },
   "messageBubble": {
     "unknownUser": "Unknown User",

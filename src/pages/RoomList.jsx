@@ -12,6 +12,7 @@ import {
   recordRoomActivity,
   incrementUnread,
   deleteRoom,
+  deleteMessages,
   clearUnread,
 } from "../db";
 import socket from "../socket";
@@ -268,6 +269,33 @@ export default function RoomList() {
     }
   }, [t]);
 
+  const deleteRoomFromContextMenu = useCallback(async (room) => {
+    if (!room?.roomId || !me?.userId) return;
+    const ok = window.confirm(t("roomList.deleteRoomConfirm"));
+    if (!ok) return;
+
+    const normalizedType = String(room.roomType || "").toLowerCase();
+    const isOneToOne = normalizedType === "1to1" || normalizedType === "onetoone";
+
+    if (isOneToOne) {
+      socket.emit("delete-room", {
+        roomId: room.roomId,
+        participantId: me.userId,
+      });
+    } else {
+      socket.emit("leave-room", {
+        roomId: room.roomId,
+        participantId: me.userId,
+        reason: "roomlist-context-delete",
+      });
+    }
+
+    await deleteMessages(room.roomId);
+    await deleteRoom(room.roomId);
+    setActionRoom(null);
+    await loadRooms();
+  }, [deleteRoom, deleteMessages, loadRooms, me?.userId, t]);
+
   // ── Delete room ──
   const handleDeleteRoom = async (roomId, e) => {
     e.stopPropagation();
@@ -284,6 +312,17 @@ export default function RoomList() {
       navigate(`/?${query.toString()}`, { replace: true });
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const onRoomDeleted = async ({ roomId }) => {
+      if (!roomId) return;
+      await deleteMessages(roomId);
+      await deleteRoom(roomId);
+      await loadRooms();
+    };
+    socket.on("room-deleted", onRoomDeleted);
+    return () => socket.off("room-deleted", onRoomDeleted);
+  }, [deleteMessages, deleteRoom, loadRooms]);
 
   if (!me) {
     return (
@@ -496,6 +535,13 @@ export default function RoomList() {
               className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
             >
               🔗 {t("chat.copyInviteLink")}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteRoomFromContextMenu(actionRoom)}
+              className="w-full h-[52px] px-3 text-left text-[15px] text-[#DC2626] border-b border-[var(--color-border)]"
+            >
+              🗑️ {t("roomList.deleteRoom")}
             </button>
             <button
               type="button"
