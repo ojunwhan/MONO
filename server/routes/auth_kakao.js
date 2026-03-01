@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const { upsertUserFromOAuth } = require('../db/users');
 
 module.exports = function attachKakaoAuth(app) {
+  function isInvalidAuthCode(code) {
+    const normalized = String(code ?? '').trim().toLowerCase();
+    return !normalized || normalized === 'undefined' || normalized === 'null';
+  }
+
   function getCallbackUrl() {
     const explicit = String(process.env.KAKAO_CALLBACK_URL || '').trim();
     if (explicit) return explicit;
@@ -67,8 +72,9 @@ module.exports = function attachKakaoAuth(app) {
         });
         return res.redirect('/login?oauth_error=kakao_provider_error');
       }
-      if (!code) {
+      if (isInvalidAuthCode(code)) {
         console.error('[kakao][callback] missing authorization code', {
+          rawCode: code,
           callbackUrl,
         });
         return res.redirect('/login?oauth_error=kakao_missing_code');
