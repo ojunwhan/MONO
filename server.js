@@ -47,6 +47,7 @@ const usageStats = {
   roomsCreated: 0,         // 생성된 방 수
   roomsActive: 0,          // 현재 활성 방 수
   activeSession: 0,        // 호스트+게스트 실제 연결 완료 세션 수
+  regions: {},             // 국가별 접속 이벤트 집계
 
   // 로그인 관련
   googleLogins: 0,         // Google 로그인 수
@@ -66,6 +67,7 @@ const usageStats = {
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const STATS_API_KEY = process.env.STATS_API_KEY;
+const LOCATION_CACHE = new Map();
 
 function resetDailyStats() {
   const today = new Date().toISOString().split('T')[0];
@@ -77,6 +79,7 @@ function resetDailyStats() {
     usageStats.totalSocketConnects = 0;
     usageStats.roomsCreated = 0;
     usageStats.activeSession = 0;
+    usageStats.regions = {};
     usageStats.googleLogins = 0;
     usageStats.kakaoLogins = 0;
     usageStats.guestJoins = 0;
@@ -97,6 +100,67 @@ function trackUsageError(error) {
   });
 }
 
+function normalizeClientIp(rawIp) {
+  const ip = String(rawIp || "").split(",")[0].trim();
+  if (!ip) return "";
+  if (ip.startsWith("::ffff:")) return ip.slice(7);
+  return ip;
+}
+
+function isPrivateOrLocalIp(ip) {
+  const v = normalizeClientIp(ip);
+  if (!v) return true;
+  if (v === "127.0.0.1" || v === "::1" || v === "localhost") return true;
+  if (v.startsWith("10.") || v.startsWith("192.168.") || v.startsWith("169.254.")) return true;
+  if (v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80:")) return true;
+  const m = v.match(/^172\.(\d+)\./);
+  if (m) {
+    const second = Number(m[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false;
+}
+
+function getClientIpFromReq(req) {
+  const forwarded = req?.headers?.["x-forwarded-for"];
+  const fallback = req?.connection?.remoteAddress || req?.socket?.remoteAddress || "";
+  return normalizeClientIp(Array.isArray(forwarded) ? forwarded[0] : (forwarded || fallback));
+}
+
+function getClientIpFromSocket(socket) {
+  const forwarded = socket?.handshake?.headers?.["x-forwarded-for"];
+  const fallback = socket?.handshake?.address || socket?.request?.socket?.remoteAddress || "";
+  return normalizeClientIp(Array.isArray(forwarded) ? forwarded[0] : (forwarded || fallback));
+}
+
+function recordRegion(country) {
+  const key = String(country || "Unknown").trim() || "Unknown";
+  usageStats.regions[key] = (usageStats.regions[key] || 0) + 1;
+}
+
+async function getLocation(ip) {
+  try {
+    const clientIp = normalizeClientIp(ip);
+    if (!clientIp || isPrivateOrLocalIp(clientIp)) {
+      return { country: "Local", city: "Local" };
+    }
+    const cached = LOCATION_CACHE.get(clientIp);
+    if (cached && (Date.now() - cached.ts) < 10 * 60 * 1000) {
+      return cached.location;
+    }
+    const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(clientIp)}?fields=country,city`);
+    const data = await res.json();
+    const location = {
+      country: data?.country || "Unknown",
+      city: data?.city || "Unknown",
+    };
+    LOCATION_CACHE.set(clientIp, { ts: Date.now(), location });
+    return location;
+  } catch {
+    return { country: "Unknown", city: "Unknown" };
+  }
+}
+
 async function sendTelegram(message) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   try {
@@ -115,17 +179,23 @@ async function sendTelegram(message) {
   }
 }
 
-function sendConnectionAlert(type, details = {}) {
+async function sendConnectionAlert(type, details = {}) {
   const now = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' });
   let msg = '';
 
   switch (type) {
-    case 'login':
-      msg = `🟢 ${now} | 로그인: ${details.provider} | ${details.name || 'Unknown'}`;
+    case 'login': {
+      const location = details.location || await getLocation(details.ip);
+      recordRegion(location.country);
+      msg = `🟢 ${now} | ${details.provider} 로그인 | ${details.name || 'Unknown'} | 📍 ${location.country}, ${location.city}`;
       break;
-    case 'guest':
-      msg = `👤 ${now} | 게스트 입장 | 방: ${String(details.roomId || '').substring(0, 8)}...`;
+    }
+    case 'guest': {
+      const location = details.location || await getLocation(details.ip);
+      recordRegion(location.country);
+      msg = `👤 ${now} | 게스트 입장 | 방: ${String(details.roomId || '').substring(0, 8)}... | 📍 ${location.country}, ${location.city}`;
       break;
+    }
     case 'room':
       msg = `🏠 ${now} | 방 생성 | 현재 활성 ${usageStats.roomsActive}개`;
       break;
@@ -165,6 +235,7 @@ function sendHourlyReport() {
 👤 게스트 입장: ${usageStats.guestJoins}회
 🏠 방 생성: ${usageStats.roomsCreated}개 (활성: ${usageStats.roomsActive})
 🎯 실제 통역 세션: ${usageStats.activeSession}건
+🌍 접속 지역: ${Object.entries(usageStats.regions).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([country, count]) => `${country} ${count}`).join(' / ') || '집계 없음'}
 
 🎤 STT: ${usageStats.sttRequests}회
 🔄 번역: ${usageStats.translationRequests}회
@@ -765,8 +836,7 @@ app.use((req, res, next) => {
   resetDailyStats();
   if (!req.path.startsWith('/api/') && !req.path.startsWith('/socket.io')) {
     usageStats.totalVisits += 1;
-    const rawIp = req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
-    const ip = String(Array.isArray(rawIp) ? rawIp[0] : rawIp).split(',')[0].trim();
+    const ip = getClientIpFromReq(req);
     if (ip) usageStats.uniqueIPs.add(ip);
   }
   next();
@@ -775,6 +845,7 @@ app.use((req, res, next) => {
 // OAuth 콜백 성공 카운트 (기존 OAuth 로직은 그대로 유지)
 app.use((req, res, next) => {
   const pathName = req.path || '';
+  const loginIp = getClientIpFromReq(req);
   if (pathName !== '/api/auth/google/callback' && pathName !== '/api/auth/kakao/callback') {
     return next();
   }
@@ -788,10 +859,10 @@ app.use((req, res, next) => {
       if (!hasTokenCookie || !isSuccessRedirect) return;
       if (pathName === '/api/auth/google/callback') {
         usageStats.googleLogins += 1;
-        sendConnectionAlert('login', { provider: 'Google' });
+        sendConnectionAlert('login', { provider: 'Google', ip: loginIp });
       } else if (pathName === '/api/auth/kakao/callback') {
         usageStats.kakaoLogins += 1;
-        sendConnectionAlert('login', { provider: 'Kakao' });
+        sendConnectionAlert('login', { provider: 'Kakao', ip: loginIp });
       }
     } catch {}
   });
@@ -1512,6 +1583,7 @@ io.on('connection', (socket) => {
   resetDailyStats();
   usageStats.currentConnections += 1;
   usageStats.totalSocketConnects += 1;
+  socket.data.clientIp = getClientIpFromSocket(socket);
   if (usageStats.currentConnections > usageStats.peakConnections) {
     usageStats.peakConnections = usageStats.currentConnections;
   }
@@ -2237,7 +2309,7 @@ io.on('connection', (socket) => {
       if (serverRole === "guest") {
         resetDailyStats();
         usageStats.guestJoins += 1;
-        sendConnectionAlert('guest', { roomId });
+        sendConnectionAlert('guest', { roomId, ip: socket.data.clientIp || getClientIpFromSocket(socket) });
         console.log(`[GUEST] Joined room: ${roomId}, Socket: ${socket.id}`);
         const joinPayload = { roomId, socketId: socket.id, lang: fromLang || "auto" };
         socket.to(roomId).emit("guest:joined", joinPayload);
@@ -2355,7 +2427,7 @@ io.on('connection', (socket) => {
       if (serverRole === "guest") {
         resetDailyStats();
         usageStats.guestJoins += 1;
-        sendConnectionAlert('guest', { roomId });
+        sendConnectionAlert('guest', { roomId, ip: socket.data.clientIp || getClientIpFromSocket(socket) });
         const joinPayload = {
           roomId,
           socketId: socket.id,
