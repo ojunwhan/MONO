@@ -50,14 +50,29 @@ module.exports = function attachKakaoAuth(app) {
   // 2) 콜백 → 토큰 교환 → 사용자 조회 → JWT 발급 → next로 이동
   app.get('/api/auth/kakao/callback', async (req, res) => {
     try {
-      const { code, state } = req.query;
+      const { code, state, error: oauthError, error_description: oauthErrorDescription } = req.query;
       const callbackUrl = getCallbackUrl();
       const clientId = getKakaoClientId();
       console.log('[kakao][callback] start', {
         hasCode: Boolean(code),
+        hasOAuthError: Boolean(oauthError),
         callbackUrl,
         hasClientId: Boolean(clientId),
       });
+      if (oauthError) {
+        console.error('[kakao][callback] oauth error from provider', {
+          oauthError,
+          oauthErrorDescription,
+          callbackUrl,
+        });
+        return res.redirect('/login?oauth_error=kakao_provider_error');
+      }
+      if (!code) {
+        console.error('[kakao][callback] missing authorization code', {
+          callbackUrl,
+        });
+        return res.redirect('/login?oauth_error=kakao_missing_code');
+      }
       if (!clientId) {
         return res.status(503).send('KAKAO_CLIENT_ID_MISSING');
       }
