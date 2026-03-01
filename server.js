@@ -46,6 +46,7 @@ const usageStats = {
   // 방/세션 관련
   roomsCreated: 0,         // 생성된 방 수
   roomsActive: 0,          // 현재 활성 방 수
+  activeSession: 0,        // 호스트+게스트 실제 연결 완료 세션 수
 
   // 로그인 관련
   googleLogins: 0,         // Google 로그인 수
@@ -75,6 +76,7 @@ function resetDailyStats() {
     usageStats.peakConnections = 0;
     usageStats.totalSocketConnects = 0;
     usageStats.roomsCreated = 0;
+    usageStats.activeSession = 0;
     usageStats.googleLogins = 0;
     usageStats.kakaoLogins = 0;
     usageStats.guestJoins = 0;
@@ -162,6 +164,7 @@ function sendHourlyReport() {
 🔑 로그인: Google ${usageStats.googleLogins} / 카카오 ${usageStats.kakaoLogins}
 👤 게스트 입장: ${usageStats.guestJoins}회
 🏠 방 생성: ${usageStats.roomsCreated}개 (활성: ${usageStats.roomsActive})
+🎯 실제 통역 세션: ${usageStats.activeSession}건
 
 🎤 STT: ${usageStats.sttRequests}회
 🔄 번역: ${usageStats.translationRequests}회
@@ -1100,6 +1103,33 @@ function syncRoomsActive() {
   usageStats.roomsActive = ROOMS.size;
 }
 
+function trackRealSessionConnected(roomId, meta) {
+  if (!roomId || !meta || meta.sessionCounted) return;
+
+  const ownerPid = String(meta.ownerPid || "").trim();
+  if (!ownerPid || !meta.participants?.[ownerPid]) return;
+
+  const room = io?.sockets?.adapter?.rooms?.get(roomId);
+  if (!room || room.size < 2) return;
+
+  const ownerSocketId = meta.participants[ownerPid]?.socketId;
+  if (!ownerSocketId || !room.has(ownerSocketId)) return;
+
+  const guestConnected = Object.entries(meta.participants).some(([pid, participant]) => {
+    if (pid === ownerPid) return false;
+    return !!participant?.socketId && room.has(participant.socketId);
+  });
+  if (!guestConnected) return;
+
+  meta.sessionCounted = true;
+  ROOMS.set(roomId, meta);
+
+  resetDailyStats();
+  usageStats.roomsCreated += 1;
+  usageStats.activeSession += 1;
+  sendConnectionAlert('room');
+}
+
 const LIMITS = {
   MAX_MESSAGE_CHARS: 500,
   MAX_AUDIO_BASE64_CHARS: 360000, // ~270KB base64 payload cap per chunk
@@ -1260,6 +1290,7 @@ function ensureRoomMeta(roomId){
   if (!m.callSignCounters) m.callSignCounters = {};
   if (!m.roomType) m.roomType = 'oneToOne';
   if (!m.expiresAt) m.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  if (typeof m.sessionCounted !== 'boolean') m.sessionCounted = false;
   return m;
 }
 
@@ -1647,10 +1678,7 @@ io.on('connection', (socket) => {
     meta.ownerPid = myUserId;
     ROOMS.set(roomId, meta);
     if (!roomAlreadyExists) {
-      resetDailyStats();
-      usageStats.roomsCreated += 1;
       syncRoomsActive();
-      sendConnectionAlert('room');
     }
 
     // Join socket room (leave previous room first)
@@ -1749,10 +1777,7 @@ io.on('connection', (socket) => {
 
     ROOMS.set(roomId, meta);
     if (!roomAlreadyExists) {
-      resetDailyStats();
-      usageStats.roomsCreated += 1;
       syncRoomsActive();
-      sendConnectionAlert('room');
     }
     socket.emit("room-created-ack", { roomId, siteContext: ctx });
   });
@@ -1787,10 +1812,7 @@ io.on('connection', (socket) => {
     }
     ROOMS.set(rid, meta);
     if (created) {
-      resetDailyStats();
-      usageStats.roomsCreated += 1;
       syncRoomsActive();
-      sendConnectionAlert('room');
     }
     ackReply({ ok: true, roomId: rid, created, isOwner });
     socket.emit("global-room-ready", { roomId: rid, created, isOwner });
@@ -2361,6 +2383,8 @@ io.on('connection', (socket) => {
         }
       }
     }
+
+    trackRealSessionConnected(roomId, meta);
 
     // Restore missed messages (common)
     const missed = (messageBuffer[roomId] || []).filter(
@@ -3381,6 +3405,7 @@ app.get('/api/stats', (req, res) => {
     uniqueVisitors: usageStats.uniqueIPs.size,
     roomsCreated: usageStats.roomsCreated,
     roomsActive: usageStats.roomsActive,
+    activeSession: usageStats.activeSession,
     logins: {
       google: usageStats.googleLogins,
       kakao: usageStats.kakaoLogins,
