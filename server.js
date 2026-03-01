@@ -29,6 +29,149 @@ const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 
+// === 사용량 추적 ===
+const usageStats = {
+  // 오늘 날짜 (자정에 리셋)
+  date: new Date().toISOString().split('T')[0],
+
+  // 접속 관련
+  totalVisits: 0,          // 페이지 접속 수 (HTTP 요청)
+  uniqueIPs: new Set(),    // 고유 IP 수
+
+  // 소켓 관련
+  currentConnections: 0,   // 현재 동시 접속
+  peakConnections: 0,      // 오늘 최대 동시 접속
+  totalSocketConnects: 0,  // 총 소켓 연결 수
+
+  // 방/세션 관련
+  roomsCreated: 0,         // 생성된 방 수
+  roomsActive: 0,          // 현재 활성 방 수
+
+  // 로그인 관련
+  googleLogins: 0,         // Google 로그인 수
+  kakaoLogins: 0,          // 카카오 로그인 수
+  guestJoins: 0,           // 게스트 입장 수
+
+  // 통역 관련
+  sttRequests: 0,          // STT 요청 수
+  translationRequests: 0,  // 번역 요청 수
+  ttsRequests: 0,          // TTS 요청 수
+
+  // 에러
+  errorCount: 0,           // 에러 발생 수
+  errors: [],              // 최근 에러 목록 (최대 10개)
+};
+
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const STATS_API_KEY = process.env.STATS_API_KEY;
+
+function resetDailyStats() {
+  const today = new Date().toISOString().split('T')[0];
+  if (usageStats.date !== today) {
+    usageStats.date = today;
+    usageStats.totalVisits = 0;
+    usageStats.uniqueIPs = new Set();
+    usageStats.peakConnections = 0;
+    usageStats.totalSocketConnects = 0;
+    usageStats.roomsCreated = 0;
+    usageStats.googleLogins = 0;
+    usageStats.kakaoLogins = 0;
+    usageStats.guestJoins = 0;
+    usageStats.sttRequests = 0;
+    usageStats.translationRequests = 0;
+    usageStats.ttsRequests = 0;
+    usageStats.errorCount = 0;
+    usageStats.errors = [];
+  }
+}
+
+function trackUsageError(error) {
+  usageStats.errorCount += 1;
+  if (usageStats.errors.length >= 10) usageStats.errors.shift();
+  usageStats.errors.push({
+    time: new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }),
+    message: String(error?.message || error || 'Unknown'),
+  });
+}
+
+async function sendTelegram(message) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+  } catch (e) {
+    console.error('[MONO] Telegram send failed:', e?.message || e);
+    trackUsageError(e);
+  }
+}
+
+function sendConnectionAlert(type, details = {}) {
+  const now = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' });
+  let msg = '';
+
+  switch (type) {
+    case 'login':
+      msg = `🟢 ${now} | 로그인: ${details.provider} | ${details.name || 'Unknown'}`;
+      break;
+    case 'guest':
+      msg = `👤 ${now} | 게스트 입장 | 방: ${String(details.roomId || '').substring(0, 8)}...`;
+      break;
+    case 'room':
+      msg = `🏠 ${now} | 방 생성 | 현재 활성 ${usageStats.roomsActive}개`;
+      break;
+    case 'translation':
+      if (usageStats.translationRequests % 10 === 0) {
+        msg = `🔄 ${now} | 번역 ${usageStats.translationRequests}건 달성`;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (msg) sendTelegram(msg);
+}
+
+let lastHourlyReportKey = '';
+function sendHourlyReport() {
+  resetDailyStats();
+  const now = new Date();
+  const hour = now.getHours();
+
+  // 새벽 1시~7시는 전송 안 함
+  if (hour >= 1 && hour <= 7) return;
+
+  const hourKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${hour}`;
+  if (lastHourlyReportKey === hourKey) return;
+  lastHourlyReportKey = hourKey;
+
+  const msg = `📊 <b>MONO 시간별 리포트</b>
+⏰ ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+
+👥 현재 접속: <b>${usageStats.currentConnections}명</b>
+📈 오늘 최대 동시접속: <b>${usageStats.peakConnections}명</b>
+🌐 오늘 방문: ${usageStats.totalVisits}회 (${usageStats.uniqueIPs.size}명)
+
+🔑 로그인: Google ${usageStats.googleLogins} / 카카오 ${usageStats.kakaoLogins}
+👤 게스트 입장: ${usageStats.guestJoins}회
+🏠 방 생성: ${usageStats.roomsCreated}개 (활성: ${usageStats.roomsActive})
+
+🎤 STT: ${usageStats.sttRequests}회
+🔄 번역: ${usageStats.translationRequests}회
+🔊 TTS: ${usageStats.ttsRequests}회
+
+❌ 에러: ${usageStats.errorCount}건`;
+
+  sendTelegram(msg);
+}
+
 // --- lang detect & map ---
 const LANG_ALIAS = {
   'en': 'en','en-US':'en','en-GB':'en',
@@ -488,6 +631,8 @@ async function consumeTranslationUsage(userId) {
 
 async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
   if (!openai || isOpenAIBlocked()) return "";
+  resetDailyStats();
+  usageStats.sttRequests += 1;
   const wavBuffer = pcm16ToWavBuffer(pcmBuffer, sampleRateHz, 1);
   const tmpFile = path.join(os.tmpdir(), `${uuidv4()}.wav`);
   fs.writeFileSync(tmpFile, wavBuffer);
@@ -517,6 +662,8 @@ function extFromMimeType(mimeType = "") {
 
 async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
   if (!openai || isOpenAIBlocked()) return "";
+  resetDailyStats();
+  usageStats.sttRequests += 1;
   const ext = extFromMimeType(mimeType);
   const tmpFile = path.join(os.tmpdir(), `${uuidv4()}.${ext}`);
   fs.writeFileSync(tmpFile, audioBuffer);
@@ -542,6 +689,8 @@ const TTS_DEFAULT_VOICE = "echo"; // neutral, steady, mid-range
 
 async function synthesizeSpeech(text, targetLang = "en") {
   if (!openai || !text || isOpenAIBlocked()) return null;
+  resetDailyStats();
+  usageStats.ttsRequests += 1;
   const processedText = preprocessForTTS(text);
   if (!processedText) return null;
   try {
@@ -607,6 +756,44 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
+
+// 모든 요청에서 방문 카운트 (API 제외, 페이지 요청만)
+app.use((req, res, next) => {
+  resetDailyStats();
+  if (!req.path.startsWith('/api/') && !req.path.startsWith('/socket.io')) {
+    usageStats.totalVisits += 1;
+    const rawIp = req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
+    const ip = String(Array.isArray(rawIp) ? rawIp[0] : rawIp).split(',')[0].trim();
+    if (ip) usageStats.uniqueIPs.add(ip);
+  }
+  next();
+});
+
+// OAuth 콜백 성공 카운트 (기존 OAuth 로직은 그대로 유지)
+app.use((req, res, next) => {
+  const pathName = req.path || '';
+  if (pathName !== '/api/auth/google/callback' && pathName !== '/api/auth/kakao/callback') {
+    return next();
+  }
+  res.on('finish', () => {
+    try {
+      resetDailyStats();
+      const cookies = res.getHeader('set-cookie');
+      const list = Array.isArray(cookies) ? cookies : (cookies ? [cookies] : []);
+      const hasTokenCookie = list.some((c) => String(c).includes('token='));
+      const isSuccessRedirect = res.statusCode >= 300 && res.statusCode < 400;
+      if (!hasTokenCookie || !isSuccessRedirect) return;
+      if (pathName === '/api/auth/google/callback') {
+        usageStats.googleLogins += 1;
+        sendConnectionAlert('login', { provider: 'Google' });
+      } else if (pathName === '/api/auth/kakao/callback') {
+        usageStats.kakaoLogins += 1;
+        sendConnectionAlert('login', { provider: 'Kakao' });
+      }
+    } catch {}
+  });
+  next();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // WEB PUSH — VAPID configuration + subscription store + send API
@@ -909,6 +1096,10 @@ const RATE_BUCKETS = new Map(); // key(socketId:event) -> { count, resetAt }
 const ROOM_MESSAGE_CACHE = new Map(); // roomId -> recent conversation context
 const MAX_CONTEXT_MESSAGES = 10;
 
+function syncRoomsActive() {
+  usageStats.roomsActive = ROOMS.size;
+}
+
 const LIMITS = {
   MAX_MESSAGE_CHARS: 500,
   MAX_AUDIO_BASE64_CHARS: 360000, // ~270KB base64 payload cap per chunk
@@ -1209,6 +1400,9 @@ async function generateNameAdaptations(roomId) {
 
 async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
+  resetDailyStats();
+  usageStats.translationRequests += 1;
+  sendConnectionAlert('translation');
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general');
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
     .slice(-MAX_CONTEXT_MESSAGES)
@@ -1237,6 +1431,8 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
 
 async function hqTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
+  resetDailyStats();
+  usageStats.translationRequests += 1;
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general')
     + `\nRefine to fluent native chat style without changing meaning or emotional tone.`;
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
@@ -1282,6 +1478,12 @@ async function emitRoutes(roomId) {
 }
 
 io.on('connection', (socket) => {
+  resetDailyStats();
+  usageStats.currentConnections += 1;
+  usageStats.totalSocketConnects += 1;
+  if (usageStats.currentConnections > usageStats.peakConnections) {
+    usageStats.peakConnections = usageStats.currentConnections;
+  }
   console.log('🟢 New client connected:', socket.id);
 
   const leaveRoomInternal = ({ roomId, participantId, reason } = {}) => {
@@ -1392,6 +1594,7 @@ io.on('connection', (socket) => {
       try { io.in(rid).socketsLeave(rid); } catch {}
       ROOMS.delete(rid);
       delete messageBuffer[rid];
+      syncRoomsActive();
       console.log(`[ROOM:DELETE] oneToOne room removed room=${rid} by=${pid}`);
       return;
     }
@@ -1415,6 +1618,7 @@ io.on('connection', (socket) => {
     // Deterministic roomId: sorted pair
     const pair = [myUserId, peerUserId].sort();
     const roomId = `1to1_${pair[0]}_${pair[1]}`;
+    const roomAlreadyExists = ROOMS.has(roomId);
 
     const meta = ensureRoomMeta(roomId);
     meta.roomType = "oneToOne";
@@ -1442,6 +1646,12 @@ io.on('connection', (socket) => {
     }
     meta.ownerPid = myUserId;
     ROOMS.set(roomId, meta);
+    if (!roomAlreadyExists) {
+      resetDailyStats();
+      usageStats.roomsCreated += 1;
+      syncRoomsActive();
+      sendConnectionAlert('room');
+    }
 
     // Join socket room (leave previous room first)
     leaveBeforeJoin({ nextRoomId: roomId, participantId: myUserId, reason: "create-1to1" });
@@ -1500,6 +1710,7 @@ io.on('connection', (socket) => {
   // ======================================================
   socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType }) => {
     if (!roomId) return;
+    const roomAlreadyExists = ROOMS.has(roomId);
 
     const hostLangCode = mapLang(fromLang);
     const ctx = siteContext || "general";
@@ -1537,6 +1748,12 @@ io.on('connection', (socket) => {
     }
 
     ROOMS.set(roomId, meta);
+    if (!roomAlreadyExists) {
+      resetDailyStats();
+      usageStats.roomsCreated += 1;
+      syncRoomsActive();
+      sendConnectionAlert('room');
+    }
     socket.emit("room-created-ack", { roomId, siteContext: ctx });
   });
 
@@ -1569,6 +1786,12 @@ io.on('connection', (socket) => {
       meta.ownerLang = mapLang(fromLang || meta.ownerLang || "en");
     }
     ROOMS.set(rid, meta);
+    if (created) {
+      resetDailyStats();
+      usageStats.roomsCreated += 1;
+      syncRoomsActive();
+      sendConnectionAlert('room');
+    }
     ackReply({ ok: true, roomId: rid, created, isOwner });
     socket.emit("global-room-ready", { roomId: rid, created, isOwner });
   });
@@ -1990,6 +2213,9 @@ io.on('connection', (socket) => {
 
       // guest:joined
       if (serverRole === "guest") {
+        resetDailyStats();
+        usageStats.guestJoins += 1;
+        sendConnectionAlert('guest', { roomId });
         console.log(`[GUEST] Joined room: ${roomId}, Socket: ${socket.id}`);
         const joinPayload = { roomId, socketId: socket.id, lang: fromLang || "auto" };
         socket.to(roomId).emit("guest:joined", joinPayload);
@@ -2105,6 +2331,9 @@ io.on('connection', (socket) => {
       });
 
       if (serverRole === "guest") {
+        resetDailyStats();
+        usageStats.guestJoins += 1;
+        sendConnectionAlert('guest', { roomId });
         const joinPayload = {
           roomId,
           socketId: socket.id,
@@ -2963,6 +3192,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
+    resetDailyStats();
+    usageStats.currentConnections = Math.max(0, usageStats.currentConnections - 1);
     const roomId = socket.roomId;
     console.log(`🔴 ${socket.id} disconnected from room ${roomId} (${reason})`);
     removeUserPresenceBySocket(socket.id);
@@ -2993,6 +3224,7 @@ io.on('connection', (socket) => {
         if (!room || room.size === 0) {
           ROOMS.delete(roomId);
           delete messageBuffer[roomId];
+          syncRoomsActive();
           console.log(`💨 Room ${roomId} removed after grace period`);
         } else {
           console.log(`🟢 Room ${roomId} survived grace period`);
@@ -3009,6 +3241,7 @@ io.on('connection', (socket) => {
             io.to(roomId).emit("room-closed");
             ROOMS.delete(roomId);
             delete messageBuffer[roomId];
+            syncRoomsActive();
             console.log(`💨 Room ${roomId} closed after host left`);
           }
         }, 5 * 60 * 1000);
@@ -3033,6 +3266,8 @@ async function handleSttUpload(req, res) {
   try {
     if (!openai) return res.status(500).json({ error: 'openai_not_configured' });
     if (!req.file?.buffer) return res.status(400).json({ error: "no audio" });
+    resetDailyStats();
+    usageStats.sttRequests += 1;
 
     // Browser MediaRecorder outputs webm/opus; Whisper supports webm directly.
     // Avoid ffmpeg conversion to reduce format/codec failures.
@@ -3049,6 +3284,7 @@ async function handleSttUpload(req, res) {
     res.json({ text: result.text || "" });
 
   } catch (err) {
+    trackUsageError(err);
     console.error("[stt] error:", err.message);
     if (!res.headersSent) {
       const status = Number(err?.status || err?.code || 500);
@@ -3130,6 +3366,36 @@ app.post("/api/auth/convert-guest", async (req, res) => {
   }
 });
 
+app.get('/api/stats', (req, res) => {
+  if (!STATS_API_KEY || req.query.key !== STATS_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  resetDailyStats();
+  syncRoomsActive();
+  res.json({
+    date: usageStats.date,
+    currentConnections: usageStats.currentConnections,
+    peakConnections: usageStats.peakConnections,
+    totalVisits: usageStats.totalVisits,
+    uniqueVisitors: usageStats.uniqueIPs.size,
+    roomsCreated: usageStats.roomsCreated,
+    roomsActive: usageStats.roomsActive,
+    logins: {
+      google: usageStats.googleLogins,
+      kakao: usageStats.kakaoLogins,
+      guest: usageStats.guestJoins,
+    },
+    api: {
+      stt: usageStats.sttRequests,
+      translation: usageStats.translationRequests,
+      tts: usageStats.ttsRequests,
+    },
+    errorCount: usageStats.errorCount,
+    recentErrors: usageStats.errors,
+  });
+});
+
 
 attachGoogleAuth(app);
 attachKakaoAuth(app);
@@ -3197,8 +3463,10 @@ function startServer(port, retries = 0) {
       console.log(`[server] requested PORT: ${port}`);
       console.log(`[server] actual PORT: ${actualPort}`);
       console.log(`[server] mode: ${IS_DEV ? 'dev' : 'prod'}`);
+      sendTelegram(`🚀 <b>MONO 서버 시작</b>\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n🌐 Port: ${actualPort || port}`);
     })
     .once('error', (err) => {
+      trackUsageError(err);
       if (err?.code === 'EADDRINUSE') {
         console.error(`[server] ⚠ Port ${port} is already in use (EADDRINUSE)`);
         if (ENABLE_AUTO_PORT_FALLBACK && retries < MAX_PORT_RETRIES) {
@@ -3228,5 +3496,20 @@ function shutdownGracefully(signal) {
 
 process.on('SIGINT', () => shutdownGracefully('SIGINT'));
 process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));
+process.on('uncaughtException', (err) => {
+  trackUsageError(err);
+});
+process.on('unhandledRejection', (reason) => {
+  trackUsageError(reason);
+});
+
+setInterval(() => {
+  const now = new Date();
+  resetDailyStats();
+  syncRoomsActive();
+  if (now.getMinutes() === 0) {
+    sendHourlyReport();
+  }
+}, 60 * 1000).unref?.();
 
 startServer(START_PORT);
