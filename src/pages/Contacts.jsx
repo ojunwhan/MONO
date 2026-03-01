@@ -71,6 +71,19 @@ export default function Contacts() {
     loadLists();
   }, [me?.userId, loadLists]);
 
+  useEffect(() => {
+    const keyword = query.trim();
+    if (!keyword) {
+      setSearchResults([]);
+      setMessage("");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      onSearch();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, onSearch]);
+
   const onSearch = useCallback(async () => {
     setMessage("");
     if (query.trim().length < 2) {
@@ -294,7 +307,13 @@ export default function Contacts() {
       </div>
 
       <div className="sticky top-0 z-20 bg-[var(--color-bg)] px-4 py-3 border-b border-[var(--color-border)]">
-        <div className="relative">
+        <form
+          className="relative"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSearch();
+          }}
+        >
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]" />
           <input
             value={query}
@@ -303,7 +322,7 @@ export default function Contacts() {
             placeholder={t("contacts.searchMonoId")}
             className="w-full h-[40px] pl-9 pr-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[14px]"
           />
-        </div>
+        </form>
         {(searchFocused || query.trim()) && (
           <div className="absolute left-4 right-4 top-[58px] max-h-[280px] overflow-y-auto rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
             {filteredSearchResults.length === 0 ? (
