@@ -1,8 +1,9 @@
 import React from "react";
-import { LANGUAGE_PROFILES, getLanguageProfileByCode } from "../constants/languageProfiles";
+import { getFlagUrlByLang, getLabelFromCode } from "../constants/languageProfiles";
+import { LANGUAGES, getLanguageByCode } from "../constants/languages";
 
 export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGrid, onSelect }) {
-  const selected = getLanguageProfileByCode(selectedLang) || LANGUAGE_PROFILES[0];
+  const selected = getLanguageByCode(selectedLang) || LANGUAGES[0];
 
   return (
     <div className="w-full">
@@ -14,7 +15,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
         className="w-full rounded-[12px] border-2 border-[#3B82F6] bg-[var(--color-bg)] px-4 py-3 flex items-center justify-center gap-3"
       >
         <img
-          src={selected?.flagUrl}
+          src={getFlagUrlByLang(selected?.code)}
           alt={`${selected?.name || "Language"} flag`}
           width={48}
           height={48}
@@ -22,14 +23,16 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
           loading="lazy"
         />
         <div className="text-left">
-          <div className="text-[14px] font-semibold text-[var(--color-text)]">{selected?.shortLabel || "UNK"}</div>
+          <div className="text-[14px] font-semibold text-[var(--color-text)]">
+            {getLabelFromCode(selected?.code) || "UNK"}
+          </div>
           <div className="text-[12px] text-[var(--color-text-secondary)]">{selected?.name || "Unknown"}</div>
         </div>
       </button>
 
       {showGrid ? (
         <div className="mt-4 grid grid-cols-4 gap-3">
-          {LANGUAGE_PROFILES.map((p) => {
+          {LANGUAGES.map((p) => {
             const isSelected = selected?.code === p.code;
             return (
               <button
@@ -43,7 +46,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
                 }`}
               >
                 <img
-                  src={p.flagUrl}
+                  src={getFlagUrlByLang(p.code)}
                   alt={`${p.name} flag`}
                   width={48}
                   height={48}
@@ -51,7 +54,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
                   loading="lazy"
                 />
                 <div className="mt-2 text-[12px] font-semibold tracking-wide text-[var(--color-text)]">
-                  {p.shortLabel || String(p.code || "").toUpperCase()}
+                  {getLabelFromCode(p.code) || String(p.code || "").toUpperCase()}
                 </div>
               </button>
             );
