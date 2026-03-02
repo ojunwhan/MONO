@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import MonoLogo from "../components/MonoLogo";
-import { LANGUAGES, getLanguageByCode } from "../constants/languages";
+import { getLanguageByCode } from "../constants/languages";
+import { detectUserLanguage } from "../constants/languageProfiles";
 import { useTranslation } from "react-i18next";
 
 function detectBrowserLanguage() {
-  const browserLang = (navigator.language || "en").split("-")[0].toLowerCase();
-  return LANGUAGES.some((l) => l.code === browserLang) ? browserLang : "en";
+  const detected = detectUserLanguage();
+  return getLanguageByCode(detected?.code)?.code || "en";
 }
 
 function saveGuestSession(roomId, lang, name, guestId, siteContext, roomType) {
@@ -41,7 +42,12 @@ export default function GuestJoinPage() {
   const { roomId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [selectedLang, setSelectedLang] = useState(detectBrowserLanguage());
+  const savedLang = useMemo(() => {
+    const saved = localStorage.getItem("myLang");
+    return getLanguageByCode(saved)?.code || "";
+  }, []);
+  const [selectedLang, setSelectedLang] = useState(savedLang || detectBrowserLanguage());
+  const [showLangGrid, setShowLangGrid] = useState(!savedLang);
 
   const siteContext = useMemo(() => searchParams.get("siteContext") || "general", [searchParams]);
   const roomType = useMemo(() => searchParams.get("roomType") || "oneToOne", [searchParams]);
@@ -67,6 +73,12 @@ export default function GuestJoinPage() {
     const normalized = String(selectedLang || "").toLowerCase();
     if (!getLanguageByCode(normalized)) setSelectedLang("en");
   }, [selectedLang]);
+
+  useEffect(() => {
+    if (!savedLang || showLangGrid || !roomId) return;
+    startGuestSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedLang, showLangGrid, roomId]);
 
   const startGuestSession = () => {
     if (!roomId) return;
@@ -99,17 +111,25 @@ export default function GuestJoinPage() {
 
         <div className="flex-[0_0_60%] flex flex-col items-center justify-center">
           <div className="w-full max-w-[320px] space-y-3">
-            <p className="text-[14px] text-[var(--color-text-secondary)] text-center">{t("guestJoin.selectLanguage")}</p>
-            <div className="[&_img]:w-6 [&_img]:h-6 [&_img]:min-w-6 [&_img]:min-h-6">
-              <LanguageSelector value={selectedLang} onChange={setSelectedLang} />
-            </div>
-            <button
-              type="button"
-              onClick={startGuestSession}
-              className="w-full h-[48px] rounded-[8px] text-[16px] font-medium bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
-            >
-              {t("guestJoin.startInterpret")}
-            </button>
+            <LanguageFlagPicker
+              selectedLang={selectedLang}
+              showGrid={showLangGrid}
+              onToggleGrid={() => setShowLangGrid((prev) => !prev)}
+              onSelect={(code) => {
+                setSelectedLang(code);
+                localStorage.setItem("myLang", code);
+                setShowLangGrid(false);
+              }}
+            />
+            {!showLangGrid ? (
+              <button
+                type="button"
+                onClick={startGuestSession}
+                className="w-full h-[48px] rounded-[8px] text-[16px] font-medium bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
+              >
+                {t("guestJoin.startInterpret")}
+              </button>
+            ) : null}
             <p className="text-[14px] text-[var(--color-text-secondary)] text-center">
               {t("guestJoin.noInstall")}
             </p>

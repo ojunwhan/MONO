@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate, useLocation } from "react-router-dom";
 import QRCodeBox from "../components/QRCodeBox";
 import { LANGUAGE_PROFILES, detectUserLanguage, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
 import { ChevronLeft } from "lucide-react";
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { fetchAuthMe } from "../auth/session";
 import { useTranslation } from "react-i18next";
 
@@ -27,16 +27,21 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [authOk, setAuthOk] = useState(false);
   const detected = useMemo(() => detectUserLanguage(), []);
-  const initialLang = useMemo(() => {
+  const savedLang = useMemo(() => {
     const saved = localStorage.getItem("myLang");
-    if (saved && getLanguageByCode(saved)) return saved;
+    return getLanguageByCode(saved)?.code || "";
+  }, []);
+  const initialLang = useMemo(() => {
+    if (savedLang) return savedLang;
     return detected?.code || "ko";
-  }, [detected]);
+  }, [detected, savedLang]);
 
   const [selectedLang, setSelectedLang] = useState(initialLang);
+  const [showLangGrid, setShowLangGrid] = useState(!savedLang);
   const [roomId, setRoomId] = useState("");
   const [hostPid, setHostPid] = useState("");
   const [isGuest, setIsGuest] = useState(false);
+  const autoGuestStartRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +92,7 @@ export default function Home() {
   const handleHostLangChange = (code) => {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
+    setShowLangGrid(false);
     const newRoomId = uuidv4();
     setRoomId(newRoomId);
     const pidKey = `mro.pid.${newRoomId}`;
@@ -113,6 +119,14 @@ export default function Home() {
     });
   };
 
+  useEffect(() => {
+    if (!authReady || !authOk || !isGuest) return;
+    if (!savedLang || showLangGrid || !roomId) return;
+    if (autoGuestStartRef.current) return;
+    autoGuestStartRef.current = true;
+    handleGuestStart();
+  }, [authReady, authOk, isGuest, savedLang, showLangGrid, roomId]);
+
   const me = getLanguageProfileByCode(selectedLang) || LANGUAGE_PROFILES[0];
 
   if (!authReady || !authOk) {
@@ -138,13 +152,24 @@ export default function Home() {
           </div>
         ) : null}
         <div className="mb-8"><MonoLogo /></div>
-        <p className="mb-3 text-[14px] text-[var(--color-text-secondary)]">{t("interpret.selectLanguage")}</p>
-        <LanguageSelector
-          value={selectedLang}
-          onChange={isGuest ? setSelectedLang : handleHostLangChange}
-        />
+        <div className="w-full max-w-[360px]">
+          <LanguageFlagPicker
+            selectedLang={selectedLang}
+            showGrid={showLangGrid}
+            onToggleGrid={() => setShowLangGrid((prev) => !prev)}
+            onSelect={(code) => {
+              if (isGuest) {
+                setSelectedLang(code);
+                localStorage.setItem("myLang", code);
+                setShowLangGrid(false);
+              } else {
+                handleHostLangChange(code);
+              }
+            }}
+          />
+        </div>
 
-        {!isGuest ? (
+        {!isGuest && !showLangGrid ? (
           <div className="mt-6 w-full flex flex-col items-center">
             {!!roomId && !!hostPid && (
               <QRCodeBox
@@ -159,7 +184,7 @@ export default function Home() {
               />
             )}
           </div>
-        ) : (
+        ) : isGuest && !showLangGrid ? (
           <div className="mt-6 w-full max-w-[320px]">
             <button
               type="button"
@@ -169,7 +194,7 @@ export default function Home() {
               {me.startLabel}
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
