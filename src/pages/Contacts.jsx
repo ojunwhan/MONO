@@ -71,19 +71,6 @@ export default function Contacts() {
     loadLists();
   }, [me?.userId, loadLists]);
 
-  useEffect(() => {
-    const keyword = query.trim();
-    if (!keyword) {
-      setSearchResults([]);
-      setMessage("");
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      onSearch();
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [query, onSearch]);
-
   const onSearch = useCallback(async () => {
     setMessage("");
     if (query.trim().length < 2) {
@@ -107,6 +94,19 @@ export default function Contacts() {
       setBusy(false);
     }
   }, [authFetch, query, t]);
+
+  useEffect(() => {
+    const keyword = query.trim();
+    if (!keyword) {
+      setSearchResults([]);
+      setMessage("");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      onSearch();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, onSearch]);
 
   const sendRequest = useCallback(
     async (targetMonoId) => {
