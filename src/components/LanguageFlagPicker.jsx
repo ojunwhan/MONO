@@ -2,6 +2,20 @@ import React from "react";
 import { getFlagUrlByLang, getLabelFromCode } from "../constants/languageProfiles";
 import { LANGUAGES, getLanguageByCode } from "../constants/languages";
 
+function flagToTwemojiUrl(flag) {
+  const codePoints = Array.from(String(flag || ""))
+    .map((ch) => ch.codePointAt(0)?.toString(16))
+    .filter(Boolean);
+  if (!codePoints.length) return "";
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints.join("-")}.svg`;
+}
+
+function getFlagImageUrl(code) {
+  const lang = getLanguageByCode(code);
+  const emojiFlagUrl = lang?.flag ? flagToTwemojiUrl(lang.flag) : "";
+  return emojiFlagUrl || getFlagUrlByLang(code);
+}
+
 export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGrid, onSelect }) {
   const selected = getLanguageByCode(selectedLang) || LANGUAGES[0];
 
@@ -15,7 +29,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
         className="w-full rounded-[12px] border-2 border-[#3B82F6] bg-[var(--color-bg)] px-4 py-3 flex items-center justify-center gap-3"
       >
         <img
-          src={getFlagUrlByLang(selected?.code)}
+          src={getFlagImageUrl(selected?.code)}
           alt={`${selected?.name || "Language"} flag`}
           width={48}
           height={48}
@@ -46,7 +60,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
                 }`}
               >
                 <img
-                  src={getFlagUrlByLang(p.code)}
+                  src={getFlagImageUrl(p.code)}
                   alt={`${p.name} flag`}
                   width={48}
                   height={48}
