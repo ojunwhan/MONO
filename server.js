@@ -68,6 +68,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const STATS_API_KEY = process.env.STATS_API_KEY;
 const LOCATION_CACHE = new Map();
+const ERROR_ALERT_STATE = new Map();
 
 function resetDailyStats() {
   const today = new Date().toISOString().split('T')[0];
@@ -91,13 +92,33 @@ function resetDailyStats() {
   }
 }
 
-function trackUsageError(error) {
+function makeErrorMessage(error) {
+  return String(error?.stack || error?.message || error || 'Unknown')
+    .replace(/\s+/g, ' ')
+    .slice(0, 400);
+}
+
+function sendErrorAlertOnce(source, error) {
+  const msgText = makeErrorMessage(error);
+  const key = `${String(source || 'runtime')}:${msgText.slice(0, 140)}`;
+  const nowMs = Date.now();
+  const prev = ERROR_ALERT_STATE.get(key) || 0;
+  // Prevent alert flooding for repeated identical errors within 3 minutes.
+  if (nowMs - prev < 3 * 60 * 1000) return;
+  ERROR_ALERT_STATE.set(key, nowMs);
+  const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  sendTelegram(`🚨 ${now} | 에러(${source || 'runtime'})\n${msgText}`);
+}
+
+function trackUsageError(error, options = {}) {
+  const { source = 'runtime', notify = true } = options;
   usageStats.errorCount += 1;
   if (usageStats.errors.length >= 10) usageStats.errors.shift();
   usageStats.errors.push({
     time: new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }),
-    message: String(error?.message || error || 'Unknown'),
+    message: makeErrorMessage(error),
   });
+  if (notify) sendErrorAlertOnce(source, error);
 }
 
 function normalizeClientIp(rawIp) {
@@ -175,7 +196,7 @@ async function sendTelegram(message) {
     });
   } catch (e) {
     console.error('[MONO] Telegram send failed:', e?.message || e);
-    trackUsageError(e);
+    trackUsageError(e, { source: 'telegram_send', notify: false });
   }
 }
 
@@ -3594,10 +3615,10 @@ function shutdownGracefully(signal) {
 process.on('SIGINT', () => shutdownGracefully('SIGINT'));
 process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));
 process.on('uncaughtException', (err) => {
-  trackUsageError(err);
+  trackUsageError(err, { source: 'uncaughtException' });
 });
 process.on('unhandledRejection', (reason) => {
-  trackUsageError(reason);
+  trackUsageError(reason, { source: 'unhandledRejection' });
 });
 
 setInterval(() => {
