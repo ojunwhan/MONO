@@ -1,4 +1,29 @@
 // AudioProcessor.js
+
+/**
+ * Map localStorage "mono.mic.sensitivity" (0~100, default 60)
+ * to a VAD threshold.  Higher sensitivity → lower threshold.
+ *   0   → threshold 0.05  (barely picks up anything)
+ *   50  → threshold 0.01  (default, balanced)
+ *   100 → threshold 0.002 (very sensitive)
+ */
+function getMicThresholdFromSettings(fallback = 0.008) {
+  try {
+    const raw = localStorage.getItem("mono.mic.sensitivity");
+    if (raw === null) return fallback;
+    const val = Number(raw);
+    if (Number.isNaN(val)) return fallback;
+    const clamped = Math.max(0, Math.min(100, val));
+    // Linear interpolation on a log scale
+    // 0 → 0.05,  50 → 0.01,  100 → 0.002
+    const logMin = Math.log(0.002);
+    const logMax = Math.log(0.05);
+    return Math.exp(logMax + (logMin - logMax) * (clamped / 100));
+  } catch {
+    return fallback;
+  }
+}
+
 export default class AudioProcessor {
   constructor({
     onAudio,
@@ -13,8 +38,9 @@ export default class AudioProcessor {
     this.onSpeechEnd = onSpeechEnd;
     this.onRms = onRms;
     this.sampleRate = sampleRate;
+    const userThreshold = getMicThresholdFromSettings(0.008);
     this.vad = {
-      threshold: typeof vad.threshold === "number" ? vad.threshold : 0.01,
+      threshold: typeof vad.threshold === "number" ? vad.threshold : userThreshold,
       minSpeechMs: typeof vad.minSpeechMs === "number" ? vad.minSpeechMs : 120,
       silenceMsToStop: typeof vad.silenceMsToStop === "number" ? vad.silenceMsToStop : 2000,
     };

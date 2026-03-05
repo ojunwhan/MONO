@@ -10,6 +10,8 @@ import LoginPage from "./pages/Login";
 import CsChatPage from "./pages/CsChat";
 import GuestJoinPage from "./pages/GuestJoin";
 import KioskPage from "./pages/KioskPage";
+import TermsPage from "./pages/Terms";
+import PrivacyPage from "./pages/Privacy";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -83,6 +85,14 @@ const router = createBrowserRouter([
   {
     path: "/kiosk",
     element: <KioskPage />,
+  },
+  {
+    path: "/terms",
+    element: <TermsPage />,
+  },
+  {
+    path: "/privacy",
+    element: <PrivacyPage />,
   },
 ]);
 

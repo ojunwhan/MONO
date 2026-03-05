@@ -650,6 +650,10 @@ export default function ChatScreen() {
     };
 
     const onNotify = (p) => {
+      // Check if notifications are globally enabled
+      const notifEnabled = localStorage.getItem("mono.notif.enabled") !== "0";
+      if (!notifEnabled) return;
+
       const incomingRoomId = String(p?.roomId || "");
       const currentRoomId = String(roomIdRef.current || "");
       const shouldPlaySound =
@@ -664,7 +668,9 @@ export default function ChatScreen() {
           new Notification(p?.title || "MONO", { body: p?.body || "" });
         }
       } catch {}
-      if (navigator?.vibrate) navigator.vibrate([120, 60, 120]);
+      // Check if vibration is enabled
+      const vibrationEnabled = localStorage.getItem("mono.notif.vibration") !== "0";
+      if (vibrationEnabled && navigator?.vibrate) navigator.vibrate([120, 60, 120]);
     };
 
     const onServerWarning = (payload) => {

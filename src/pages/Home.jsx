@@ -29,7 +29,10 @@ export default function Home() {
   const detected = useMemo(() => detectUserLanguage(), []);
   const savedLang = useMemo(() => {
     const saved = localStorage.getItem("myLang");
-    return getLanguageByCode(saved)?.code || "";
+    if (saved) return getLanguageByCode(saved)?.code || "";
+    // Fallback to preferred language from Settings
+    const preferred = localStorage.getItem("mono.preferredLang");
+    return getLanguageByCode(preferred)?.code || "";
   }, []);
   const initialLang = useMemo(() => {
     if (savedLang) return savedLang;

@@ -44,7 +44,9 @@ export default function GuestJoinPage() {
   const navigate = useNavigate();
   const savedLang = useMemo(() => {
     const saved = localStorage.getItem("myLang");
-    return getLanguageByCode(saved)?.code || "";
+    if (saved) return getLanguageByCode(saved)?.code || "";
+    const preferred = localStorage.getItem("mono.preferredLang");
+    return getLanguageByCode(preferred)?.code || "";
   }, []);
   const [selectedLang, setSelectedLang] = useState(savedLang || detectBrowserLanguage());
   // 항상 언어 선택 그리드를 보여줌 — 게스트는 매번 본인 언어를 확인/선택해야 함

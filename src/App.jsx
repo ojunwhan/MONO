@@ -17,6 +17,17 @@ const App = () => {
     const theme = localStorage.getItem("mono.theme");
     document.documentElement.classList.toggle("dark", theme === "dark");
 
+    // Apply font size from settings (mono.fontSize: "small" | "medium" | "large")
+    const applyFontSize = () => {
+      const fs = localStorage.getItem("mono.fontSize") || "normal";
+      const sizeMap = { small: "14px", normal: "16px", large: "20px" };
+      document.documentElement.style.fontSize = sizeMap[fs] || "16px";
+    };
+    applyFontSize();
+    window.addEventListener("storage", applyFontSize);
+    // Also listen for custom event dispatched from Settings page
+    window.addEventListener("mono:fontSizeChanged", applyFontSize);
+
     let disposed = false;
     let registerHandler = null;
     // App first load: restore identity -> register user -> subscribe push.
@@ -37,6 +48,8 @@ const App = () => {
     return () => {
       disposed = true;
       if (registerHandler) socket.off("connect", registerHandler);
+      window.removeEventListener("storage", applyFontSize);
+      window.removeEventListener("mono:fontSizeChanged", applyFontSize);
     };
   }, []);
 

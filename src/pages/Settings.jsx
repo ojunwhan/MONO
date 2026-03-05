@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clearMyIdentity, clearQueue, getMyIdentity, getStorageUsage, setMyIdentity } from "../db";
 import { clearAllHistory } from "../utils/ChatStorage";
-import { LANGUAGE_PROFILES, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { useNavigate } from "react-router-dom";
 import LanguageSelector from "../components/LanguageSelector";
 import MonoLogo from "../components/MonoLogo";
@@ -12,6 +11,7 @@ import ToastMessage from "../components/ToastMessage";
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const profileEditRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -25,8 +25,6 @@ export default function SettingsPage() {
     phoneNumber: "",
     statusMessage: "",
   });
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [subscription, setSubscription] = useState(null);
   const [darkMode, setDarkMode] = useState(
     typeof window !== "undefined" && localStorage.getItem("mono.theme") === "dark"
@@ -119,8 +117,6 @@ export default function SettingsPage() {
 
   const saveProfile = async () => {
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       const res = await authFetch("/api/auth/profile", {
         method: "PATCH",
@@ -163,10 +159,47 @@ export default function SettingsPage() {
     }
   };
 
+  const deleteAccount = async () => {
+    if (!window.confirm(t("settings.deleteAccountConfirm", "정말 계정을 삭제하시겠습니까?\n모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다."))) {
+      return;
+    }
+    // Double confirm for safety
+    if (!window.confirm(t("settings.deleteAccountFinal", "마지막 확인: 계정 삭제를 진행합니다. 정말로 삭제하시겠습니까?"))) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await authFetch("/api/auth/account", { method: "DELETE" });
+      if (!res.ok) {
+        showToast(t("common.error", "오류가 발생했습니다."));
+        return;
+      }
+      // Clear all local data
+      await clearMyIdentity().catch(() => {});
+      localStorage.clear();
+      sessionStorage.clear();
+      try {
+        const dbs = await window.indexedDB.databases?.();
+        if (dbs) {
+          for (const dbInfo of dbs) {
+            if (dbInfo.name) window.indexedDB.deleteDatabase(dbInfo.name);
+          }
+        }
+      } catch {}
+      showToast(t("settings.accountDeleted", "계정이 삭제되었습니다."));
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 1500);
+    } catch (e) {
+      console.error("[Settings] deleteAccount error:", e);
+      showToast(t("common.error", "오류가 발생했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const doLogout = async () => {
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       await authFetch("/api/auth/logout", { method: "POST" });
     } catch {}
@@ -181,8 +214,6 @@ export default function SettingsPage() {
       return;
     }
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       await clearQueue().catch(() => {});
       clearAllHistory();
@@ -212,21 +243,21 @@ export default function SettingsPage() {
   const requestNotificationPermission = async () => {
     if (typeof Notification === "undefined") {
       setNotificationPermission("unsupported");
-      setError(t("common.error"));
+      showToast(t("common.error"));
       return;
     }
     try {
       const perm = await Notification.requestPermission();
       setNotificationPermission(perm);
-      setMessage(
+      showToast(
         perm === "granted"
           ? t("settings.notifications")
           : perm === "denied"
           ? t("common.cancel")
-          : t("settings.notifRequestCancelled")
+          : t("settings.notifRequestCancelled", "알림 요청이 취소되었습니다.")
       );
     } catch {
-      setError(t("settings.notifRequestFailed"));
+      showToast(t("settings.notifRequestFailed", "알림 권한 요청에 실패했습니다."));
     }
   };
 
@@ -237,10 +268,6 @@ export default function SettingsPage() {
     localStorage.setItem("mono.theme", next ? "dark" : "light");
   };
 
-  const selectedLang = useMemo(
-    () => getLanguageProfileByCode(form.nativeLanguage) || LANGUAGE_PROFILES[0],
-    [form.nativeLanguage]
-  );
   const usagePercent = useMemo(() => {
     if (!subscription?.monthlyLimit || subscription.monthlyLimit <= 0) return 0;
     return Math.min(100, Math.round(((subscription?.usageCount || 0) / subscription.monthlyLimit) * 100));
@@ -334,7 +361,7 @@ export default function SettingsPage() {
       <div className="text-[18px] font-semibold px-1">{t("nav.settings")}</div>
 
       <div className="mono-card p-4">
-        <button type="button" onClick={() => {}} className="w-full text-left">
+        <button type="button" onClick={() => profileEditRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })} className="w-full text-left">
           <div className="flex items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center text-[20px] font-semibold">
               {(form.nickname || "M").charAt(0).toUpperCase()}
@@ -466,6 +493,7 @@ export default function SettingsPage() {
             onChange={(e) => {
               setFontSize(e.target.value);
               localStorage.setItem("mono.fontSize", e.target.value);
+              window.dispatchEvent(new Event("mono:fontSizeChanged"));
             }}
           >
             <option value="small">{t("settings.fontSmall")}</option>
@@ -514,9 +542,9 @@ export default function SettingsPage() {
               const d = await r.json().catch(() => ({}));
               if (!r.ok) throw new Error("checkout_failed");
               if (d?.checkoutUrl) window.location.href = d.checkoutUrl;
-              else setMessage("Coming soon.");
+              else showToast("Coming soon.");
             } catch {
-              setMessage("Coming soon.");
+              showToast("Coming soon.");
             }
           }}
           className="mono-btn w-full h-[44px] bg-[var(--color-primary)] text-white border border-[var(--color-primary)]"
@@ -539,7 +567,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="mono-card p-4 space-y-3">
+      <div ref={profileEditRef} className="mono-card p-4 space-y-3">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.profile")}</div>
         <div className="space-y-2">
           <input className="mono-input w-full h-[44px] px-3" value={form.nickname} onChange={(e) => onChange("nickname", e.target.value)} maxLength={40} placeholder="Nickname" />
@@ -555,8 +583,8 @@ export default function SettingsPage() {
       <div className="mono-card p-4 space-y-2">
         <div className="text-[12px] text-[var(--color-text-secondary)] uppercase">{t("settings.account")}</div>
         <button type="button" onClick={doLogout} disabled={saving} className="w-full text-left text-[15px] text-[#DC2626] h-[40px]">{t("settings.logout")}</button>
-        <button type="button" onClick={() => setMessage("Coming soon.")} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">Delete Account</button>
-        <button type="button" onClick={() => setMessage("Coming soon.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">Blocked Users</button>
+        <button type="button" onClick={deleteAccount} disabled={saving} className="w-full text-left text-[14px] text-[#DC2626] h-[36px]">Delete Account</button>
+        <button type="button" onClick={() => showToast("Coming soon.")} className="w-full text-left text-[14px] text-[var(--color-text-secondary)] h-[36px]">Blocked Users</button>
       </div>
 
       <div className="mono-card p-4 space-y-2">
@@ -584,8 +612,6 @@ export default function SettingsPage() {
         <div className="text-[13px] text-[var(--color-text-secondary)]">Version: {import.meta.env.VITE_APP_VERSION || "1.0.0"}</div>
       </div>
 
-      {error ? <p className="text-[12px] text-[#DC2626]">{error}</p> : null}
-      {message ? <p className="text-[12px] text-[var(--color-primary)]">{message}</p> : null}
       <div className="h-2" />
 
       <ToastMessage message={toast} visible={!!toast} />

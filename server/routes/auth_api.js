@@ -860,5 +860,36 @@ module.exports = function attachAuthApi(app) {
       });
     }
   });
+
+  // ── Account deletion ──
+  app.delete("/api/auth/account", verifyToken, async (req, res) => {
+    try {
+      const userId = req.auth?.sub;
+      if (!userId) return res.status(401).json({ error: "unauthorized" });
+
+      // Delete user's friends
+      await run("DELETE FROM friends WHERE user_id = ? OR friend_id = ?", [userId, userId]);
+      // Delete user's push subscriptions
+      await run("DELETE FROM push_subscriptions WHERE user_id = ?", [userId]);
+      // Delete hospital sessions (if any)
+      try {
+        await run("DELETE FROM hospital_messages WHERE hospital_session_id IN (SELECT id FROM hospital_sessions WHERE room_id IN (SELECT room_id FROM hospital_sessions WHERE id IN (SELECT id FROM hospital_sessions)))", []);
+      } catch {}
+      // Delete user record
+      await run("DELETE FROM users WHERE id = ?", [userId]);
+
+      // Clear auth cookie
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+      });
+
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[AUTH] delete account error:", e?.message);
+      return res.status(500).json({ error: "account_delete_failed" });
+    }
+  });
 };
 

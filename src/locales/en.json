@@ -121,7 +121,10 @@
     "profileSaved": "Profile saved successfully.",
     "monoIdTaken": "This MONO ID is already taken.",
     "invalidMonoId": "Invalid MONO ID.",
-    "logoutComplete": "You have been logged out."
+    "logoutComplete": "You have been logged out.",
+    "deleteAccountConfirm": "Are you sure you want to delete your account?\nAll data will be permanently deleted and cannot be recovered.",
+    "deleteAccountFinal": "Final confirmation: Proceed with account deletion. Are you absolutely sure?",
+    "accountDeleted": "Your account has been deleted."
   },
   "guestJoin": {
     "subtitle": "AI Real-time Interpretation Messenger",

@@ -130,6 +130,10 @@ export async function unsubscribeFromPush(userId) {
 export function showLocalNotification(title, options = {}) {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
+  // Respect global notification toggle
+  try {
+    if (localStorage.getItem("mono.notif.enabled") === "0") return;
+  } catch {}
   try {
     new Notification(title, {
       body: options.body || "",

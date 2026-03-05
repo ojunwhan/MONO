@@ -152,13 +152,16 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
 
   const notifyNative = (title, body) => {
     try {
+      const notifEnabled = localStorage.getItem("mono.notif.enabled") !== "0";
+      if (!notifEnabled) return;
       if ("Notification" in window) {
         if (Notification.permission === "default") Notification.requestPermission().catch(() => {});
         if (Notification.permission === "granted" && document.hidden) {
           new Notification(title || "MONO", { body: body || "" });
         }
       }
-      if (navigator?.vibrate) navigator.vibrate([120, 60, 120]);
+      const vibrationEnabled = localStorage.getItem("mono.notif.vibration") !== "0";
+      if (vibrationEnabled && navigator?.vibrate) navigator.vibrate([120, 60, 120]);
     } catch (_) {}
   };
 

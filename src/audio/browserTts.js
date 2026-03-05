@@ -106,6 +106,41 @@ function splitLongText(text) {
   return chunks.length ? chunks : [t.slice(0, 200)];
 }
 
+function getUserTtsSettings() {
+  try {
+    const speed = Number(localStorage.getItem("mono.tts.speed") || "1");
+    const voice = localStorage.getItem("mono.tts.voice") || "female"; // "female" | "male"
+    return { speed: speed > 0 ? speed : 1, voicePref: voice };
+  } catch {
+    return { speed: 1, voicePref: "female" };
+  }
+}
+
+export function isTtsAutoPlayEnabled() {
+  try {
+    return localStorage.getItem("mono.tts.autoplay") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function pickVoiceByPref(langCode, voicePref) {
+  if (!voicesCache.length) refreshVoices();
+  const base = (langCode || "en-US").split("-")[0].toLowerCase();
+  const matches = voicesCache.filter((v) => (v.lang || "").toLowerCase().startsWith(base));
+  if (!matches.length) return null;
+  if (matches.length === 1) return matches[0];
+  // Try to match gender preference by common name patterns
+  const isMale = voicePref === "male";
+  const genderHint = matches.find((v) => {
+    const n = (v.name || "").toLowerCase();
+    return isMale
+      ? /\bmale\b|남성|男|homme/.test(n) || /david|mark|daniel|jorge|thomas/.test(n)
+      : /\bfemale\b|여성|女|femme/.test(n) || /samantha|karen|victoria|yuna|siri.*female/.test(n);
+  });
+  return genderHint || matches[0];
+}
+
 function speakChunk(chunk, langCode, token) {
   return new Promise((resolve, reject) => {
     const synth = getSynth();
@@ -117,12 +152,13 @@ function speakChunk(chunk, langCode, token) {
       resolve();
       return;
     }
+    const { speed, voicePref } = getUserTtsSettings();
     const utter = new SpeechSynthesisUtterance(chunk);
     utter.lang = langCode;
-    utter.rate = 0.9;
+    utter.rate = Math.max(0.1, Math.min(speed, 3));
     utter.pitch = 1.0;
     utter.volume = 1.0;
-    const voice = findVoiceByLang(langCode);
+    const voice = pickVoiceByPref(langCode, voicePref);
     if (voice) utter.voice = voice;
     utter.onend = () => resolve();
     utter.onerror = (e) => reject(e?.error || e);
@@ -131,6 +167,8 @@ function speakChunk(chunk, langCode, token) {
 }
 
 export async function speakText(text, monoLang, callbacks = {}) {
+  // Respect user's autoplay setting (skip if autoplay is disabled)
+  if (!isTtsAutoPlayEnabled()) return false;
   const synth = getSynth();
   if (!synth) {
     callbacks.onError?.(new Error("speechSynthesis not supported"));
