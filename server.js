@@ -908,6 +908,14 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
+// body-parser SyntaxError 핸들러 (잘못된 JSON 요청 시 stderr 오염 방지)
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && err.status === 400)) {
+    return res.status(400).json({ error: 'invalid_json' });
+  }
+  next(err);
+});
+
 // 모든 요청에서 방문 카운트 (API 제외, 페이지 요청만)
 app.use((req, res, next) => {
   resetDailyStats();
