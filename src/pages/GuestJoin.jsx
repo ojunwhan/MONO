@@ -98,7 +98,13 @@ export default function GuestJoinPage() {
             <LanguageFlagPicker
               selectedLang={selectedLang}
               showGrid={showLangGrid}
-              onToggleGrid={() => setShowLangGrid((prev) => !prev)}
+              onToggleGrid={() => {
+                // 그리드를 닫을 때 = 현재 언어 확정 (상단 버튼 탭으로 닫기)
+                setShowLangGrid((prev) => {
+                  if (prev) setLangConfirmed(true); // 그리드 열림→닫힘 = 선택 확정
+                  return !prev;
+                });
+              }}
               onSelect={(code) => {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
