@@ -116,7 +116,12 @@
     "notifRequestCancelled": "Notification permission request was cancelled.",
     "notifRequestFailed": "Failed to request notification permission.",
     "preferredLanguage": "Preferred Translation Language",
-    "dataClearComplete": "Local data has been cleared."
+    "dataClearComplete": "Local data has been cleared.",
+    "dataClearConfirm": "Are you sure you want to clear all local data?\n(Settings, chat history, etc. will be reset)",
+    "profileSaved": "Profile saved successfully.",
+    "monoIdTaken": "This MONO ID is already taken.",
+    "invalidMonoId": "Invalid MONO ID.",
+    "logoutComplete": "You have been logged out."
   },
   "guestJoin": {
     "subtitle": "AI Real-time Interpretation Messenger",

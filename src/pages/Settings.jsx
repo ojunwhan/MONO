@@ -54,13 +54,14 @@ export default function SettingsPage() {
   }, []);
 
   const authFetch = useCallback(async (url, options = {}) => {
+    const { headers: extraHeaders, ...restOptions } = options;
     return fetch(url, {
       credentials: "include",
+      ...restOptions,
       headers: {
         "Content-Type": "application/json",
-        ...(options.headers || {}),
+        ...(extraHeaders || {}),
       },
-      ...options,
     });
   }, []);
 
@@ -128,11 +129,11 @@ export default function SettingsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data?.error === "mono_id_taken") {
-          setError(t("common.error"));
+          showToast(t("settings.monoIdTaken", "이미 사용 중인 MONO ID입니다."));
         } else if (data?.error === "invalid_mono_id") {
-          setError(t("common.error"));
+          showToast(t("settings.invalidMonoId", "유효하지 않은 MONO ID입니다."));
         } else {
-          setError(t("common.error"));
+          showToast(t("common.error", "오류가 발생했습니다."));
         }
         return;
       }
@@ -153,9 +154,10 @@ export default function SettingsPage() {
           });
         }
       }
-      setMessage(t("common.save"));
-    } catch {
-      setError(t("common.error"));
+      showToast(t("settings.profileSaved", "프로필이 저장되었습니다."));
+    } catch (e) {
+      console.error("[Settings] saveProfile error:", e);
+      showToast(t("common.error", "오류가 발생했습니다."));
     } finally {
       setSaving(false);
     }
@@ -171,23 +173,38 @@ export default function SettingsPage() {
     await clearMyIdentity().catch(() => {});
     setIsAuthenticated(false);
     setSaving(false);
-    setMessage(t("settings.logout"));
+    showToast(t("settings.logoutComplete", "로그아웃 되었습니다."));
   };
 
   const clearLocalData = async () => {
+    if (!window.confirm(t("settings.dataClearConfirm", "로컬 데이터를 모두 삭제하시겠습니까?\n(설정값, 대화 기록 등이 초기화됩니다)"))) {
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      await clearQueue();
+      await clearQueue().catch(() => {});
       clearAllHistory();
       localStorage.clear();
       sessionStorage.clear();
+      // IndexedDB도 클리어
+      try {
+        const dbs = await window.indexedDB.databases?.();
+        if (dbs) {
+          for (const dbInfo of dbs) {
+            if (dbInfo.name) window.indexedDB.deleteDatabase(dbInfo.name);
+          }
+        }
+      } catch {}
       showToast(t("settings.dataClearComplete", "로컬 데이터가 초기화되었습니다."));
+      // 토스트 보여준 후 새로고침하여 상태 반영
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (e) {
       console.error("[Settings] clearLocalData error:", e);
-      setError(t("common.error"));
-    } finally {
+      showToast(t("common.error", "오류가 발생했습니다."));
       setSaving(false);
     }
   };

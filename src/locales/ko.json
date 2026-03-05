@@ -116,7 +116,12 @@
     "notifRequestCancelled": "알림 권한 요청이 취소되었습니다.",
     "notifRequestFailed": "알림 권한 요청에 실패했습니다.",
     "preferredLanguage": "선호 번역 언어",
-    "dataClearComplete": "로컬 데이터가 초기화되었습니다."
+    "dataClearComplete": "로컬 데이터가 초기화되었습니다.",
+    "dataClearConfirm": "로컬 데이터를 모두 삭제하시겠습니까?\n(설정값, 대화 기록 등이 초기화됩니다)",
+    "profileSaved": "프로필이 저장되었습니다.",
+    "monoIdTaken": "이미 사용 중인 MONO ID입니다.",
+    "invalidMonoId": "유효하지 않은 MONO ID입니다.",
+    "logoutComplete": "로그아웃 되었습니다."
   },
   "guestJoin": {
     "subtitle": "AI 실시간 통역 메신저",
