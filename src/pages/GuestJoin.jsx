@@ -82,7 +82,11 @@ export default function GuestJoinPage() {
 
   const startGuestSession = () => {
     if (!roomId) return;
-    const guestId = `guest_${uuidv4().slice(0, 8)}`;
+    // 같은 방에 대한 기존 세션이 있으면 guestId 재사용 (재접속 시 서버에서 동일인으로 인식)
+    const existingSession = getGuestSession();
+    const guestId = (existingSession?.roomId === roomId && existingSession?.guestId)
+      ? existingSession.guestId
+      : `guest_${uuidv4().slice(0, 8)}`;
     const cleanName = t("common.guest");
     saveGuestSession(roomId, selectedLang, cleanName, guestId, siteContext, roomType);
     localStorage.setItem("myLang", selectedLang);

@@ -641,6 +641,37 @@ function convertOneToOneRoomToBroadcast(roomId, meta) {
   return nextMeta;
 }
 
+/**
+ * Revert a room from broadcast back to oneToOne when active participants ≤ 2.
+ * This handles the case where a room was auto-converted due to stale/offline guest PIDs.
+ */
+function revertBroadcastToOneToOne(roomId, meta) {
+  if (!meta || meta.roomType !== "broadcast") return meta;
+  // Only revert rooms that were auto-converted (not intentionally created as broadcast)
+  // We detect this by checking if the room has ≤ 2 active (online) participants
+  const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+  const onlinePids = Object.entries(meta.participants || {}).filter(([, p]) => p?.socketId && isOnline(p.socketId));
+
+  if (onlinePids.length > 2) return meta; // Genuinely multi-party, stay broadcast
+
+  meta.roomType = "oneToOne";
+  // Remove call signs (not needed for 1:1)
+  for (const [, p] of Object.entries(meta.participants || {})) {
+    if (p) {
+      delete p.callSign;
+      delete p.phoneticVariants;
+    }
+  }
+  ROOMS.set(roomId, meta);
+  io.to(roomId).emit("room-context", {
+    siteContext: meta.siteContext,
+    locked: meta.locked,
+    roomType: "oneToOne",
+  });
+  console.log(`[JOIN] broadcast -> oneToOne revert: ${roomId} (${onlinePids.length} online)`);
+  return meta;
+}
+
 function pcm16ToWavBuffer(pcmBuffer, sampleRateHz = 16000, channels = 1) {
   const byteRate = sampleRateHz * channels * 2;
   const blockAlign = channels * 2;
@@ -2258,13 +2289,45 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // ── 1:1 방에서 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
+    // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
     if (meta.roomType === "oneToOne") {
       const currentPids = Object.keys(meta.participants);
       const isReconnect = currentPids.includes(participantId);
+
+      // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
       if (!isReconnect && currentPids.length >= 2) {
-        console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${currentPids.length + 1} ppl)`);
-        convertOneToOneRoomToBroadcast(roomId, meta);
+        const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+        const offlineGuestPids = currentPids.filter(pid => {
+          if (pid === meta.ownerPid) return false; // 호스트는 절대 제거하지 않음
+          const p = meta.participants[pid];
+          return !p?.socketId || !isOnline(p.socketId);
+        });
+
+        if (offlineGuestPids.length > 0) {
+          for (const gPid of offlineGuestPids) {
+            console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
+            delete meta.participants[gPid];
+          }
+          ROOMS.set(roomId, meta);
+        }
+      }
+
+      // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
+      const activePids = Object.keys(meta.participants);
+      const isReconnectAfterCleanup = activePids.includes(participantId);
+      if (!isReconnectAfterCleanup && activePids.length >= 2) {
+        // 실제 온라인 소켓 수도 확인 — 2명 이상 실시간 접속 중인 경우만 전환
+        const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+        const onlineCount = activePids.filter(pid => {
+          const p = meta.participants[pid];
+          return p?.socketId && isOnline2(p.socketId);
+        }).length;
+        if (onlineCount >= 2) {
+          console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
+          convertOneToOneRoomToBroadcast(roomId, meta);
+        } else {
+          console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
+        }
       }
     }
 
@@ -3401,6 +3464,13 @@ io.on('connection', (socket) => {
       }, 300_000); // 5분 유예 (모바일 백그라운드 재접속 대비)
     } else {
       console.log(`👤 Room ${roomId} has ${remaining} socket(s) remaining`);
+
+      // ── broadcast → oneToOne 복원: 온라인 참여자 ≤ 2이면 1:1로 되돌림 ──
+      const metaCheck = ROOMS.get(roomId);
+      if (metaCheck && metaCheck.roomType === "broadcast") {
+        revertBroadcastToOneToOne(roomId, metaCheck);
+      }
+
       if (disconnectedWasHost) {
         io.to(roomId).emit("host-left", { message: "호스트가 통역을 종료했습니다." });
         setTimeout(() => {
