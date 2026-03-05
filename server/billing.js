@@ -61,6 +61,9 @@ async function getUserBillingOverview(userId) {
 
 async function bumpTranslationUsage(userId, countDelta = 1) {
   if (!userId) return null;
+  // Skip billing for guest/temporary IDs that are not in the users table
+  const userExists = await get("SELECT id FROM users WHERE id = ? LIMIT 1", [userId]);
+  if (!userExists) return null;
   const month = currentMonthKey();
   const delta = Number.isFinite(Number(countDelta)) ? Math.max(0, Math.floor(Number(countDelta))) : 1;
   if (delta <= 0) return getUsageRow(userId, month);
