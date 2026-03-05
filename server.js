@@ -18,6 +18,7 @@ const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
+const Groq = require('groq-sdk');
 const fs = require('fs');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -725,13 +726,25 @@ async function consumeTranslationUsage(userId) {
 }
 
 async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
-  if (!openai || isOpenAIBlocked()) return "";
+  if (!groq && (!openai || isOpenAIBlocked())) return "";
   resetDailyStats();
   usageStats.sttRequests += 1;
   const wavBuffer = pcm16ToWavBuffer(pcmBuffer, sampleRateHz, 1);
   const tmpFile = path.join(os.tmpdir(), `${uuidv4()}.wav`);
   fs.writeFileSync(tmpFile, wavBuffer);
   try {
+    if (groq) {
+      // Groq whisper-large-v3
+      const result = await groq.audio.transcriptions.create({
+        file: fs.createReadStream(tmpFile),
+        model: "whisper-large-v3",
+        response_format: "json",
+        temperature: 0.0,
+        ...(lang ? { language: lang } : {}),
+      });
+      return (result.text || "").trim();
+    }
+    // Fallback: OpenAI whisper-1
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -739,7 +752,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
     });
     return (result.text || "").trim();
   } catch (e) {
-    markOpenAIQuotaBlocked(e);
+    if (!groq) markOpenAIQuotaBlocked(e);
     throw e;
   } finally {
     try { fs.unlinkSync(tmpFile); } catch {}
@@ -756,7 +769,7 @@ function extFromMimeType(mimeType = "") {
 }
 
 async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
-  if (!openai || isOpenAIBlocked()) return "";
+  if (!groq && (!openai || isOpenAIBlocked())) return "";
   resetDailyStats();
   usageStats.sttRequests += 1;
   const ext = extFromMimeType(mimeType);
@@ -764,6 +777,18 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
   fs.writeFileSync(tmpFile, audioBuffer);
   try {
     const language = lang && lang !== "auto" ? mapLang(lang) : undefined;
+    if (groq) {
+      // Groq whisper-large-v3
+      const result = await groq.audio.transcriptions.create({
+        file: fs.createReadStream(tmpFile),
+        model: "whisper-large-v3",
+        response_format: "json",
+        temperature: 0.0,
+        ...(language ? { language } : {}),
+      });
+      return (result.text || "").trim();
+    }
+    // Fallback: OpenAI whisper-1
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -771,7 +796,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
     });
     return (result.text || "").trim();
   } catch (e) {
-    markOpenAIQuotaBlocked(e);
+    if (!groq) markOpenAIQuotaBlocked(e);
     throw e;
   } finally {
     try { fs.unlinkSync(tmpFile); } catch {}
@@ -1157,7 +1182,15 @@ app.post('/api/push/send', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-if (!openai) console.warn("[OpenAI] API key missing — translation/STT disabled");
+if (!openai) console.warn("[OpenAI] API key missing — translation/TTS disabled");
+
+// ── Groq STT client (whisper-large-v3) ──
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+if (groq) {
+  console.log("[Groq] ✅ STT client initialized (whisper-large-v3)");
+} else {
+  console.warn("[Groq] ⚠ GROQ_API_KEY missing — falling back to OpenAI Whisper for STT");
+}
 
 const LANG_LABEL = Object.fromEntries([
   ['auto','Auto Detect'],
@@ -3381,22 +3414,35 @@ io.on('connection', (socket) => {
 async function handleSttUpload(req, res) {
   let tmpFile = null;
   try {
-    if (!openai) return res.status(500).json({ error: 'openai_not_configured' });
+    if (!groq && !openai) return res.status(500).json({ error: 'stt_not_configured' });
     if (!req.file?.buffer) return res.status(400).json({ error: "no audio" });
     resetDailyStats();
     usageStats.sttRequests += 1;
 
     // Browser MediaRecorder outputs webm/opus; Whisper supports webm directly.
-    // Avoid ffmpeg conversion to reduce format/codec failures.
     tmpFile = path.join(os.tmpdir(), `${uuidv4()}.webm`);
     fs.writeFileSync(tmpFile, req.file.buffer);
 
     const language = String(req.body?.language || req.body?.lang || "").trim();
-    const result = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(tmpFile),
-      model: "whisper-1",
-      ...(language ? { language } : {}),
-    });
+
+    let result;
+    if (groq) {
+      // Groq whisper-large-v3
+      result = await groq.audio.transcriptions.create({
+        file: fs.createReadStream(tmpFile),
+        model: "whisper-large-v3",
+        response_format: "json",
+        temperature: 0.0,
+        ...(language ? { language } : {}),
+      });
+    } else {
+      // Fallback: OpenAI whisper-1
+      result = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(tmpFile),
+        model: "whisper-1",
+        ...(language ? { language } : {}),
+      });
+    }
 
     res.json({ text: result.text || "" });
 
