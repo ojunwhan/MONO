@@ -47,38 +47,18 @@ export default function GuestJoinPage() {
     return getLanguageByCode(saved)?.code || "";
   }, []);
   const [selectedLang, setSelectedLang] = useState(savedLang || detectBrowserLanguage());
-  const [showLangGrid, setShowLangGrid] = useState(!savedLang);
+  // 항상 언어 선택 그리드를 보여줌 — 게스트는 매번 본인 언어를 확인/선택해야 함
+  const [showLangGrid, setShowLangGrid] = useState(true);
+  // 언어 선택 완료 여부 (그리드에서 국기를 탭해야 true)
+  const [langConfirmed, setLangConfirmed] = useState(false);
 
   const siteContext = useMemo(() => searchParams.get("siteContext") || "general", [searchParams]);
   const roomType = useMemo(() => searchParams.get("roomType") || "oneToOne", [searchParams]);
 
   useEffect(() => {
-    const session = getGuestSession();
-    if (!session || session.roomId !== roomId) return;
-    navigate(`/room/${roomId}`, {
-      replace: true,
-      state: {
-        fromLang: session.lang || "en",
-        localName: session.name || t("common.guest"),
-        role: "Manager",
-        isCreator: false,
-        siteContext: session.siteContext || "general",
-        roomType: session.roomType || "oneToOne",
-        isGuest: true,
-      },
-    });
-  }, [navigate, roomId]);
-
-  useEffect(() => {
     const normalized = String(selectedLang || "").toLowerCase();
     if (!getLanguageByCode(normalized)) setSelectedLang("en");
   }, [selectedLang]);
-
-  useEffect(() => {
-    if (!savedLang || showLangGrid || !roomId) return;
-    startGuestSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedLang, showLangGrid, roomId]);
 
   const startGuestSession = () => {
     if (!roomId) return;
@@ -122,10 +102,11 @@ export default function GuestJoinPage() {
               onSelect={(code) => {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
+                setLangConfirmed(true);
                 setShowLangGrid(false);
               }}
             />
-            {!showLangGrid ? (
+            {!showLangGrid && langConfirmed ? (
               <button
                 type="button"
                 onClick={startGuestSession}
