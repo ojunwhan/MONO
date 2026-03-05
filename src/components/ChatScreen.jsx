@@ -130,6 +130,8 @@ export default function ChatScreen() {
   const [localName] = useState(location.state?.localName || queryLocalName || "");
   const [selectedRole] = useState(location.state?.role || "Tech");
   const roleHint = isGuestMode ? "guest" : (location.state?.isCreator ? "owner" : "guest");
+  const isKioskMode = !!location.state?.isKiosk;
+  const kioskStationId = location.state?.stationId || "default";
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
@@ -1030,6 +1032,12 @@ export default function ChatScreen() {
       pushToast(t("chat.hostEnded"));
     };
     const onRoomClosed = () => {
+      if (isKioskMode) {
+        pushToast(t("chat.roomClosed"));
+        cancelSpeech();
+        navigate(`/kiosk?stationId=${encodeURIComponent(kioskStationId)}`);
+        return;
+      }
       if (!isGuestMode) return;
       pushToast(t("chat.roomClosed"));
       leaveAsGuestNow();
@@ -1053,7 +1061,11 @@ export default function ChatScreen() {
     try {
       sessionStorage.removeItem("mono_guest");
     } catch {}
-    navigate("/login");
+    if (isKioskMode) {
+      navigate(`/kiosk?stationId=${encodeURIComponent(kioskStationId)}`);
+    } else {
+      navigate("/login");
+    }
   };
 
   const handleLeave = () => {

@@ -231,6 +231,16 @@
     "deleteRoom": "대화방 삭제",
     "deleteRoomConfirm": "이 대화방을 삭제하시겠습니까?"
   },
+  "hospital": {
+    "mode": "병원 모드",
+    "chartNumber": "차트번호",
+    "chartPlaceholder": "차트번호 입력",
+    "chartNumberInvalid": "차트번호는 숫자만 입력하세요.",
+    "startSession": "세션 시작",
+    "endSession": "세션 종료",
+    "activeSession": "진료 중",
+    "stationLabel": "창구"
+  },
   "messageBubble": {
     "unknownUser": "알 수 없는 사용자",
     "reply": "답장",

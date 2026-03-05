@@ -1862,7 +1862,7 @@ io.on('connection', (socket) => {
   // ======================================================
   // ✅ [수정됨] 호스트 방 생성 + 즉시 조인 (증발 방지 핵심)
   // ======================================================
-  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType }) => {
+  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId }) => {
     if (!roomId) return;
     const roomAlreadyExists = ROOMS.has(roomId);
 
@@ -1877,6 +1877,8 @@ io.on('connection', (socket) => {
       siteContext: ctx,
       locked: true,
       ownerPid: participantId || null,
+      // Hospital mode metadata (only if hospital session)
+      ...(chartNumber ? { chartNumber: String(chartNumber), stationId: stationId || 'default', hospitalSessionId: hospitalSessionId || null, sessionType: 'hospital' } : {}),
       participants: {},
       callSignCounters: {},
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
@@ -3103,6 +3105,16 @@ io.on('connection', (socket) => {
     if (messageBuffer[roomId].length > 200) messageBuffer[roomId].shift();
     ackReply({ ok: true, accepted: true });
 
+    // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
+    if (meta.hospitalSessionId) {
+      const senderRole = (rec.role === 'owner' || meta.ownerPid === participantId) ? 'host' : 'guest';
+      dbRun(
+        `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, meta.hospitalSessionId, roomId, senderRole, senderP?.lang || '', trimmedText]
+      ).catch(e => console.warn('[hospital] msg save error:', e?.message));
+    }
+
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
     const detectedLang = detectTextLang(trimmedText);
     const fromLang = registeredLang || detectedLang;
@@ -3176,6 +3188,13 @@ io.on('connection', (socket) => {
         if (!isGarbageText(hq) && otherP?.socketId) {
           finalizedForTts = hq;
           io.to(otherP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+        }
+        // ── Hospital: update translated text ──
+        if (meta.hospitalSessionId) {
+          dbRun(
+            `UPDATE hospital_messages SET translated_text = ?, translated_lang = ? WHERE id = ? AND session_id = ?`,
+            [finalizedForTts, toLang, id, meta.hospitalSessionId]
+          ).catch(() => {});
         }
       } catch (e) {}
       // TTS → other (typed messages also get spoken)
@@ -3528,6 +3547,205 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     return res.status(500).json({ error: "convert_guest_failed" });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// HOSPITAL KIOSK MODE — DB + REST API + Socket events
+// ═══════════════════════════════════════════════════════════════
+const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/db/sqlite');
+
+// Auto-migrate: create hospital tables if not exist
+(async () => {
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS hospital_sessions (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        chart_number TEXT NOT NULL,
+        station_id TEXT DEFAULT 'default',
+        host_lang TEXT,
+        guest_lang TEXT,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS hospital_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        sender_role TEXT NOT NULL CHECK (sender_role IN ('host', 'guest')),
+        sender_lang TEXT,
+        original_text TEXT NOT NULL,
+        translated_text TEXT,
+        translated_lang TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (session_id) REFERENCES hospital_sessions(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_hospital_sessions_chart ON hospital_sessions(chart_number);
+      CREATE INDEX IF NOT EXISTS idx_hospital_sessions_station ON hospital_sessions(station_id);
+      CREATE INDEX IF NOT EXISTS idx_hospital_sessions_status ON hospital_sessions(status);
+      CREATE INDEX IF NOT EXISTS idx_hospital_messages_session ON hospital_messages(session_id);
+    `);
+    console.log('[hospital] ✅ hospital tables ready');
+  } catch (e) {
+    console.warn('[hospital] ⚠ table init failed:', e?.message);
+  }
+})();
+
+// In-memory kiosk station registry: stationId → { roomId, sessionId, chartNumber, hostLang }
+const KIOSK_STATIONS = new Map();
+
+// POST /api/hospital/session — 직원이 병원 세션 생성
+app.post('/api/hospital/session', async (req, res) => {
+  try {
+    const { chartNumber, stationId, hostLang, roomId } = req.body || {};
+    if (!chartNumber || !/^\d+$/.test(String(chartNumber).trim())) {
+      return res.status(400).json({ error: 'chart_number_required', message: '차트번호는 숫자만 입력하세요.' });
+    }
+    const cleanChart = String(chartNumber).trim();
+    const station = String(stationId || 'default').trim();
+    const rid = String(roomId || uuidv4()).trim();
+    const sessionId = uuidv4();
+    const lang = String(hostLang || 'ko').trim();
+
+    await dbRun(
+      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, host_lang, status)
+       VALUES (?, ?, ?, ?, ?, 'active')`,
+      [sessionId, rid, cleanChart, station, lang]
+    );
+
+    // Register kiosk station mapping
+    KIOSK_STATIONS.set(station, { roomId: rid, sessionId, chartNumber: cleanChart, hostLang: lang });
+
+    // Notify kiosk tablets listening on this station
+    io.to(`kiosk:${station}`).emit('kiosk:session-ready', {
+      roomId: rid,
+      sessionId,
+      chartNumber: cleanChart,
+      hostLang: lang,
+    });
+
+    console.log(`[hospital] 🏥 Session created: chart=${cleanChart} station=${station} room=${rid}`);
+    res.json({ success: true, sessionId, roomId: rid, chartNumber: cleanChart, stationId: station });
+  } catch (e) {
+    console.error('[hospital] session create error:', e?.message);
+    res.status(500).json({ error: 'session_create_failed' });
+  }
+});
+
+// POST /api/hospital/session/:sessionId/end — 세션 종료
+app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await dbGet('SELECT * FROM hospital_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
+
+    await dbRun(
+      `UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?`,
+      [sessionId]
+    );
+
+    // Clear kiosk station
+    for (const [sid, data] of KIOSK_STATIONS.entries()) {
+      if (data.sessionId === sessionId) {
+        KIOSK_STATIONS.delete(sid);
+        io.to(`kiosk:${sid}`).emit('kiosk:session-ended', { sessionId, stationId: sid });
+        break;
+      }
+    }
+
+    console.log(`[hospital] Session ended: ${sessionId}`);
+    res.json({ success: true, sessionId });
+  } catch (e) {
+    res.status(500).json({ error: 'session_end_failed' });
+  }
+});
+
+// POST /api/hospital/message — 병원 대화 메시지 저장
+app.post('/api/hospital/message', async (req, res) => {
+  try {
+    const { sessionId, roomId, senderRole, senderLang, originalText, translatedText, translatedLang } = req.body || {};
+    if (!sessionId || !roomId || !originalText) {
+      return res.status(400).json({ error: 'missing_fields' });
+    }
+    const msgId = uuidv4();
+    await dbRun(
+      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '']
+    );
+    res.json({ success: true, id: msgId });
+  } catch (e) {
+    res.status(500).json({ error: 'message_save_failed' });
+  }
+});
+
+// GET /api/hospital/sessions — 차트번호로 세션 목록 조회
+app.get('/api/hospital/sessions', async (req, res) => {
+  try {
+    const { chartNumber, stationId, date, limit: lim } = req.query;
+    let sql = 'SELECT * FROM hospital_sessions WHERE 1=1';
+    const params = [];
+    if (chartNumber) { sql += ' AND chart_number = ?'; params.push(chartNumber); }
+    if (stationId) { sql += ' AND station_id = ?'; params.push(stationId); }
+    if (date) { sql += ' AND DATE(created_at) = ?'; params.push(date); }
+    sql += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(Number(lim) || 50);
+    const sessions = await dbAll(sql, params);
+    res.json({ success: true, sessions });
+  } catch (e) {
+    res.status(500).json({ error: 'sessions_query_failed' });
+  }
+});
+
+// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역
+app.get('/api/hospital/sessions/:sessionId/messages', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await dbGet('SELECT * FROM hospital_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
+    const messages = await dbAll(
+      'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
+      [sessionId]
+    );
+    res.json({ success: true, session, messages });
+  } catch (e) {
+    res.status(500).json({ error: 'messages_query_failed' });
+  }
+});
+
+// GET /api/hospital/kiosk/status — 키오스크가 현재 대기 중인 세션 확인
+app.get('/api/hospital/kiosk/status', (req, res) => {
+  const station = String(req.query.stationId || 'default').trim();
+  const data = KIOSK_STATIONS.get(station);
+  if (data) {
+    res.json({ active: true, ...data });
+  } else {
+    res.json({ active: false, stationId: station });
+  }
+});
+
+// Socket: kiosk tablet joins station channel
+io.on('connection', (kioskSocket) => {
+  kioskSocket.on('kiosk:join-station', ({ stationId }) => {
+    if (!stationId) return;
+    const channel = `kiosk:${stationId}`;
+    kioskSocket.join(channel);
+    console.log(`[kiosk] 📺 Tablet joined station: ${stationId} (socket=${kioskSocket.id})`);
+
+    // If there's an active session for this station, notify immediately
+    const data = KIOSK_STATIONS.get(stationId);
+    if (data) {
+      kioskSocket.emit('kiosk:session-ready', {
+        roomId: data.roomId,
+        sessionId: data.sessionId,
+        chartNumber: data.chartNumber,
+        hostLang: data.hostLang,
+      });
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 
 app.get('/api/stats', (req, res) => {
   if (!STATS_API_KEY || req.query.key !== STATS_API_KEY) {

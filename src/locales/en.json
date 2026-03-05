@@ -231,6 +231,16 @@
     "deleteRoom": "Delete room",
     "deleteRoomConfirm": "Are you sure you want to delete this room?"
   },
+  "hospital": {
+    "mode": "Hospital Mode",
+    "chartNumber": "Chart Number",
+    "chartPlaceholder": "Enter chart number",
+    "chartNumberInvalid": "Chart number must be numbers only.",
+    "startSession": "Start Session",
+    "endSession": "End Session",
+    "activeSession": "In Session",
+    "stationLabel": "Station"
+  },
   "messageBubble": {
     "unknownUser": "Unknown User",
     "reply": "Reply",

@@ -5,7 +5,7 @@ import socket from "../socket";
 import { useTranslation } from "react-i18next";
 import { playNotificationSound } from "../audio/notificationSound";
 
-const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType }) => {
+const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const movedRef = useRef(false);
@@ -19,6 +19,9 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
   const localNameRef = useRef(localName);
   const siteContextRef = useRef(siteContext || "general");
   const roomTypeRef = useRef(roomType || "oneToOne");
+  const chartNumberRef = useRef(chartNumber || "");
+  const stationIdRef = useRef(stationId || "");
+  const hospitalSessionIdRef = useRef(hospitalSessionId || "");
 
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
   useEffect(() => { pidRef.current = participantId; }, [participantId]);
@@ -27,6 +30,9 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
   useEffect(() => { localNameRef.current = localName; }, [localName]);
   useEffect(() => { siteContextRef.current = siteContext || "general"; }, [siteContext]);
   useEffect(() => { roomTypeRef.current = roomType || "oneToOne"; }, [roomType]);
+  useEffect(() => { chartNumberRef.current = chartNumber || ""; }, [chartNumber]);
+  useEffect(() => { stationIdRef.current = stationId || ""; }, [stationId]);
+  useEffect(() => { hospitalSessionIdRef.current = hospitalSessionId || ""; }, [hospitalSessionId]);
 
   // ── Invitation link ──
   const link = useMemo(() => {
@@ -64,6 +70,11 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       role: r,
       localName: localNameRef.current || "",
       roomType: roomTypeRef.current || "oneToOne",
+      ...(chartNumberRef.current ? {
+        chartNumber: chartNumberRef.current,
+        stationId: stationIdRef.current || "default",
+        hospitalSessionId: hospitalSessionIdRef.current || "",
+      } : {}),
     });
     socket.emit("join", {
       roomId: rid,
