@@ -115,7 +115,8 @@
     "requestNotifPermission": "Request notification permission (current: {{status}})",
     "notifRequestCancelled": "Notification permission request was cancelled.",
     "notifRequestFailed": "Failed to request notification permission.",
-    "preferredLanguage": "Preferred Translation Language"
+    "preferredLanguage": "Preferred Translation Language",
+    "dataClearComplete": "Local data has been cleared."
   },
   "guestJoin": {
     "subtitle": "AI Real-time Interpretation Messenger",

@@ -115,7 +115,8 @@
     "requestNotifPermission": "알림 권한 요청 (현재: {{status}})",
     "notifRequestCancelled": "알림 권한 요청이 취소되었습니다.",
     "notifRequestFailed": "알림 권한 요청에 실패했습니다.",
-    "preferredLanguage": "선호 번역 언어"
+    "preferredLanguage": "선호 번역 언어",
+    "dataClearComplete": "로컬 데이터가 초기화되었습니다."
   },
   "guestJoin": {
     "subtitle": "AI 실시간 통역 메신저",

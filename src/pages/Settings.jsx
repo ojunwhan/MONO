@@ -7,6 +7,7 @@ import LanguageSelector from "../components/LanguageSelector";
 import MonoLogo from "../components/MonoLogo";
 import { useTranslation } from "react-i18next";
 import { startKakaoLogin } from "../auth/kakaoLogin";
+import ToastMessage from "../components/ToastMessage";
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -45,6 +46,12 @@ export default function SettingsPage() {
   });
   const [vibrationEnabled, setVibrationEnabled] = useState(localStorage.getItem("mono.notif.vibration") !== "0");
   const [storageUsage, setStorageUsage] = useState({ usageMB: 0, quotaMB: 0 });
+  const [toast, setToast] = useState("");
+
+  const showToast = useCallback((msg, duration = 2500) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), duration);
+  }, []);
 
   const authFetch = useCallback(async (url, options = {}) => {
     return fetch(url, {
@@ -174,8 +181,11 @@ export default function SettingsPage() {
     try {
       await clearQueue();
       clearAllHistory();
-      setMessage(t("settings.storage"));
-    } catch {
+      localStorage.clear();
+      sessionStorage.clear();
+      showToast(t("settings.dataClearComplete", "로컬 데이터가 초기화되었습니다."));
+    } catch (e) {
+      console.error("[Settings] clearLocalData error:", e);
       setError(t("common.error"));
     } finally {
       setSaving(false);
@@ -560,6 +570,8 @@ export default function SettingsPage() {
       {error ? <p className="text-[12px] text-[#DC2626]">{error}</p> : null}
       {message ? <p className="text-[12px] text-[var(--color-primary)]">{message}</p> : null}
       <div className="h-2" />
+
+      <ToastMessage message={toast} visible={!!toast} />
     </div>
   );
 }
