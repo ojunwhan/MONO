@@ -3857,13 +3857,13 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
 // Auto-migrate: create hospital tables if not exist
 (async () => {
   try {
+    // Step 1: Create tables (without department in CREATE — safe for existing DBs)
     await dbExec(`
       CREATE TABLE IF NOT EXISTS hospital_sessions (
         id TEXT PRIMARY KEY,
         room_id TEXT NOT NULL,
         chart_number TEXT NOT NULL,
         station_id TEXT DEFAULT 'default',
-        department TEXT,
         host_lang TEXT,
         guest_lang TEXT,
         status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
@@ -3893,6 +3893,17 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+    `);
+    // Step 2: Backfill department column if missing (existing DBs)
+    try {
+      const cols = await dbAll("PRAGMA table_info(hospital_sessions)");
+      if (!cols.some(c => c.name === 'department')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN department TEXT");
+        console.log('[hospital] ✅ added department column');
+      }
+    } catch (_) {}
+    // Step 3: Create indexes (after column backfill)
+    await dbExec(`
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_chart ON hospital_sessions(chart_number);
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_station ON hospital_sessions(station_id);
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_status ON hospital_sessions(status);
@@ -3902,13 +3913,6 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
       CREATE INDEX IF NOT EXISTS idx_hospital_patients_chart ON hospital_patients(chart_number);
       CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);
     `);
-    // Backfill: add department column if missing (existing DBs)
-    try {
-      const cols = await dbAll("PRAGMA table_info(hospital_sessions)");
-      if (!cols.some(c => c.name === 'department')) {
-        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN department TEXT");
-      }
-    } catch (_) {}
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages)');
   } catch (e) {
     console.warn('[hospital] ⚠ table init failed:', e?.message);
