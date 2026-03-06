@@ -12,6 +12,7 @@ import GuestJoinPage from "./pages/GuestJoin";
 import KioskPage from "./pages/KioskPage";
 import TermsPage from "./pages/Terms";
 import PrivacyPage from "./pages/Privacy";
+import HospitalApp from "./pages/HospitalApp";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -81,6 +82,10 @@ const router = createBrowserRouter([
   {
     path: "/cs-chat",
     element: <CsChatPage />,
+  },
+  {
+    path: "/hospital",
+    element: <HospitalApp />,
   },
   {
     path: "/kiosk",

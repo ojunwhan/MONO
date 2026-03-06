@@ -132,6 +132,8 @@ export default function ChatScreen() {
   const roleHint = isGuestMode ? "guest" : (location.state?.isCreator ? "owner" : "guest");
   const isKioskMode = !!location.state?.isKiosk;
   const kioskStationId = location.state?.stationId || "default";
+  const isHospitalMode = String(location.state?.siteContext || "").startsWith("hospital_");
+  const hospitalDept = location.state?.hospitalDept || null;
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
@@ -1081,7 +1083,11 @@ export default function ChatScreen() {
     }
     cancelSpeech();
     socket.emit("manual-leave");
-    navigate("/home");
+    if (isHospitalMode) {
+      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
+    } else {
+      navigate("/home");
+    }
   };
 
   const onMicListeningChange = useCallback((listening) => {

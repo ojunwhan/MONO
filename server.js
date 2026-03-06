@@ -447,6 +447,18 @@ const SITE_CONTEXT_PROMPTS = {
   medical: `Domain: Medical/Healthcare. Use medical terminology accurately. Patient safety is absolute priority. Terms: vital signs, medication, dosage, triage, sterilize, patient ID, ward, IV, stat.`,
   airport_event: `Domain: Airport/Event venue. Use aviation/event terminology. Crowd safety phrases. Terms: gate, boarding, security checkpoint, terminal, VIP, evacuation route, crowd control, PA.`,
   general: `Domain: General workplace. Clear, professional, direct language.`,
+
+  // ── Hospital Department-Specific Prompts ──
+  hospital_internal: `You are a professional medical interpreter specializing in Internal Medicine. Translate accurately in the context of internal medicine consultations. Prioritize precise translation of terms related to: heart conditions, blood pressure, diabetes, digestive disorders, liver/kidney function, cholesterol, blood tests, ECG, endoscopy. Medical terms must be translated using standard medical terminology in the target language. Patient safety is the top priority — never omit or alter dosage, medication names, or critical instructions. Maintain a professional, calm, and reassuring tone appropriate for doctor-patient communication.`,
+  hospital_surgery: `You are a professional medical interpreter specializing in Surgery. Translate accurately in the context of surgical consultations and pre/post-operative care. Prioritize precise translation of terms related to: surgical procedures, anesthesia, incision, sutures, drainage, wound care, recovery, complications, consent forms. Medical terms must use standard surgical terminology in the target language. Patient safety is the top priority — never omit or alter surgical instructions, medication dosages, or post-operative care instructions.`,
+  hospital_emergency: `You are an EMERGENCY medical interpreter. Speed and accuracy are critical. This is an emergency medical situation. Translate quickly and precisely. Life-threatening terms must be translated with absolute priority: myocardial infarction, stroke, cardiac arrest, airway obstruction, hemorrhage, shock, anaphylaxis, seizure, fracture, burns, poisoning. Use short, direct sentences. No ambiguity allowed. NEVER delay or ask for clarification — always provide best-effort translation immediately.`,
+  hospital_obstetrics: `You are a professional medical interpreter specializing in Obstetrics and Gynecology. Translate accurately in the context of pregnancy, childbirth, and women's health. Prioritize precise translation of terms related to: pregnancy stages, ultrasound findings, contractions, dilation, fetal heart rate, cesarean section, prenatal vitamins, gestational diabetes, preeclampsia. Use culturally sensitive language. Patient safety is paramount — never omit medication or procedure details.`,
+  hospital_pediatrics: `You are a professional medical interpreter specializing in Pediatrics. Translate accurately in the context of child healthcare. Prioritize precise translation of terms related to: vaccinations, growth milestones, fever management, childhood diseases, medication dosages (weight-based), allergies, breastfeeding, developmental screening. Dosage accuracy is critical for pediatric patients — NEVER approximate or omit weight-based dosage information.`,
+  hospital_orthopedics: `You are a professional medical interpreter specializing in Orthopedics. Translate accurately in the context of musculoskeletal conditions and treatments. Prioritize precise translation of terms related to: fractures, joints, ligaments, tendons, arthritis, spinal conditions, physical therapy, casting, splinting, MRI/X-ray findings, surgical fixation, rehabilitation exercises.`,
+  hospital_neurology: `You are a professional medical interpreter specializing in Neurology. Translate accurately in the context of neurological conditions. Prioritize precise translation of terms related to: headache/migraine, seizure, stroke symptoms, nerve conduction, EEG, MRI brain, Parkinson's, Alzheimer's, neuropathy, dizziness/vertigo. Time-sensitive conditions (stroke, seizure) require urgent, clear translation.`,
+  hospital_dermatology: `You are a professional medical interpreter specializing in Dermatology. Translate accurately in the context of skin conditions. Prioritize precise translation of terms related to: rash, eczema, psoriasis, acne, moles, skin biopsy, dermatitis, hives, fungal infections, topical medications, UV exposure, skin cancer screening.`,
+  hospital_ophthalmology: `You are a professional medical interpreter specializing in Ophthalmology. Translate accurately in the context of eye conditions. Prioritize precise translation of terms related to: visual acuity, cataracts, glaucoma, retinal conditions, intraocular pressure, eye drops, laser surgery, lens prescription, fundoscopy, OCT scan.`,
+  hospital_dentistry: `You are a professional medical interpreter specializing in Dentistry. Translate accurately in the context of dental conditions. Prioritize precise translation of terms related to: cavity/caries, root canal, crown, bridge, extraction, implant, gum disease, scaling, filling, orthodontics, wisdom teeth, dental X-ray, local anesthesia.`,
 };
 
 // ───────────────── CALL SIGN SYSTEM (DETERMINISTIC — NO GPT) ─────────────────
@@ -457,6 +469,17 @@ const SITE_ROLES = {
   medical: ["Doctor", "Nurse", "Tech", "Admin", "Paramedic"],
   airport_event: ["Manager", "Lead", "Security", "Operator", "Guide"],
   general: ["Manager", "Lead", "Tech", "Operator", "Staff"],
+  // Hospital departments share the same roles
+  hospital_internal: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
+  hospital_surgery: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
+  hospital_emergency: ["Doctor", "Nurse", "Patient", "Paramedic", "Tech"],
+  hospital_obstetrics: ["Doctor", "Nurse", "Patient", "Midwife", "Tech"],
+  hospital_pediatrics: ["Doctor", "Nurse", "Patient", "Parent", "Tech"],
+  hospital_orthopedics: ["Doctor", "Nurse", "Patient", "Tech", "Therapist"],
+  hospital_neurology: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
+  hospital_dermatology: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
+  hospital_ophthalmology: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
+  hospital_dentistry: ["Doctor", "Nurse", "Patient", "Hygienist", "Admin"],
 };
 
 const ROLE_PHONETICS = {
@@ -756,7 +779,8 @@ async function consumeTranslationUsage(userId) {
   }
 }
 
-async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
+async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {}) {
+  const forceGroq = opts.hospitalMode && groq; // Hospital mode: force Groq, no fallback
   if (!groq && (!openai || isOpenAIBlocked())) return "";
   resetDailyStats();
   usageStats.sttRequests += 1;
@@ -764,8 +788,8 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
   const tmpFile = path.join(os.tmpdir(), `${uuidv4()}.wav`);
   fs.writeFileSync(tmpFile, wavBuffer);
   try {
-    if (groq) {
-      // Groq whisper-large-v3
+    if (forceGroq || groq) {
+      // Groq whisper-large-v3 (forced for hospital, preferred for general)
       const result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
@@ -775,7 +799,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
       });
       return (result.text || "").trim();
     }
-    // Fallback: OpenAI whisper-1
+    // Fallback: OpenAI whisper-1 (NOT used in hospital mode)
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -783,6 +807,11 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000) {
     });
     return (result.text || "").trim();
   } catch (e) {
+    if (forceGroq) {
+      // Hospital mode: no fallback, log and rethrow
+      console.error("[stt:hospital] Groq STT failed, no fallback allowed:", e?.message);
+      throw e;
+    }
     if (!groq) markOpenAIQuotaBlocked(e);
     throw e;
   } finally {
@@ -799,7 +828,8 @@ function extFromMimeType(mimeType = "") {
   return "webm";
 }
 
-async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
+async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = {}) {
+  const forceGroq = opts.hospitalMode && groq;
   if (!groq && (!openai || isOpenAIBlocked())) return "";
   resetDailyStats();
   usageStats.sttRequests += 1;
@@ -808,8 +838,8 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
   fs.writeFileSync(tmpFile, audioBuffer);
   try {
     const language = lang && lang !== "auto" ? mapLang(lang) : undefined;
-    if (groq) {
-      // Groq whisper-large-v3
+    if (forceGroq || groq) {
+      // Groq whisper-large-v3 (forced for hospital, preferred for general)
       const result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
@@ -819,7 +849,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
       });
       return (result.text || "").trim();
     }
-    // Fallback: OpenAI whisper-1
+    // Fallback: OpenAI whisper-1 (NOT used in hospital mode)
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -827,6 +857,10 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang) {
     });
     return (result.text || "").trim();
   } catch (e) {
+    if (forceGroq) {
+      console.error("[stt:hospital] Groq STT failed, no fallback:", e?.message);
+      throw e;
+    }
     if (!groq) markOpenAIQuotaBlocked(e);
     throw e;
   } finally {
@@ -1495,8 +1529,28 @@ function getRoomContext(roomId) {
   return ROOM_MESSAGE_CACHE.get(roomId) || [];
 }
 
+function isHospitalContext(siteContext) {
+  return String(siteContext || '').startsWith('hospital_');
+}
+
 function buildSystemPrompt(from, to, ctx, siteContext) {
   const siteDomain = SITE_CONTEXT_PROMPTS[siteContext] || SITE_CONTEXT_PROMPTS.general;
+  const isHospital = isHospitalContext(siteContext);
+
+  if (isHospital) {
+    // Hospital mode: medical-specific system prompt (no slang instructions)
+    return [
+      siteDomain,
+      `Translate from ${label(from)} to ${label(to)} with conversation context awareness.`,
+      `Maintain a professional medical tone. Use standard medical terminology in the target language.`,
+      `Preserve proper nouns, medication names, dosages, numbers, units, and medical terms accurately.`,
+      `If message is ambiguous, use conversation context to resolve. Always output best-effort translation.`,
+      ctx ? `Recent conversation context:\n${ctx}` : '',
+      `Output ONLY translated text. No explanation, no notes, no quotation marks, no brackets.`,
+    ].filter(Boolean).join('\n');
+  }
+
+  // General mode: original prompt
   return [
     `You are a professional real-time interpreter for MONO multilingual messenger.`,
     `This is a casual chat messenger. Users use slang, abbreviations, and shorthand.`,
@@ -2737,11 +2791,14 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const sttMeta = ensureRoomMeta(roomId);
+    const sttHospitalMode = isHospitalContext(sttMeta.siteContext);
+
     let text = "";
     try {
-      text = await transcribePcm16(pcm, session.lang, session.sampleRateHz);
+      text = await transcribePcm16(pcm, session.lang, session.sampleRateHz, { hospitalMode: sttHospitalMode });
       text = normalizeRepeats(text);
-      console.log(`[stt:segment] 🎙 STT result: "${text}"`);
+      console.log(`[stt:segment] 🎙 STT result: "${text}"${sttHospitalMode ? ' [hospital]' : ''}`);
     } catch (e) {
       console.warn("[stt] transcribe error:", e?.message);
       if (isQuotaExceededError(e)) emitQuotaWarning(socket);
@@ -3092,9 +3149,12 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const whisperMeta = ROOMS.get(roomId) || {};
+    const whisperHospitalMode = isHospitalContext(whisperMeta.siteContext);
+
     let text = "";
     try {
-      text = await transcribeEncodedAudioBuffer(audioBuffer, mimeType || "audio/webm", lang);
+      text = await transcribeEncodedAudioBuffer(audioBuffer, mimeType || "audio/webm", lang, { hospitalMode: whisperHospitalMode });
       text = normalizeRepeats(text);
     } catch (e) {
       console.warn("[stt:whisper] transcribe error:", e?.message || e);

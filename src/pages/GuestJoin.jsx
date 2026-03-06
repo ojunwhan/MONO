@@ -56,6 +56,7 @@ export default function GuestJoinPage() {
 
   const siteContext = useMemo(() => searchParams.get("siteContext") || "general", [searchParams]);
   const roomType = useMemo(() => searchParams.get("roomType") || "oneToOne", [searchParams]);
+  const isHospitalMode = String(siteContext).startsWith("hospital_");
 
   useEffect(() => {
     const normalized = String(selectedLang || "").toLowerCase();
@@ -87,6 +88,77 @@ export default function GuestJoinPage() {
     });
   };
 
+  // ── Hospital mode: patient-specific UI ──
+  if (isHospitalMode) {
+    return (
+      <div className="min-h-[100dvh] bg-[var(--color-bg)] text-[var(--color-text)]">
+        <div className="mx-auto w-full max-w-[480px] min-h-[100dvh] px-6 py-8 flex flex-col">
+          {/* Hospital header */}
+          <div className="flex-none flex flex-col items-center justify-center text-center pt-4 pb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className="text-[40px] font-light leading-none"
+                style={{ letterSpacing: "3px" }}
+              >
+                <span style={{ color: "#3B82F6" }}>M</span>
+                <span style={{ color: "#06B6D4" }}>O</span>
+                <span style={{ color: "#10B981" }}>N</span>
+                <span style={{ color: "#3B82F6" }}>O</span>
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-semibold tracking-[2px] text-[#3B82F6] uppercase">
+                  Hospital
+                </span>
+                <span className="text-[9px] text-[var(--color-text-secondary)]">
+                  Medical Interpreter
+                </span>
+              </div>
+            </div>
+            <p className="text-[14px] text-[var(--color-text-secondary)]">
+              Select your language to start
+            </p>
+          </div>
+
+          {/* Language selection */}
+          <div className="flex-1 flex flex-col items-center justify-start">
+            <div className="w-full max-w-[360px] space-y-4">
+              <LanguageFlagPicker
+                selectedLang={selectedLang}
+                showGrid={showLangGrid}
+                onToggleGrid={() => {
+                  setShowLangGrid((prev) => {
+                    if (prev) setLangConfirmed(true);
+                    return !prev;
+                  });
+                }}
+                onSelect={(code) => {
+                  setSelectedLang(code);
+                  localStorage.setItem("myLang", code);
+                  setLangConfirmed(true);
+                  setShowLangGrid(false);
+                }}
+              />
+              {!showLangGrid && langConfirmed ? (
+                <button
+                  type="button"
+                  onClick={startGuestSession}
+                  className="w-full h-[52px] rounded-[12px] text-[16px] font-semibold bg-[#3B82F6] text-white border-0 active:scale-[0.98] transition-transform"
+                >
+                  🏥 통역 시작
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="pt-4 pb-2 text-center text-[10px] text-[var(--color-text-secondary)]">
+            Powered by MONO Medical Interpreter
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── General mode: standard guest join UI ──
   return (
     <div className="min-h-[100dvh] bg-[var(--color-bg)] text-[var(--color-text)]">
       <div className="mx-auto w-full max-w-[480px] min-h-[100dvh] px-6 py-8 flex flex-col">

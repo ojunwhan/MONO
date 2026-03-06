@@ -5,7 +5,7 @@ import socket from "../socket";
 import { useTranslation } from "react-i18next";
 import { playNotificationSound } from "../audio/notificationSound";
 
-const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId }) => {
+const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, hospitalDept, saveMode }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const movedRef = useRef(false);
@@ -182,6 +182,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
           isCreator: true,
           siteContext: siteContextRef.current,
           roomType: roomTypeRef.current,
+          ...(hospitalDept ? { hospitalDept, saveMode: !!saveMode } : {}),
         },
       });
     };
