@@ -1286,6 +1286,26 @@ const LANG_LABEL = Object.fromEntries([
 ]);
 const label = (code) => LANG_LABEL[code] || code || 'auto';
 
+// ── Language code → ISO 3166-1 alpha-3 country code (for hospital display) ──
+const LANG_TO_COUNTRY3 = {
+  ko: "KOR", en: "ENG", ja: "JPN", zh: "CHN", vi: "VNM", th: "THA",
+  id: "IDN", ms: "MYS", tl: "PHL", my: "MMR", km: "KHM", ne: "NPL",
+  mn: "MNG", uz: "UZB", ru: "RUS", es: "ESP", pt: "PRT", fr: "FRA",
+  de: "DEU", ar: "SAU", hi: "IND", bn: "BGD", ta: "LKA", te: "IND",
+  tr: "TUR", uk: "UKR", pl: "POL", it: "ITA", nl: "NLD", sv: "SWE",
+  fi: "FIN", da: "DNK", no: "NOR", cs: "CZE", sk: "SVK", ro: "ROU",
+  hu: "HUN", bg: "BGR", hr: "HRV", sr: "SRB", sl: "SVN", el: "GRC",
+  he: "ISR", fa: "IRN", ur: "PAK", sw: "KEN", si: "LKA", lo: "LAO",
+  ka: "GEO", hy: "ARM", kk: "KAZ", ky: "KGZ", tg: "TJK", tk: "TKM",
+  af: "ZAF", sq: "ALB", am: "ETH", az: "AZE", be: "BLR", bs: "BIH",
+  et: "EST", gl: "ESP", gu: "IND", ht: "HTI", ig: "NGA", jv: "IDN",
+  kn: "IND", lt: "LTU", lv: "LVA", mk: "MKD", ml: "IND", mr: "IND",
+  mt: "MLT", pa: "IND", ps: "AFG", rw: "RWA", so: "SOM",
+};
+function langToCountry3(code) {
+  return LANG_TO_COUNTRY3[String(code || "").toLowerCase().split("-")[0]] || String(code || "").toUpperCase();
+}
+
 // ── In-Memory State
 const ROOMS = new Map();
 const SOCKET_ROLES = new Map();
@@ -1608,6 +1628,57 @@ async function generateNameAdaptations(roomId) {
   const pB = meta.participants[pidB];
   if (!pA?.nativeName || !pB?.nativeName) return;
 
+  const isHospital = String(meta.siteContext || "").startsWith("hospital_");
+  const ownerPid = meta.ownerPid;
+
+  if (isHospital && ownerPid) {
+    // Hospital mode: host(의료진) sees "환자", guest(환자) sees adapted host name
+    const isAHost = pidA === ownerPid;
+    const hostPid = isAHost ? pidA : pidB;
+    const guestPid = isAHost ? pidB : pidA;
+    const host = meta.participants[hostPid];
+    const guest = meta.participants[guestPid];
+
+    // Adapt host name for guest (normal transliteration)
+    const hostNameForGuest = await adaptName(host.nativeName, host.lang, guest.lang);
+    // Guest label for host: always "환자"
+    const guestLabelForHost = "환자";
+
+    if (!host.adaptedNames) host.adaptedNames = {};
+    if (!guest.adaptedNames) guest.adaptedNames = {};
+    host.adaptedNames[guest.lang] = host.nativeName; // not used for hospital
+    guest.adaptedNames[host.lang] = guestLabelForHost;
+    ROOMS.set(roomId, meta);
+
+    // Send to host: show "[국가코드] 환자"
+    if (host.socketId) {
+      io.to(host.socketId).emit("partner-info", {
+        roomId,
+        peerUserId: guestPid,
+        peerCanonicalName: guest.nativeName,
+        peerLocalizedName: guestLabelForHost,
+        partnerName: guestLabelForHost,
+        partnerNativeName: guest.nativeName,
+        peerLang: guest.lang || "en",
+      });
+    }
+    // Send to guest: show adapted host name
+    if (guest.socketId) {
+      io.to(guest.socketId).emit("partner-info", {
+        roomId,
+        peerUserId: hostPid,
+        peerCanonicalName: host.nativeName,
+        peerLocalizedName: hostNameForGuest || host.nativeName,
+        partnerName: hostNameForGuest || host.nativeName,
+        partnerNativeName: host.nativeName,
+        peerLang: host.lang || "ko",
+      });
+    }
+    console.log(`[1:1:hospital] host sees "${guestLabelForHost}", guest sees "${hostNameForGuest}"`);
+    return;
+  }
+
+  // ── General mode: mutual name adaptation ──
   const [aForB, bForA] = await Promise.all([
     adaptName(pA.nativeName, pA.lang, pB.lang),
     adaptName(pB.nativeName, pB.lang, pA.lang),
@@ -2531,25 +2602,47 @@ io.on('connection', (socket) => {
         const [pidA, pidB] = pids;
         const pA = meta.participants[pidA];
         const pB = meta.participants[pidB];
+        const isHospitalJoin = String(meta.siteContext || "").startsWith("hospital_");
+        const ownerPidJoin = meta.ownerPid;
+
         // Immediate fallback: send native names so UI never shows blank
+        // Hospital mode: host sees "[국가코드] 환자", guest sees host nativeName
         if (pA?.socketId && pB?.nativeName) {
+          const isAHost = pidA === ownerPidJoin;
+          let nameForA = pB.nativeName;
+          if (isHospitalJoin && ownerPidJoin) {
+            if (isAHost) {
+              // A is host → show "환자" for guest B
+              nameForA = "환자";
+            }
+            // A is guest → show host nativeName (unchanged)
+          }
           io.to(pA.socketId).emit("partner-info", {
             roomId,
             peerUserId: pidB,
             peerCanonicalName: pB.nativeName,
-            peerLocalizedName: pB.nativeName,
-            partnerName: pB.nativeName,
+            peerLocalizedName: nameForA,
+            partnerName: nameForA,
             partnerNativeName: pB.nativeName,
             peerLang: pB.lang || "en",
           });
         }
         if (pB?.socketId && pA?.nativeName) {
+          const isBHost = pidB === ownerPidJoin;
+          let nameForB = pA.nativeName;
+          if (isHospitalJoin && ownerPidJoin) {
+            if (isBHost) {
+              // B is host → show "환자" for guest A
+              nameForB = "환자";
+            }
+            // B is guest → show host nativeName (unchanged)
+          }
           io.to(pB.socketId).emit("partner-info", {
             roomId,
             peerUserId: pidA,
             peerCanonicalName: pA.nativeName,
-            peerLocalizedName: pA.nativeName,
-            partnerName: pA.nativeName,
+            peerLocalizedName: nameForB,
+            partnerName: nameForB,
             partnerNativeName: pA.nativeName,
             peerLang: pA.lang || "en",
           });
