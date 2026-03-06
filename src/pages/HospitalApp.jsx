@@ -1,0 +1,533 @@
+// src/pages/HospitalApp.jsx — 병원 전용 진입 컴포넌트 (의료진 측)
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { useLocation } from "react-router-dom";
+// Auth skipped for hospital mode – direct entry
+import { detectUserLanguage } from "../constants/languageProfiles";
+import { getLanguageByCode } from "../constants/languages";
+import LanguageFlagPicker from "../components/LanguageFlagPicker";
+import MonoLogo from "../components/MonoLogo";
+import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
+import QRCodeBox from "../components/QRCodeBox";
+import {
+  ChevronLeft,
+  FileText,
+  Shield,
+  ShieldOff,
+  Copy,
+  Download,
+  X,
+  AlertTriangle,
+  RotateCcw,
+  Check,
+} from "lucide-react";
+
+// ── Emergency quick phrases ──
+const EMERGENCY_PHRASES = {
+  ko: [
+    "통증이 어디입니까?",
+    "언제부터 아팠습니까?",
+    "알레르기가 있습니까?",
+    "현재 복용 중인 약이 있습니까?",
+    "의식이 있습니까?",
+    "숨쉬기 힘듭니까?",
+    "출혈이 있습니까?",
+  ],
+  en: [
+    "Where is the pain?",
+    "When did the pain start?",
+    "Do you have any allergies?",
+    "Are you currently taking any medications?",
+    "Are you conscious?",
+    "Is it difficult to breathe?",
+    "Is there any bleeding?",
+  ],
+};
+
+function HospitalLogo() {
+  return (
+    <div className="flex items-center gap-3">
+      <MonoLogo />
+      <div className="flex flex-col">
+        <span className="text-[11px] font-semibold tracking-[2px] text-[#7C6FEB] uppercase">
+          Hospital
+        </span>
+        <span className="text-[10px] text-[var(--color-text-secondary)]">
+          Medical Interpreter
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function HospitalApp() {
+  const location = useLocation();
+
+  // ── Language ──
+  const detected = useMemo(() => detectUserLanguage(), []);
+  const savedLang = useMemo(() => {
+    const saved = localStorage.getItem("myLang");
+    if (saved) return getLanguageByCode(saved)?.code || "";
+    return "";
+  }, []);
+  const initialLang = useMemo(() => savedLang || detected?.code || "ko", [detected, savedLang]);
+  const [selectedLang, setSelectedLang] = useState(initialLang);
+  const [showLangGrid, setShowLangGrid] = useState(false);
+
+  // ── Department ──
+  const [selectedDept, setSelectedDept] = useState(null);
+  const [step, setStep] = useState("department"); // 'department' | 'session' | 'summary'
+
+  // ── Session ──
+  const [roomId, setRoomId] = useState("");
+  const [hostPid, setHostPid] = useState("");
+  const [saveMode, setSaveMode] = useState(false); // 무기록(false) / 저장(true)
+  const [chartNumber, setChartNumber] = useState("");
+  const [copiedPhrase, setCopiedPhrase] = useState("");
+
+  // ── Summary (returned from ChatScreen) ──
+  const [summaryMessages, setSummaryMessages] = useState([]);
+  const [summaryDept, setSummaryDept] = useState(null);
+  const [summaryChart, setSummaryChart] = useState("");
+  const [copiedSummary, setCopiedSummary] = useState(false);
+
+  // Auth check removed — hospital mode skips login entirely
+
+  // ── Detect return from ChatScreen with session data ──
+  useEffect(() => {
+    if (location.state?.returnFromSession) {
+      const msgs = location.state?.messages || [];
+      setSummaryMessages(msgs);
+      setSummaryDept(selectedDept);
+      setSummaryChart(chartNumber);
+      if (msgs.length > 0) {
+        setStep("summary");
+      } else {
+        setStep("department");
+      }
+      // Clear the state so back-button doesn't re-trigger
+      window.history.replaceState({}, "");
+    }
+  }, [location.state]);
+
+  // ── Generate room ──
+  const generateRoom = useCallback(() => {
+    const newRoomId = uuidv4();
+    setRoomId(newRoomId);
+    const pidKey = `mro.pid.${newRoomId}`;
+    let pid = localStorage.getItem(pidKey);
+    if (!pid) {
+      pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+      localStorage.setItem(pidKey, pid);
+    }
+    setHostPid(pid);
+    return newRoomId;
+  }, []);
+
+  useEffect(() => {
+    if (step !== "summary") generateRoom();
+  }, [generateRoom, step]);
+
+  // ── Handlers ──
+  const handleDeptSelect = (dept) => {
+    setSelectedDept(dept);
+    setStep("session");
+    generateRoom();
+  };
+
+  const handleLangChange = (code) => {
+    setSelectedLang(code);
+    localStorage.setItem("myLang", code);
+    setShowLangGrid(false);
+    generateRoom();
+  };
+
+  const handleBackToDept = () => {
+    setStep("department");
+    setSelectedDept(null);
+    setChartNumber("");
+    generateRoom();
+  };
+
+  const handleNewSession = () => {
+    setSummaryMessages([]);
+    setSummaryDept(null);
+    setSummaryChart("");
+    setChartNumber("");
+    setStep("department");
+    generateRoom();
+  };
+
+  const handleCopyPhrase = (phrase) => {
+    navigator.clipboard?.writeText(phrase).catch(() => {});
+    setCopiedPhrase(phrase);
+    setTimeout(() => setCopiedPhrase(""), 1500);
+  };
+
+  const handleCopySummary = () => {
+    const text = summaryMessages
+      .filter((m) => m.text || m.original)
+      .map((m) => {
+        const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : "";
+        const speaker = m.isMine ? "의료진" : "환자";
+        return `[${time}] ${speaker}: ${m.original || m.text || ""}`;
+      })
+      .join("\n");
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopiedSummary(true);
+    setTimeout(() => setCopiedSummary(false), 2000);
+  };
+
+  const handleDownloadSummary = () => {
+    const lines = [
+      `=== MONO Hospital - 진료 대화 요약 ===`,
+      `진료과: ${summaryDept?.labelKo || selectedDept?.labelKo || "N/A"}`,
+      `차트번호: ${summaryChart || chartNumber || "N/A"}`,
+      `날짜: ${new Date().toLocaleString()}`,
+      `언어: ${selectedLang}`,
+      `---`,
+      ...summaryMessages
+        .filter((m) => m.text || m.original)
+        .map((m) => {
+          const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : "";
+          const speaker = m.isMine ? "의료진" : "환자";
+          const orig = m.original || m.text || "";
+          const translated = m.translated || "";
+          return translated
+            ? `[${time}] ${speaker}: ${orig}\n         → ${translated}`
+            : `[${time}] ${speaker}: ${orig}`;
+        }),
+    ];
+    const text = lines.join("\n");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `mono_hospital_${summaryChart || chartNumber || "session"}_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // No auth guard — always render immediately
+
+  // ════════════════════════════════════════════
+  // STEP 3: Summary (after returning from session)
+  // ════════════════════════════════════════════
+  if (step === "summary") {
+    return (
+      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+        <div className="mx-auto w-full max-w-[520px] px-4 py-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <HospitalLogo />
+            <button
+              type="button"
+              onClick={handleNewSession}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#3B82F6] text-white text-[13px] font-medium hover:bg-[#2563EB] transition-colors"
+            >
+              <RotateCcw size={14} />
+              새 세션
+            </button>
+          </div>
+
+          {/* Summary Header */}
+          <div className="p-4 rounded-[16px] border border-[var(--color-border)] bg-[var(--color-bg)] mb-4">
+            <h2 className="text-[16px] font-semibold text-[var(--color-text)] mb-2">
+              📋 진료 대화 요약
+            </h2>
+            <div className="text-[12px] text-[var(--color-text-secondary)] space-y-0.5">
+              <p>진료과: {summaryDept?.labelKo || "N/A"} {summaryDept?.icon || ""}</p>
+              <p>차트번호: {summaryChart || "N/A"}</p>
+              <p>날짜: {new Date().toLocaleString()}</p>
+              <p>대화 수: {summaryMessages.filter((m) => m.text || m.original).length}건</p>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+            {summaryMessages.filter((m) => m.text || m.original).length === 0 ? (
+              <p className="text-center text-[13px] text-[var(--color-text-secondary)] py-8">
+                대화 기록이 없습니다.
+              </p>
+            ) : (
+              summaryMessages
+                .filter((m) => m.text || m.original)
+                .map((m, i) => {
+                  const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : "";
+                  const speaker = m.isMine ? "🩺 의료진" : "🧑 환자";
+                  return (
+                    <div
+                      key={i}
+                      className="p-3 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)]"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[11px] font-medium">{speaker}</span>
+                        <span className="text-[10px] text-[var(--color-text-secondary)]">{time}</span>
+                      </div>
+                      <p className="text-[13px] text-[var(--color-text)]">{m.original || m.text}</p>
+                      {m.translated && (
+                        <p className="text-[12px] text-[#3B82F6] mt-1">→ {m.translated}</p>
+                      )}
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCopySummary}
+              className="flex-1 flex items-center justify-center gap-1.5 h-[44px] rounded-[12px] border border-[var(--color-border)] text-[13px] font-medium"
+            >
+              {copiedSummary ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+              {copiedSummary ? "복사됨" : "텍스트 복사"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadSummary}
+              className="flex-1 flex items-center justify-center gap-1.5 h-[44px] rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-medium"
+            >
+              <Download size={14} />
+              파일 다운로드
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-8 text-center">
+            <p className="text-[10px] text-[var(--color-text-secondary)]">
+              Powered by MONO Medical Interpreter
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════
+  // STEP 1: Department Selection
+  // ════════════════════════════════════════════
+  if (step === "department") {
+    return (
+      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+        <div className="mx-auto w-full max-w-[480px] px-4 py-6">
+          {/* Header */}
+          <div className="flex items-center justify-center mb-8">
+            <HospitalLogo />
+          </div>
+
+          {/* Language Selection */}
+          <div className="mb-6">
+            <LanguageFlagPicker
+              selectedLang={selectedLang}
+              showGrid={showLangGrid}
+              onToggleGrid={() => setShowLangGrid((prev) => !prev)}
+              onSelect={handleLangChange}
+            />
+          </div>
+
+          {/* Department Grid */}
+          {!showLangGrid && (
+            <div>
+              <h2 className="text-[15px] font-semibold text-center mb-4 text-[var(--color-text)]">
+                진료과 선택
+              </h2>
+              {/* Reception card – full width at top */}
+              {HOSPITAL_DEPARTMENTS.filter((d) => d.id === "reception").map((dept) => (
+                <button
+                  key={dept.id}
+                  type="button"
+                  onClick={() => handleDeptSelect(dept)}
+                  className="w-full flex items-center gap-4 p-4 mb-3 rounded-[16px] border-2 border-[#3B82F6] bg-[#EFF6FF] dark:bg-[#1E3A5F] hover:bg-[#DBEAFE] dark:hover:bg-[#1E4A7F] transition-all active:scale-[0.98]"
+                >
+                  <span className="text-[36px]">{dept.icon}</span>
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-[15px] font-semibold text-[var(--color-text)]">
+                      {dept.labelKo}
+                    </span>
+                    <span className="text-[11px] text-[#3B82F6] font-medium">
+                      {dept.label}
+                    </span>
+                    {dept.description && (
+                      <span className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">
+                        {dept.description}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+
+              {/* Department grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {HOSPITAL_DEPARTMENTS.filter((d) => d.id !== "reception").map((dept) => (
+                  <button
+                    key={dept.id}
+                    type="button"
+                    onClick={() => handleDeptSelect(dept)}
+                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-[16px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F] transition-all active:scale-95"
+                  >
+                    <span className="text-[28px]">{dept.icon}</span>
+                    <span className="text-[13px] font-medium text-[var(--color-text)]">
+                      {dept.labelKo}
+                    </span>
+                    <span className="text-[10px] text-[var(--color-text-secondary)]">
+                      {dept.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="mt-8 text-center">
+            <p className="text-[10px] text-[var(--color-text-secondary)]">
+              Powered by MONO Medical Interpreter
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════
+  // STEP 2: Session Setup (QR + Controls)
+  // ════════════════════════════════════════════
+  return (
+    <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+      <div className="mx-auto w-full max-w-[480px] px-4 py-4">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            type="button"
+            onClick={handleBackToDept}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[20px]">{selectedDept?.icon}</span>
+              <span className="text-[16px] font-semibold text-[var(--color-text)]">
+                {selectedDept?.labelKo}
+              </span>
+            </div>
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              {selectedDept?.label}
+            </span>
+          </div>
+          <HospitalLogo />
+        </div>
+
+        {/* Chart Number Input */}
+        <div className="mb-4 p-3 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)]">
+          <label className="block text-[12px] font-medium text-[var(--color-text-secondary)] mb-1.5 uppercase">
+            차트번호 (선택)
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={chartNumber}
+            onChange={(e) => setChartNumber(e.target.value.replace(/\D/g, ""))}
+            placeholder="환자 차트번호 입력"
+            className="w-full h-[40px] px-3 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[14px] focus:outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+
+        {/* Record Mode Toggle */}
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSaveMode(!saveMode)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium transition-colors ${
+              saveMode
+                ? "bg-[#DBEAFE] text-[#1D4ED8] border border-[#3B82F6]"
+                : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
+            }`}
+          >
+            {saveMode ? <Shield size={14} /> : <ShieldOff size={14} />}
+            {saveMode ? "대화 저장 ON" : "무기록 모드"}
+          </button>
+
+          {selectedDept?.id === "emergency" && (
+            <span className="flex items-center gap-1 text-[11px] text-red-500 font-medium animate-pulse">
+              <AlertTriangle size={12} />
+              응급
+            </span>
+          )}
+        </div>
+
+        {/* Emergency Quick Phrases */}
+        {selectedDept?.id === "emergency" && (
+          <div className="mb-4 p-3 rounded-[12px] border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
+            <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 mb-2 uppercase">
+              ⚡ 긴급 문구 (클릭하여 복사)
+            </p>
+            <div className="space-y-1">
+              {(EMERGENCY_PHRASES[selectedLang] || EMERGENCY_PHRASES.en).map((phrase, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleCopyPhrase(phrase)}
+                  className={`w-full text-left text-[12px] px-2 py-1.5 rounded transition-colors ${
+                    copiedPhrase === phrase
+                      ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                      : "text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900"
+                  }`}
+                >
+                  {copiedPhrase === phrase ? "✓ 복사됨" : phrase}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Info banner - STT Model */}
+        <div className="mb-4 px-3 py-2 rounded-[8px] bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+          <p className="text-[11px] text-blue-600 dark:text-blue-400">
+            🧪 병원 모드: <strong>Groq Whisper Large V3</strong> 고정 (최고 품질 STT)
+          </p>
+          <p className="text-[10px] text-blue-500 dark:text-blue-500 mt-0.5">
+            {selectedDept?.labelKo} 전문 의료 번역 프롬프트 적용 중
+          </p>
+        </div>
+
+        {/* QR Code */}
+        {roomId && hostPid && (
+          <div className="mb-4">
+            <QRCodeBox
+              key={roomId}
+              roomId={roomId}
+              fromLang={selectedLang}
+              participantId={hostPid}
+              siteContext={`hospital_${selectedDept?.id || "general"}`}
+              role="Doctor"
+              localName=""
+              roomType="oneToOne"
+              chartNumber={chartNumber}
+              stationId={selectedDept?.id || ""}
+              hospitalSessionId=""
+              hospitalDept={selectedDept}
+              saveMode={saveMode}
+            />
+          </div>
+        )}
+
+        {/* Hint */}
+        <div className="text-center mt-2">
+          <p className="text-[11px] text-[var(--color-text-secondary)]">
+            환자가 QR 코드를 스캔하면 자동으로 통역 세션이 시작됩니다
+          </p>
+        </div>
+
+        {/* White Label placeholder */}
+        <div className="mt-8 text-center">
+          <p className="text-[10px] text-[var(--color-text-secondary)]">
+            Powered by MONO Medical Interpreter
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -70,7 +70,7 @@ export default function GuestJoinPage() {
     const guestId = (existingSession?.roomId === roomId && existingSession?.guestId)
       ? existingSession.guestId
       : `guest_${uuidv4().slice(0, 8)}`;
-    const cleanName = t("common.guest");
+    const cleanName = isHospitalMode ? "Patient" : t("common.guest");
     saveGuestSession(roomId, selectedLang, cleanName, guestId, siteContext, roomType);
     localStorage.setItem("myLang", selectedLang);
     navigate(`/room/${roomId}`, {
@@ -96,17 +96,9 @@ export default function GuestJoinPage() {
           {/* Hospital header */}
           <div className="flex-none flex flex-col items-center justify-center text-center pt-4 pb-6">
             <div className="flex items-center gap-3 mb-2">
-              <div
-                className="text-[40px] font-light leading-none"
-                style={{ letterSpacing: "3px" }}
-              >
-                <span style={{ color: "#3B82F6" }}>M</span>
-                <span style={{ color: "#06B6D4" }}>O</span>
-                <span style={{ color: "#10B981" }}>N</span>
-                <span style={{ color: "#3B82F6" }}>O</span>
-              </div>
+              <MonoLogo />
               <div className="flex flex-col text-left">
-                <span className="text-[10px] font-semibold tracking-[2px] text-[#3B82F6] uppercase">
+                <span className="text-[10px] font-semibold tracking-[2px] text-[#7C6FEB] uppercase">
                   Hospital
                 </span>
                 <span className="text-[9px] text-[var(--color-text-secondary)]">
