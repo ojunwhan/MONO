@@ -12,6 +12,46 @@ function detectBrowserLanguage() {
   return getLanguageByCode(detected?.code)?.code || "en";
 }
 
+// ── Hospital mode: "환자" translated per language ──
+const PATIENT_LABEL = {
+  ko: "환자",
+  en: "Patient",
+  ja: "患者",
+  zh: "患者",
+  vi: "Bệnh nhân",
+  th: "ผู้ป่วย",
+  id: "Pasien",
+  tl: "Pasyente",
+  mn: "Өвчтөн",
+  uz: "Bemor",
+  ru: "Пациент",
+  ar: "مريض",
+  es: "Paciente",
+  ne: "बिरामी",
+  my: "လူနာ",
+  km: "អ្នកជំងឺ",
+};
+
+async function getPatientLabel(langCode) {
+  const code = String(langCode || "en").toLowerCase().split("-")[0];
+  if (PATIENT_LABEL[code]) return PATIENT_LABEL[code];
+  // Fallback: ask GPT-4o via server API
+  try {
+    const lang = getLanguageByCode(code);
+    const langName = lang?.name || code;
+    const r = await fetch("/api/translate-word", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word: "환자", targetLang: langName }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.translated) return data.translated;
+    }
+  } catch { /* ignore – fall through */ }
+  return "Patient"; // ultimate fallback
+}
+
 function saveGuestSession(roomId, lang, name, guestId, siteContext, roomType) {
   sessionStorage.setItem(
     "mono_guest",
@@ -63,14 +103,16 @@ export default function GuestJoinPage() {
     if (!getLanguageByCode(normalized)) setSelectedLang("en");
   }, [selectedLang]);
 
-  const startGuestSession = () => {
+  const startGuestSession = async () => {
     if (!roomId) return;
     // 같은 방에 대한 기존 세션이 있으면 guestId 재사용 (재접속 시 서버에서 동일인으로 인식)
     const existingSession = getGuestSession();
     const guestId = (existingSession?.roomId === roomId && existingSession?.guestId)
       ? existingSession.guestId
       : `guest_${uuidv4().slice(0, 8)}`;
-    const cleanName = isHospitalMode ? "Patient" : t("common.guest");
+    const cleanName = isHospitalMode
+      ? await getPatientLabel(selectedLang)
+      : t("common.guest");
     saveGuestSession(roomId, selectedLang, cleanName, guestId, siteContext, roomType);
     localStorage.setItem("myLang", selectedLang);
     navigate(`/room/${roomId}`, {

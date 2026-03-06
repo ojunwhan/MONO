@@ -3928,6 +3928,29 @@ app.get("/api/guess-lang", (req,res)=>{
   res.json({ lang: code });
 });
 
+// ── Translate a single word (for hospital guest nickname) ──
+app.post("/api/translate-word", async (req, res) => {
+  try {
+    if (!openai) return res.status(503).json({ error: "openai_unavailable" });
+    const word = String(req.body?.word || "").trim();
+    const targetLang = String(req.body?.targetLang || "").trim();
+    if (!word || !targetLang) return res.status(400).json({ error: "missing_params" });
+    const r = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0,
+      max_tokens: 30,
+      messages: [
+        { role: "system", content: "You are a translator. Reply with ONLY the translated word, nothing else." },
+        { role: "user", content: `Translate the Korean word "${word}" into ${targetLang}. Reply with only the translated word.` },
+      ],
+    });
+    const translated = (r.choices?.[0]?.message?.content || "").trim().replace(/^["']|["']$/g, "");
+    res.json({ translated: translated || word });
+  } catch (e) {
+    res.status(500).json({ error: "translate_failed", detail: e?.message });
+  }
+});
+
 app.get("/healthz", async (req, res) => {
   try {
     const sockets = await io.fetchSockets();
