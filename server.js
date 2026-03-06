@@ -29,6 +29,8 @@ const attachLineAuth = require('./server/routes/auth_line');
 const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
+const cron = require('node-cron');
+const { generateCostReport } = require('./server/cost-report');
 
 // === 사용량 추적 ===
 const usageStats = {
@@ -60,6 +62,12 @@ const usageStats = {
   translationRequests: 0,  // 번역 요청 수
   ttsRequests: 0,          // TTS 요청 수
 
+  // Groq / OpenAI 호출 구분
+  groqSttRequests: 0,      // Groq Whisper STT 호출 수
+  openaiSttRequests: 0,    // OpenAI Whisper STT 호출 수
+  openaiTranslations: 0,   // OpenAI GPT 번역 호출 수
+  openaiTtsRequests: 0,    // OpenAI TTS 호출 수
+
   // 에러
   errorCount: 0,           // 에러 발생 수
   errors: [],              // 최근 에러 목록 (최대 10개)
@@ -88,6 +96,10 @@ function resetDailyStats() {
     usageStats.sttRequests = 0;
     usageStats.translationRequests = 0;
     usageStats.ttsRequests = 0;
+    usageStats.groqSttRequests = 0;
+    usageStats.openaiSttRequests = 0;
+    usageStats.openaiTranslations = 0;
+    usageStats.openaiTtsRequests = 0;
     usageStats.errorCount = 0;
     usageStats.errors = [];
   }
@@ -259,7 +271,7 @@ function sendHourlyReport() {
 🎯 실제 통역 세션: ${usageStats.activeSession}건
 🌍 접속 지역: ${Object.entries(usageStats.regions).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([country, count]) => `${country} ${count}`).join(' / ') || '집계 없음'}
 
-🎤 STT: ${usageStats.sttRequests}회
+🎤 STT: ${usageStats.sttRequests}회 (Groq ${usageStats.groqSttRequests} / OpenAI ${usageStats.openaiSttRequests})
 🔄 번역: ${usageStats.translationRequests}회
 🔊 TTS: ${usageStats.ttsRequests}회
 
@@ -790,6 +802,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {})
   try {
     if (forceGroq || groq) {
       // Groq whisper-large-v3 (forced for hospital, preferred for general)
+      usageStats.groqSttRequests += 1;
       const result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
@@ -800,6 +813,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {})
       return (result.text || "").trim();
     }
     // Fallback: OpenAI whisper-1 (NOT used in hospital mode)
+    usageStats.openaiSttRequests += 1;
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -840,6 +854,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = 
     const language = lang && lang !== "auto" ? mapLang(lang) : undefined;
     if (forceGroq || groq) {
       // Groq whisper-large-v3 (forced for hospital, preferred for general)
+      usageStats.groqSttRequests += 1;
       const result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
@@ -850,6 +865,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = 
       return (result.text || "").trim();
     }
     // Fallback: OpenAI whisper-1 (NOT used in hospital mode)
+    usageStats.openaiSttRequests += 1;
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
@@ -876,6 +892,7 @@ async function synthesizeSpeech(text, targetLang = "en") {
   if (!openai || !text || isOpenAIBlocked()) return null;
   resetDailyStats();
   usageStats.ttsRequests += 1;
+  usageStats.openaiTtsRequests += 1;
   const processedText = preprocessForTTS(text);
   if (!processedText) return null;
   try {
@@ -1722,6 +1739,7 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   resetDailyStats();
   usageStats.translationRequests += 1;
+  usageStats.openaiTranslations += 1;
   sendConnectionAlert('translation');
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general');
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
@@ -1753,6 +1771,7 @@ async function hqTranslate(text, from, to, ctx, siteContext, conversationHistory
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   resetDailyStats();
   usageStats.translationRequests += 1;
+  usageStats.openaiTranslations += 1;
   const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general')
     + `\nRefine to fluent native chat style without changing meaning or emotional tone.`;
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
@@ -3748,6 +3767,7 @@ async function handleSttUpload(req, res) {
     let result;
     if (groq) {
       // Groq whisper-large-v3
+      usageStats.groqSttRequests += 1;
       result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
@@ -3757,6 +3777,7 @@ async function handleSttUpload(req, res) {
       });
     } else {
       // Fallback: OpenAI whisper-1
+      usageStats.openaiSttRequests += 1;
       result = await openai.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-1",
@@ -4248,14 +4269,32 @@ app.get('/api/stats', (req, res) => {
     },
     api: {
       stt: usageStats.sttRequests,
+      groqStt: usageStats.groqSttRequests,
+      openaiStt: usageStats.openaiSttRequests,
       translation: usageStats.translationRequests,
+      openaiTranslations: usageStats.openaiTranslations,
       tts: usageStats.ttsRequests,
+      openaiTts: usageStats.openaiTtsRequests,
     },
     errorCount: usageStats.errorCount,
     recentErrors: usageStats.errors,
   });
 });
 
+
+// ── 비용 리포트 수동 트리거 ──
+app.get('/api/cost-report', async (req, res) => {
+  if (!STATS_API_KEY || req.query.key !== STATS_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const result = await generateCostReport(usageStats);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error('[cost-report] manual trigger error:', e?.message);
+    res.status(500).json({ error: e?.message });
+  }
+});
 
 attachGoogleAuth(app);
 attachKakaoAuth(app);
@@ -4394,5 +4433,23 @@ setInterval(() => {
     sendHourlyReport();
   }
 }, 60 * 1000).unref?.();
+
+// ── 매일 오전 9시 (KST) 비용 리포트 ──
+// cron: 분 시 일 월 요일 (KST = UTC+9, 9AM KST = 0AM UTC)
+cron.schedule('0 0 * * *', async () => {
+  console.log('[cost-report] 🕘 Daily cost report triggered (9AM KST)');
+  try {
+    await generateCostReport(usageStats);
+    console.log('[cost-report] ✅ Report sent successfully');
+  } catch (e) {
+    console.error('[cost-report] ❌ Report failed:', e?.message);
+  }
+}, {
+  timezone: 'Asia/Seoul',
+  scheduled: true,
+});
+// 참고: 서버가 Asia/Seoul TZ가 아닌 UTC에서 돌아가면
+// node-cron의 timezone 옵션이 자동 변환해줌
+console.log('[cost-report] 📅 Daily cost report scheduled at 9:00 AM KST');
 
 startServer(START_PORT);
