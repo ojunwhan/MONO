@@ -153,7 +153,7 @@ export default function KioskPage() {
         localName: "",
         role: "Patient",
         isCreator: false,
-        siteContext: "hospital",
+        siteContext: "hospital_kiosk",
         roomType: "oneToOne",
         isKiosk: true,
         chartNumber: sessionData.chartNumber,

@@ -31,6 +31,7 @@ const attachAuthApi = require('./server/routes/auth_api');
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 const cron = require('node-cron');
 const { generateCostReport } = require('./server/cost-report');
+const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/db/sqlite');
 
 // === 사용량 추적 ===
 const usageStats = {
@@ -100,10 +101,55 @@ function resetDailyStats() {
     usageStats.openaiSttRequests = 0;
     usageStats.openaiTranslations = 0;
     usageStats.openaiTtsRequests = 0;
+    // ── 날짜 변경 전 이전 날짜 DB에 최종 저장 ──
+    persistUsageStats(usageStats.date === today ? null : usageStats.date);
     usageStats.errorCount = 0;
     usageStats.errors = [];
   }
 }
+
+// ── API 사용량 DB 영속화 (dbRun/dbGet = async sqlite3 wrapper) ──
+function persistUsageStats(dateOverride) {
+  const date = dateOverride || usageStats.date;
+  dbRun(
+    `INSERT INTO api_usage_daily (date, groq_stt_count, openai_stt_count, translation_count, tts_count, total_stt, total_visits, peak_connections, rooms_created)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(date) DO UPDATE SET
+       groq_stt_count = excluded.groq_stt_count,
+       openai_stt_count = excluded.openai_stt_count,
+       translation_count = excluded.translation_count,
+       tts_count = excluded.tts_count,
+       total_stt = excluded.total_stt,
+       total_visits = excluded.total_visits,
+       peak_connections = excluded.peak_connections,
+       rooms_created = excluded.rooms_created`,
+    [date, usageStats.groqSttRequests, usageStats.openaiSttRequests,
+     usageStats.translationRequests, usageStats.openaiTtsRequests,
+     usageStats.sttRequests, usageStats.totalVisits,
+     usageStats.peakConnections, usageStats.roomsCreated]
+  ).catch(() => { /* DB not yet ready */ });
+}
+
+async function restoreUsageStats() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const row = await dbGet('SELECT * FROM api_usage_daily WHERE date = ?', [today]);
+    if (row) {
+      usageStats.groqSttRequests = row.groq_stt_count || 0;
+      usageStats.openaiSttRequests = row.openai_stt_count || 0;
+      usageStats.translationRequests = row.translation_count || 0;
+      usageStats.openaiTtsRequests = row.tts_count || 0;
+      usageStats.sttRequests = row.total_stt || 0;
+      usageStats.totalVisits = row.total_visits || 0;
+      usageStats.peakConnections = row.peak_connections || 0;
+      usageStats.roomsCreated = row.rooms_created || 0;
+      console.log(`[stats] 📊 Restored today's usage from DB: STT=${usageStats.sttRequests} (Groq=${usageStats.groqSttRequests})`);
+    }
+  } catch (e) { /* table not yet created */ }
+}
+
+// ── 5분마다 사용량 DB에 저장 ──
+setInterval(() => persistUsageStats(), 5 * 60 * 1000);
 
 function makeErrorMessage(error) {
   return String(error?.stack || error?.message || error || 'Unknown')
@@ -3701,15 +3747,30 @@ io.on('connection', (socket) => {
     // ✅ 수정: 방 즉시 삭제 → 유예 후 삭제로 변경
     if (remaining === 0) {
       // ✅ 모바일 백그라운드/공유 시 끊김 대비: 방 삭제 유예 (기본 30초, 필요 시 늘림)
-      setTimeout(() => {
-        const room = io.sockets.adapter.rooms.get(roomId);
+      const capturedRoomId = roomId; // closure safety
+      setTimeout(async () => {
+        const room = io.sockets.adapter.rooms.get(capturedRoomId);
         if (!room || room.size === 0) {
-          ROOMS.delete(roomId);
-          delete messageBuffer[roomId];
+          // ── Hospital: 세션 자동 종료 ──
+          try {
+            const activeSess = await dbGet(
+              `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1`,
+              [capturedRoomId]
+            );
+            if (activeSess) {
+              await dbRun(
+                `UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?`,
+                [activeSess.id]
+              );
+              console.log(`[hospital] 🔚 Session ${activeSess.id} auto-ended (room empty)`);
+            }
+          } catch (e) { console.warn('[hospital:auto-end]', e?.message); }
+          ROOMS.delete(capturedRoomId);
+          delete messageBuffer[capturedRoomId];
           syncRoomsActive();
-          console.log(`💨 Room ${roomId} removed after grace period`);
+          console.log(`💨 Room ${capturedRoomId} removed after grace period`);
         } else {
-          console.log(`🟢 Room ${roomId} survived grace period`);
+          console.log(`🟢 Room ${capturedRoomId} survived grace period`);
         }
       }, 300_000); // 5분 유예 (모바일 백그라운드 재접속 대비)
     } else {
@@ -3723,6 +3784,25 @@ io.on('connection', (socket) => {
 
       if (disconnectedWasHost) {
         io.to(roomId).emit("host-left", { message: "호스트가 통역을 종료했습니다." });
+        // ── Hospital: 호스트가 떠나면 즉시 세션 종료 ──
+        const isHospitalDisc = String(metaBefore?.siteContext || "").startsWith("hospital_");
+        if (isHospitalDisc) {
+          (async () => {
+            try {
+              const activeSessHost = await dbGet(
+                `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1`,
+                [roomId]
+              );
+              if (activeSessHost) {
+                await dbRun(
+                  `UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?`,
+                  [activeSessHost.id]
+                );
+                console.log(`[hospital] 🔚 Session ${activeSessHost.id} ended (host left)`);
+              }
+            } catch (e) { console.warn('[hospital:host-left-end]', e?.message); }
+          })();
+        }
         setTimeout(() => {
           const room = io.sockets.adapter.rooms.get(roomId);
           const meta = ROOMS.get(roomId);
@@ -3873,7 +3953,6 @@ app.post("/api/auth/convert-guest", async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 // HOSPITAL KIOSK MODE — DB + REST API + Socket events
 // ═══════════════════════════════════════════════════════════════
-const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/db/sqlite');
 
 // Auto-migrate: create hospital tables if not exist
 (async () => {
@@ -3935,6 +4014,25 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
       CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);
     `);
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages)');
+
+    // ── API 사용량 통계 영속화 테이블 ──
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS api_usage_daily (
+        date TEXT NOT NULL,
+        groq_stt_count INTEGER DEFAULT 0,
+        openai_stt_count INTEGER DEFAULT 0,
+        translation_count INTEGER DEFAULT 0,
+        tts_count INTEGER DEFAULT 0,
+        total_stt INTEGER DEFAULT 0,
+        total_visits INTEGER DEFAULT 0,
+        peak_connections INTEGER DEFAULT 0,
+        rooms_created INTEGER DEFAULT 0,
+        PRIMARY KEY (date)
+      );
+    `);
+    console.log('[stats] ✅ api_usage_daily table ready');
+    // ── 서버 시작 시 당일 사용량 복원 ──
+    restoreUsageStats();
   } catch (e) {
     console.warn('[hospital] ⚠ table init failed:', e?.message);
   }
@@ -4411,6 +4509,9 @@ function startServer(port, retries = 0) {
 function shutdownGracefully(signal) {
   try {
     persistPushSubscriptionsNow();
+  } catch {}
+  try {
+    persistUsageStats();
   } catch {}
   console.log(`[server] shutdown by ${signal}`);
   process.exit(0);

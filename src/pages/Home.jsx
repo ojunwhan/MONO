@@ -322,7 +322,7 @@ export default function Home() {
                 roomId={roomId}
                 fromLang={selectedLang}
                 participantId={hostPid}
-                siteContext={hospitalMode ? "hospital" : "general"}
+                siteContext={hospitalMode ? "hospital_general" : "general"}
                 role="Manager"
                 localName=""
                 roomType="oneToOne"

@@ -84,6 +84,7 @@ export default function HospitalApp() {
   // ── Session ──
   const [roomId, setRoomId] = useState("");
   const [hostPid, setHostPid] = useState("");
+  const [hospitalSessionId, setHospitalSessionId] = useState("");
   const [saveMode, setSaveMode] = useState(false); // 무기록(false) / 저장(true)
   const [chartNumber, setChartNumber] = useState("");
   const [copiedPhrase, setCopiedPhrase] = useState("");
@@ -131,11 +132,36 @@ export default function HospitalApp() {
     if (step !== "summary") generateRoom();
   }, [generateRoom, step]);
 
+  // ── Create hospital session via API ──
+  const createHospitalSession = useCallback(async (newRoomId, dept) => {
+    try {
+      const res = await fetch("/api/hospital/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chartNumber: chartNumber || "0",
+          roomId: newRoomId,
+          department: dept?.id || "general",
+          hostLang: selectedLang,
+          stationId: dept?.id || "default",
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.sessionId) {
+        setHospitalSessionId(data.sessionId);
+        console.log("[hospital] Session created:", data.sessionId);
+      }
+    } catch (e) {
+      console.warn("[hospital] Session creation failed:", e?.message);
+    }
+  }, [chartNumber, selectedLang]);
+
   // ── Handlers ──
   const handleDeptSelect = (dept) => {
     setSelectedDept(dept);
     setStep("session");
-    generateRoom();
+    const newRoomId = generateRoom();
+    createHospitalSession(newRoomId, dept);
   };
 
   const handleLangChange = (code) => {
@@ -149,6 +175,7 @@ export default function HospitalApp() {
     setStep("department");
     setSelectedDept(null);
     setChartNumber("");
+    setHospitalSessionId("");
     generateRoom();
   };
 
@@ -157,6 +184,7 @@ export default function HospitalApp() {
     setSummaryDept(null);
     setSummaryChart("");
     setChartNumber("");
+    setHospitalSessionId("");
     setStep("department");
     generateRoom();
   };
@@ -522,7 +550,7 @@ export default function HospitalApp() {
               roomType="oneToOne"
               chartNumber={chartNumber}
               stationId={selectedDept?.id || ""}
-              hospitalSessionId=""
+              hospitalSessionId={hospitalSessionId}
               hospitalDept={selectedDept}
               saveMode={saveMode}
             />
