@@ -9,6 +9,7 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import QRCodeBox from "../components/QRCodeBox";
+import { useNavigate as useNav } from "react-router-dom";
 import {
   ChevronLeft,
   FileText,
@@ -20,6 +21,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Check,
+  ClipboardList,
 } from "lucide-react";
 
 // ── Emergency quick phrases ──
@@ -62,6 +64,7 @@ function HospitalLogo() {
 
 export default function HospitalApp() {
   const location = useLocation();
+  const navTo = useNav();
 
   // ── Language ──
   const detected = useMemo(() => detectUserLanguage(), []);
@@ -379,8 +382,20 @@ export default function HospitalApp() {
             </div>
           )}
 
+          {/* Records Button */}
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => navTo("/hospital/records")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+            >
+              <ClipboardList size={16} />
+              통역 기록 조회
+            </button>
+          </div>
+
           {/* Footer */}
-          <div className="mt-8 text-center">
+          <div className="mt-4 text-center">
             <p className="text-[10px] text-[var(--color-text-secondary)]">
               Powered by MONO Medical Interpreter
             </p>

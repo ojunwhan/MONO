@@ -13,6 +13,7 @@ import KioskPage from "./pages/KioskPage";
 import TermsPage from "./pages/Terms";
 import PrivacyPage from "./pages/Privacy";
 import HospitalApp from "./pages/HospitalApp";
+import HospitalRecords from "./pages/HospitalRecords";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -86,6 +87,10 @@ const router = createBrowserRouter([
   {
     path: "/hospital",
     element: <HospitalApp />,
+  },
+  {
+    path: "/hospital/records",
+    element: <HospitalRecords />,
   },
   {
     path: "/kiosk",

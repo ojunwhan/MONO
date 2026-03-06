@@ -3039,6 +3039,25 @@ io.on('connection', (socket) => {
             });
           }
         } catch (e) { console.warn("[tts]:", e?.message); }
+
+        // ── Hospital mode: auto-save message to DB ──
+        if (isHospitalMsg && roomId) {
+          try {
+            // Find active session for this room
+            const activeSession = await dbGet(
+              `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+              [roomId]
+            );
+            if (activeSession) {
+              const isOwner = meta.ownerPid === participantId;
+              await dbRun(
+                `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [msgId, activeSession.id, roomId, isOwner ? 'host' : 'guest', fromLang, finalText, translated || '', toLang]
+              );
+            }
+          } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); }
+        }
         return;
       }
 
@@ -3464,6 +3483,24 @@ io.on('connection', (socket) => {
           });
         }
       } catch (e) { console.warn("[tts:send-msg]:", e?.message); }
+
+      // ── Hospital mode: auto-save message to DB ──
+      if (isHospitalMsg2 && roomId) {
+        try {
+          const activeSession2 = await dbGet(
+            `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+            [roomId]
+          );
+          if (activeSession2) {
+            const isOwner2 = meta.ownerPid === participantId;
+            await dbRun(
+              `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [id, activeSession2.id, roomId, isOwner2 ? 'host' : 'guest', fromLang, trimmedText, draft || '', toLang]
+            );
+          }
+        } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); }
+      }
       return;
     }
 
@@ -3826,6 +3863,7 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
         room_id TEXT NOT NULL,
         chart_number TEXT NOT NULL,
         station_id TEXT DEFAULT 'default',
+        department TEXT,
         host_lang TEXT,
         guest_lang TEXT,
         status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
@@ -3844,12 +3882,34 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (session_id) REFERENCES hospital_sessions(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS hospital_patients (
+        id TEXT PRIMARY KEY,
+        chart_number TEXT NOT NULL UNIQUE,
+        language TEXT NOT NULL DEFAULT 'en',
+        hospital_id TEXT DEFAULT 'default',
+        name TEXT,
+        phone TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_chart ON hospital_sessions(chart_number);
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_station ON hospital_sessions(station_id);
       CREATE INDEX IF NOT EXISTS idx_hospital_sessions_status ON hospital_sessions(status);
+      CREATE INDEX IF NOT EXISTS idx_hospital_sessions_dept ON hospital_sessions(department);
       CREATE INDEX IF NOT EXISTS idx_hospital_messages_session ON hospital_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_hospital_messages_room ON hospital_messages(room_id);
+      CREATE INDEX IF NOT EXISTS idx_hospital_patients_chart ON hospital_patients(chart_number);
+      CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);
     `);
-    console.log('[hospital] ✅ hospital tables ready');
+    // Backfill: add department column if missing (existing DBs)
+    try {
+      const cols = await dbAll("PRAGMA table_info(hospital_sessions)");
+      if (!cols.some(c => c.name === 'department')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN department TEXT");
+      }
+    } catch (_) {}
+    console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages)');
   } catch (e) {
     console.warn('[hospital] ⚠ table init failed:', e?.message);
   }
@@ -3861,7 +3921,7 @@ const KIOSK_STATIONS = new Map();
 // POST /api/hospital/session — 직원이 병원 세션 생성
 app.post('/api/hospital/session', async (req, res) => {
   try {
-    const { chartNumber, stationId, hostLang, roomId } = req.body || {};
+    const { chartNumber, stationId, hostLang, roomId, department, guestLang } = req.body || {};
     if (!chartNumber || !/^\d+$/.test(String(chartNumber).trim())) {
       return res.status(400).json({ error: 'chart_number_required', message: '차트번호는 숫자만 입력하세요.' });
     }
@@ -3870,11 +3930,13 @@ app.post('/api/hospital/session', async (req, res) => {
     const rid = String(roomId || uuidv4()).trim();
     const sessionId = uuidv4();
     const lang = String(hostLang || 'ko').trim();
+    const dept = String(department || '').trim() || null;
+    const gLang = String(guestLang || '').trim() || null;
 
     await dbRun(
-      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, host_lang, status)
-       VALUES (?, ?, ?, ?, ?, 'active')`,
-      [sessionId, rid, cleanChart, station, lang]
+      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, department, host_lang, guest_lang, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [sessionId, rid, cleanChart, station, dept, lang, gLang]
     );
 
     // Register kiosk station mapping
@@ -4007,6 +4069,154 @@ io.on('connection', (kioskSocket) => {
       });
     }
   });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// HOSPITAL PATIENT REGISTRY — RESTful API (EMR-ready)
+// ═══════════════════════════════════════════════════════════════
+
+// POST /api/hospital/patients — 환자 등록 (최초 방문)
+app.post('/api/hospital/patients', async (req, res) => {
+  try {
+    const { chartNumber, language, hospitalId, name, phone, notes } = req.body || {};
+    if (!chartNumber) return res.status(400).json({ error: 'chart_number_required' });
+    const cleanChart = String(chartNumber).trim();
+    // Check if already registered
+    const existing = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [cleanChart]);
+    if (existing) {
+      // Update language if changed
+      if (language && language !== existing.language) {
+        await dbRun(
+          `UPDATE hospital_patients SET language = ?, updated_at = datetime('now') WHERE chart_number = ?`,
+          [language, cleanChart]
+        );
+      }
+      const updated = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [cleanChart]);
+      return res.json({ success: true, patient: updated, isNew: false });
+    }
+    const patientId = uuidv4();
+    await dbRun(
+      `INSERT INTO hospital_patients (id, chart_number, language, hospital_id, name, phone, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [patientId, cleanChart, language || 'en', hospitalId || 'default', name || null, phone || null, notes || null]
+    );
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE id = ?', [patientId]);
+    console.log(`[hospital] 👤 Patient registered: chart=${cleanChart} lang=${language || 'en'}`);
+    res.json({ success: true, patient, isNew: true });
+  } catch (e) {
+    console.error('[hospital] patient register error:', e?.message);
+    res.status(500).json({ error: 'patient_register_failed' });
+  }
+});
+
+// GET /api/hospital/patients/:chartNumber — 차트번호로 환자 조회 (재방문 매칭)
+app.get('/api/hospital/patients/:chartNumber', async (req, res) => {
+  try {
+    const { chartNumber } = req.params;
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [String(chartNumber).trim()]);
+    if (!patient) return res.json({ success: true, found: false });
+    // Also fetch recent sessions
+    const sessions = await dbAll(
+      `SELECT id, room_id, department, host_lang, guest_lang, status, created_at, ended_at
+       FROM hospital_sessions WHERE chart_number = ? ORDER BY created_at DESC LIMIT 10`,
+      [String(chartNumber).trim()]
+    );
+    res.json({ success: true, found: true, patient, recentSessions: sessions });
+  } catch (e) {
+    res.status(500).json({ error: 'patient_lookup_failed' });
+  }
+});
+
+// PUT /api/hospital/patients/:chartNumber — 환자 정보 수정
+app.put('/api/hospital/patients/:chartNumber', async (req, res) => {
+  try {
+    const { chartNumber } = req.params;
+    const { language, name, phone, notes } = req.body || {};
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [String(chartNumber).trim()]);
+    if (!patient) return res.status(404).json({ error: 'patient_not_found' });
+    const updates = [];
+    const params = [];
+    if (language) { updates.push('language = ?'); params.push(language); }
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (phone !== undefined) { updates.push('phone = ?'); params.push(phone); }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+    if (updates.length === 0) return res.json({ success: true, patient });
+    updates.push("updated_at = datetime('now')");
+    params.push(String(chartNumber).trim());
+    await dbRun(`UPDATE hospital_patients SET ${updates.join(', ')} WHERE chart_number = ?`, params);
+    const updated = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [String(chartNumber).trim()]);
+    res.json({ success: true, patient: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'patient_update_failed' });
+  }
+});
+
+// GET /api/hospital/patients — 전체 환자 목록 (검색 가능)
+app.get('/api/hospital/patients', async (req, res) => {
+  try {
+    const { hospitalId, language, search, limit: lim } = req.query;
+    let sql = 'SELECT * FROM hospital_patients WHERE 1=1';
+    const params = [];
+    if (hospitalId) { sql += ' AND hospital_id = ?'; params.push(hospitalId); }
+    if (language) { sql += ' AND language = ?'; params.push(language); }
+    if (search) { sql += ' AND (chart_number LIKE ? OR name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    sql += ' ORDER BY updated_at DESC LIMIT ?';
+    params.push(Number(lim) || 50);
+    const patients = await dbAll(sql, params);
+    res.json({ success: true, patients });
+  } catch (e) {
+    res.status(500).json({ error: 'patients_list_failed' });
+  }
+});
+
+// GET /api/hospital/records/:chartNumber — 차트번호 기반 전체 기록 조회 (직원용)
+app.get('/api/hospital/records/:chartNumber', async (req, res) => {
+  try {
+    const chart = String(req.params.chartNumber).trim();
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [chart]);
+    const sessions = await dbAll(
+      `SELECT * FROM hospital_sessions WHERE chart_number = ? ORDER BY created_at DESC`,
+      [chart]
+    );
+    // Attach messages to each session
+    const sessionsWithMessages = await Promise.all(sessions.map(async (s) => {
+      const messages = await dbAll(
+        'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
+        [s.id]
+      );
+      return { ...s, messages };
+    }));
+    res.json({ success: true, patient: patient || null, sessions: sessionsWithMessages });
+  } catch (e) {
+    res.status(500).json({ error: 'records_query_failed' });
+  }
+});
+
+// POST /api/hospital/session/:sessionId/guest-lang — 세션에 환자 언어 업데이트
+app.post('/api/hospital/session/:sessionId/guest-lang', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { guestLang } = req.body || {};
+    if (!guestLang) return res.status(400).json({ error: 'guest_lang_required' });
+    await dbRun(
+      `UPDATE hospital_sessions SET guest_lang = ? WHERE id = ?`,
+      [guestLang, sessionId]
+    );
+    // Also update patient language if chart exists
+    const session = await dbGet('SELECT chart_number FROM hospital_sessions WHERE id = ?', [sessionId]);
+    if (session?.chart_number) {
+      const patient = await dbGet('SELECT id FROM hospital_patients WHERE chart_number = ?', [session.chart_number]);
+      if (patient) {
+        await dbRun(
+          `UPDATE hospital_patients SET language = ?, updated_at = datetime('now') WHERE chart_number = ?`,
+          [guestLang, session.chart_number]
+        );
+      }
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'guest_lang_update_failed' });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════

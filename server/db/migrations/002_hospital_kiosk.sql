@@ -1,11 +1,11 @@
--- 002_hospital_kiosk.sql — 병원 키오스크 모드용 테이블
+﻿-- 002_hospital_kiosk.sql
 
--- 병원 통역 세션 (차트번호 기반)
 CREATE TABLE IF NOT EXISTS hospital_sessions (
   id TEXT PRIMARY KEY,
   room_id TEXT NOT NULL,
   chart_number TEXT NOT NULL,
   station_id TEXT DEFAULT 'default',
+  department TEXT,
   host_lang TEXT,
   guest_lang TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS hospital_sessions (
   ended_at TEXT
 );
 
--- 병원 대화 메시지 (영구 저장)
 CREATE TABLE IF NOT EXISTS hospital_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -27,9 +26,24 @@ CREATE TABLE IF NOT EXISTS hospital_messages (
   FOREIGN KEY (session_id) REFERENCES hospital_sessions(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS hospital_patients (
+  id TEXT PRIMARY KEY,
+  chart_number TEXT NOT NULL UNIQUE,
+  language TEXT NOT NULL DEFAULT 'en',
+  hospital_id TEXT DEFAULT 'default',
+  name TEXT,
+  phone TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_hospital_sessions_chart ON hospital_sessions(chart_number);
 CREATE INDEX IF NOT EXISTS idx_hospital_sessions_station ON hospital_sessions(station_id);
 CREATE INDEX IF NOT EXISTS idx_hospital_sessions_status ON hospital_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_hospital_sessions_dept ON hospital_sessions(department);
 CREATE INDEX IF NOT EXISTS idx_hospital_sessions_created ON hospital_sessions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hospital_messages_session ON hospital_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_hospital_messages_room ON hospital_messages(room_id);
+CREATE INDEX IF NOT EXISTS idx_hospital_patients_chart ON hospital_patients(chart_number);
+CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);

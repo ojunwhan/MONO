@@ -19,3 +19,10 @@ description: MONO 프로젝트 필수 규칙
 
 3. 배포 순서 준수
    - 수정 → 로컬 테스트 → 빌드 → 커밋 → 푸시 → PM2 재시작
+
+4. git commit / push 전 .env 보안 체크 (필수)
+   - 커밋 또는 푸시 전에 반드시 `.env`가 `.gitignore`에 포함되어 있는지 확인할 것
+   - 확인 명령어: `cat .gitignore | grep .env` (PowerShell: `Select-String -Pattern "\.env" -Path .gitignore`)
+   - `.env`가 `.gitignore`에 없으면 커밋을 중단하고 즉시 `.gitignore`에 추가할 것
+   - `.env`에는 OpenAI API 키, Groq API 키, Kakao API 키 등 민감정보가 포함되어 있으므로 절대 커밋하면 안 됨
+   - `git status`에서 `.env`가 추적 대상으로 나타나면 즉시 `git rm --cached .env` 실행
