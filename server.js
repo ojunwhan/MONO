@@ -2236,6 +2236,22 @@ io.on('connection', (socket) => {
       const peerPid = Object.keys(meta.participants || {}).find((pid) => pid !== userId);
       if (peerPid && meta.participants[peerPid]) {
         const peer = meta.participants[peerPid];
+        const myLang = meta.participants[userId]?.lang || "en";
+        let peerDisplayName = peer.adaptedNames?.[myLang] || peer.nativeName || "";
+        // Hospital mode: host always sees "환자" for guest
+        const isHospitalRejoin = String(meta.siteContext || "").startsWith("hospital_");
+        if (isHospitalRejoin && meta.ownerPid && userId === meta.ownerPid) {
+          peerDisplayName = "환자";
+        }
+        socket.emit("partner-info", {
+          roomId,
+          peerUserId: peerPid,
+          peerCanonicalName: peer.nativeName || "",
+          peerLocalizedName: peerDisplayName,
+          partnerName: peerDisplayName,
+          partnerNativeName: peer.nativeName || "",
+          peerLang: peer.lang || "en",
+        });
         socket.emit("partner-joined", {
           roomId,
           peerLang: peer.lang || "en",
@@ -2392,7 +2408,12 @@ io.on('connection', (socket) => {
         if (otherPid && m.participants[otherPid]) {
           const peer = m.participants[otherPid];
           const myLang = m.participants[participantId]?.lang || "en";
-          const adaptedName = peer.adaptedNames?.[myLang] || peer.nativeName || "";
+          let adaptedName = peer.adaptedNames?.[myLang] || peer.nativeName || "";
+          // Hospital mode: host always sees "환자" for guest
+          const isHospitalReconn = String(m.siteContext || "").startsWith("hospital_");
+          if (isHospitalReconn && m.ownerPid && participantId === m.ownerPid) {
+            adaptedName = "환자";
+          }
           socket.emit("partner-info", {
             roomId,
             peerUserId: otherPid,
@@ -2579,7 +2600,8 @@ io.on('connection', (socket) => {
         });
         const hostPid = meta.ownerPid;
         if (hostPid && hostPid !== participantId) {
-          const guestName = String(nativeName || localName || "Guest");
+          const isHospitalPush = String(meta.siteContext || "").startsWith("hospital_");
+          const guestName = isHospitalPush ? "환자" : String(nativeName || localName || "Guest");
           const guestLang = String(pLang || fromLang || "auto").toUpperCase();
           maybeSendPushToUser(
             hostPid,
@@ -2935,7 +2957,13 @@ io.on('connection', (socket) => {
 
         // Resolve sender display name for receiver's language
         const senderP = meta.participants[participantId];
-        const senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
+        let senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
+        // Hospital mode: host always sees guest as "환자"
+        const isHospitalMsg = String(meta.siteContext || "").startsWith("hospital_");
+        if (isHospitalMsg && meta.ownerPid && otherPid === meta.ownerPid) {
+          // otherPid is host (receiver) and sender is guest → host sees "환자"
+          senderDisplayName = "환자";
+        }
 
         let translated = finalText;
         if (fromLang !== toLang) {
@@ -3356,7 +3384,12 @@ io.on('connection', (socket) => {
       const toLang = otherP?.lang || "en";
 
       // Sender's display name adapted to receiver's language
-      const senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
+      let senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
+      // Hospital mode: host always sees guest as "환자"
+      const isHospitalMsg2 = String(meta.siteContext || "").startsWith("hospital_");
+      if (isHospitalMsg2 && meta.ownerPid && otherPid === meta.ownerPid) {
+        senderDisplayName = "환자";
+      }
 
       let draft = trimmedText;
       if (fromLang !== toLang) {
