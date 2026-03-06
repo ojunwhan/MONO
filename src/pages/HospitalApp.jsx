@@ -410,8 +410,8 @@ export default function HospitalApp() {
             </div>
           )}
 
-          {/* Records Button */}
-          <div className="mt-6 flex justify-center">
+          {/* Bottom Action Buttons */}
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
             <button
               type="button"
               onClick={() => navTo("/hospital/records")}
@@ -419,6 +419,14 @@ export default function HospitalApp() {
             >
               <ClipboardList size={16} />
               통역 기록 조회
+            </button>
+            <button
+              type="button"
+              onClick={() => navTo("/hospital-dashboard")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#3B82F6] text-[13px] font-medium text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F] transition-colors"
+            >
+              <ClipboardList size={16} />
+              관리 대시보드
             </button>
           </div>
 

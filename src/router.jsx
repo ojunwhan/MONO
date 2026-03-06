@@ -14,6 +14,7 @@ import TermsPage from "./pages/Terms";
 import PrivacyPage from "./pages/Privacy";
 import HospitalApp from "./pages/HospitalApp";
 import HospitalRecords from "./pages/HospitalRecords";
+import HospitalDashboard from "./pages/HospitalDashboard";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -91,6 +92,10 @@ const router = createBrowserRouter([
   {
     path: "/hospital/records",
     element: <HospitalRecords />,
+  },
+  {
+    path: "/hospital-dashboard",
+    element: <HospitalDashboard />,
   },
   {
     path: "/kiosk",

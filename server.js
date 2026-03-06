@@ -4128,6 +4128,139 @@ app.post('/api/hospital/message', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// HOSPITAL DASHBOARD — 통계 API
+// ═══════════════════════════════════════════════════════════════
+
+// GET /api/hospital/dashboard/stats — 대시보드 통계 개요
+app.get('/api/hospital/dashboard/stats', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const today = new Date().toISOString().split('T')[0];
+    const monthStart = today.substring(0, 7) + '-01';
+
+    // 오늘 통역 건수
+    const todayRow = await dbGet(
+      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE DATE(created_at) = ?`, [today]
+    );
+
+    // 이번 달 누적
+    const monthRow = await dbGet(
+      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE created_at >= ?`, [monthStart]
+    );
+
+    // 사용 언어 종류 수
+    const langRow = await dbGet(
+      `SELECT COUNT(DISTINCT guest_lang) as cnt FROM hospital_sessions WHERE guest_lang IS NOT NULL AND guest_lang != ''`
+    );
+
+    // 평균 통역 시간 (분)
+    const avgRow = await dbGet(
+      `SELECT AVG(
+         CASE WHEN ended_at IS NOT NULL AND created_at IS NOT NULL
+         THEN (julianday(ended_at) - julianday(created_at)) * 24 * 60
+         ELSE NULL END
+       ) as avg_min FROM hospital_sessions WHERE status = 'ended'`
+    );
+
+    // 최근 7일 일별 통역 건수
+    const dailyStats = await dbAll(
+      `SELECT DATE(created_at) as date, COUNT(*) as count
+       FROM hospital_sessions
+       WHERE created_at >= date('now', '-7 days')
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`
+    );
+
+    // 언어별 비율
+    const languageStats = await dbAll(
+      `SELECT guest_lang as language, COUNT(*) as count
+       FROM hospital_sessions
+       WHERE guest_lang IS NOT NULL AND guest_lang != ''
+       GROUP BY guest_lang
+       ORDER BY count DESC`
+    );
+
+    // 진료과별 현황
+    const deptStats = await dbAll(
+      `SELECT department, COUNT(*) as count,
+              SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+              COUNT(DISTINCT guest_lang) as lang_count
+       FROM hospital_sessions
+       WHERE department IS NOT NULL AND department != ''
+       GROUP BY department
+       ORDER BY count DESC`
+    );
+
+    res.json({
+      success: true,
+      todayCount: todayRow?.cnt || 0,
+      monthCount: monthRow?.cnt || 0,
+      languageCount: langRow?.cnt || 0,
+      avgDuration: avgRow?.avg_min ? +avgRow.avg_min.toFixed(1) : 0,
+      dailyStats,
+      languageStats,
+      deptStats,
+    });
+  } catch (e) {
+    console.error('[hospital:dashboard:stats]', e?.message);
+    res.status(500).json({ error: 'stats_query_failed' });
+  }
+});
+
+// GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (페이지네이션 + 필터)
+app.get('/api/hospital/dashboard/sessions', async (req, res) => {
+  try {
+    const { startDate, endDate, department, language, search, page: pg, limit: lim } = req.query;
+    const page = Math.max(1, Number(pg) || 1);
+    const limit = Math.min(100, Math.max(1, Number(lim) || 20));
+    const offset = (page - 1) * limit;
+
+    let where = '1=1';
+    const params = [];
+
+    if (startDate) { where += ' AND DATE(s.created_at) >= ?'; params.push(startDate); }
+    if (endDate) { where += ' AND DATE(s.created_at) <= ?'; params.push(endDate); }
+    if (department) { where += ' AND s.department = ?'; params.push(department); }
+    if (language) { where += ' AND (s.guest_lang = ? OR s.host_lang = ?)'; params.push(language, language); }
+    if (search) {
+      where += ' AND (s.chart_number LIKE ? OR s.room_id LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    // Total count
+    const countRow = await dbGet(
+      `SELECT COUNT(*) as total FROM hospital_sessions s WHERE ${where}`, params
+    );
+
+    // Sessions with message count
+    const sessions = await dbAll(
+      `SELECT s.*,
+              (SELECT COUNT(*) FROM hospital_messages m WHERE m.session_id = s.id) as message_count,
+              CASE WHEN s.ended_at IS NOT NULL AND s.created_at IS NOT NULL
+                THEN ROUND((julianday(s.ended_at) - julianday(s.created_at)) * 24 * 60, 1)
+                ELSE NULL END as duration_min
+       FROM hospital_sessions s
+       WHERE ${where}
+       ORDER BY s.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    res.json({
+      success: true,
+      sessions,
+      total: countRow?.total || 0,
+      page,
+      limit,
+      totalPages: Math.ceil((countRow?.total || 0) / limit),
+    });
+  } catch (e) {
+    console.error('[hospital:dashboard:sessions]', e?.message);
+    res.status(500).json({ error: 'sessions_query_failed' });
+  }
+});
+
 // GET /api/hospital/sessions — 차트번호로 세션 목록 조회
 app.get('/api/hospital/sessions', async (req, res) => {
   try {
