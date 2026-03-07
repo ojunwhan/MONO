@@ -139,6 +139,8 @@ export default function ChatScreen() {
   const isHospitalMode = String(effectiveSiteContext).startsWith("hospital_");
   const hospitalDept = location.state?.hospitalDept || null;
   const chartNumber = location.state?.chartNumber || "";
+  // 병원 모드에서 환자(게스트)가 보는 상대방 이름 — 나중에 병원 이름으로 교체 가능
+  const HOSPITAL_DISPLAY_NAME = hospitalDept?.labelKo || "병원";
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
@@ -703,7 +705,8 @@ export default function ChatScreen() {
 
     const onPartnerInfo = (payload) => {
       const { partnerName: pn, peerLocalizedName, peerUserId, peerLang } = payload || {};
-      const resolvedName = peerLocalizedName || pn;
+      // 병원 모드 게스트(환자)일 때 상대방 이름을 "병원"으로 고정 표시
+      const resolvedName = (isHospitalMode && roleHint === "guest") ? HOSPITAL_DISPLAY_NAME : (peerLocalizedName || pn);
       const nextPartnerFlag = getLanguageProfileByCode(peerLang)?.flagUrl || getFlagUrlByLang(peerLang) || partnerFlagRef.current;
       if (peerLang) setPartnerLang(peerLang);
       setPeerInfo((prev) => ({
