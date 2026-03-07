@@ -8,7 +8,9 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import QRCode from "react-qr-code";
+import QRCodeBox from "../components/QRCodeBox";
 import socket from "../socket";
+import { v4 as uuidv4 } from "uuid";
 import { playNotificationSound } from "../audio/notificationSound";
 import {
   ChevronLeft,
@@ -117,6 +119,13 @@ export default function HospitalApp() {
   const [saveMode, setSaveMode] = useState(false);
   const [copiedPhrase, setCopiedPhrase] = useState("");
 
+  // ── Normal mode: host creates room with QRCodeBox ──
+  const [normalRoomId, setNormalRoomId] = useState(() => uuidv4());
+  const [normalHostPid, setNormalHostPid] = useState(() => {
+    const pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+    return pid;
+  });
+
   // ── Summary ──
   const [summaryMessages, setSummaryMessages] = useState([]);
   const [summaryDept, setSummaryDept] = useState(null);
@@ -134,9 +143,9 @@ export default function HospitalApp() {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // ── URL에서 dept가 있으면 자동 세팅 (kiosk/staff 모드) ──
+  // ── URL에서 dept가 있으면 자동 세팅 (kiosk/staff/normal 모드) ──
   useEffect(() => {
-    if (urlDept && (mode === "kiosk" || mode === "staff")) {
+    if (urlDept && (mode === "kiosk" || mode === "staff" || mode === "normal")) {
       const dept = HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept);
       if (dept) {
         setSelectedDept(dept);
@@ -229,6 +238,113 @@ export default function HospitalApp() {
           setSelectedDept(null);
         }}
       />
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // MODE: NORMAL (기존 MONO 1:1 통역 + 병원 진료과 컨텍스트)
+  // 호스트가 QR 생성 → 상대방 스캔 → 1:1 통역 시작
+  // ═══════════════════════════════════════
+  if (mode === "normal" && selectedDept) {
+    const siteCtx = `hospital_${selectedDept.id}`;
+
+    const handleNormalNewSession = () => {
+      const newRoomId = uuidv4();
+      const newPid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+      setNormalRoomId(newRoomId);
+      setNormalHostPid(newPid);
+    };
+
+    return (
+      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+        <div className="mx-auto w-full max-w-[520px] px-4 py-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <HospitalLogo />
+            <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
+              1:1 통역 모드
+            </span>
+          </div>
+
+          {/* 진료과 정보 */}
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-[36px]">{selectedDept.icon}</span>
+            <div>
+              <h2 className="text-[18px] font-bold text-[var(--color-text)]">{selectedDept.labelKo}</h2>
+              <p className="text-[12px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
+            </div>
+          </div>
+
+          {/* 언어 선택 */}
+          <div className="mb-4">
+            <LanguageFlagPicker
+              selectedLang={selectedLang}
+              showGrid={showLangGrid}
+              onToggleGrid={() => setShowLangGrid((prev) => !prev)}
+              onSelect={(code) => {
+                setSelectedLang(code);
+                localStorage.setItem("myLang", code);
+                setShowLangGrid(false);
+              }}
+            />
+          </div>
+
+          {!showLangGrid && (
+            <>
+              {/* 컨텍스트 프롬프트 알림 */}
+              <div className="mb-4 px-3 py-2 rounded-[8px] bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                <p className="text-[11px] text-blue-600 dark:text-blue-400">
+                  🏥 병원 모드: <strong>{selectedDept.labelKo}</strong> 전문 의료 번역 프롬프트 적용 중
+                </p>
+                <p className="text-[10px] text-blue-500 mt-0.5">
+                  QR을 스캔하면 환자와 바로 1:1 통역이 시작됩니다
+                </p>
+              </div>
+
+              {/* 저장 모드 토글 */}
+              <div className="mb-4 flex items-center gap-3">
+                <button type="button" onClick={() => setSaveMode(!saveMode)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium transition-colors ${
+                    saveMode
+                      ? "bg-[#DBEAFE] text-[#1D4ED8] border border-[#3B82F6]"
+                      : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
+                  }`}>
+                  {saveMode ? <Shield size={14} /> : <ShieldOff size={14} />}
+                  {saveMode ? "대화 저장 ON" : "무기록 모드"}
+                </button>
+              </div>
+
+              {/* QRCodeBox — 기존 MONO 호스트 플로우 그대로 */}
+              <div className="flex flex-col items-center">
+                <QRCodeBox
+                  key={normalRoomId}
+                  roomId={normalRoomId}
+                  fromLang={selectedLang}
+                  participantId={normalHostPid}
+                  siteContext={siteCtx}
+                  role="Doctor"
+                  localName=""
+                  roomType="oneToOne"
+                  hospitalDept={selectedDept}
+                  saveMode={saveMode}
+                />
+              </div>
+
+              {/* 새 세션 버튼 */}
+              <div className="mt-6 flex justify-center">
+                <button type="button" onClick={handleNormalNewSession}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] transition-colors">
+                  <RotateCcw size={14} /> 새 QR 생성
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="mt-8 text-center">
+            <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
+          </div>
+        </div>
+      </div>
     );
   }
 

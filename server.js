@@ -519,6 +519,7 @@ const SITE_CONTEXT_PROMPTS = {
   hospital_dermatology: `You are a professional medical interpreter specializing in Dermatology. Translate accurately in the context of skin conditions. Prioritize precise translation of terms related to: rash, eczema, psoriasis, acne, moles, skin biopsy, dermatitis, hives, fungal infections, topical medications, UV exposure, skin cancer screening.`,
   hospital_ophthalmology: `You are a professional medical interpreter specializing in Ophthalmology. Translate accurately in the context of eye conditions. Prioritize precise translation of terms related to: visual acuity, cataracts, glaucoma, retinal conditions, intraocular pressure, eye drops, laser surgery, lens prescription, fundoscopy, OCT scan.`,
   hospital_dentistry: `You are a professional medical interpreter specializing in Dentistry. Translate accurately in the context of dental conditions. Prioritize precise translation of terms related to: cavity/caries, root canal, crown, bridge, extraction, implant, gum disease, scaling, filling, orthodontics, wisdom teeth, dental X-ray, local anesthesia.`,
+  hospital_plastic_surgery: `You are a professional medical interpreter specializing in Plastic and Cosmetic Surgery. Translate accurately in the context of cosmetic and reconstructive surgical consultations, pre/post-operative care, and aesthetic procedures. Prioritize precise translation of terms related to: rhinoplasty, blepharoplasty, facelift, liposuction, breast augmentation, botox, filler, laser treatment, skin rejuvenation, scar revision, jaw surgery, cheekbone reduction, fat grafting, thread lifting, recovery period, swelling, bruising, compression garments, follow-up appointments. Patient safety is the top priority — never omit or alter surgical instructions, medication dosages, or post-operative care guidelines.`,
 };
 
 // ───────────────── CALL SIGN SYSTEM (DETERMINISTIC — NO GPT) ─────────────────
@@ -541,6 +542,7 @@ const SITE_ROLES = {
   hospital_dermatology: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
   hospital_ophthalmology: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
   hospital_dentistry: ["Doctor", "Nurse", "Patient", "Hygienist", "Admin"],
+  hospital_plastic_surgery: ["Doctor", "Nurse", "Patient", "Consultant", "Admin"],
 };
 
 const ROLE_PHONETICS = {
