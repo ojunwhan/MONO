@@ -3994,12 +3994,27 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
-    // Step 2: Backfill department column if missing (existing DBs)
+    // Step 2: Backfill columns if missing (existing DBs)
     try {
       const cols = await dbAll("PRAGMA table_info(hospital_sessions)");
       if (!cols.some(c => c.name === 'department')) {
         await dbRun("ALTER TABLE hospital_sessions ADD COLUMN department TEXT");
-        console.log('[hospital] ✅ added department column');
+        console.log('[hospital] ✅ added department column to sessions');
+      }
+      if (!cols.some(c => c.name === 'patient_id')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN patient_id TEXT");
+        console.log('[hospital] ✅ added patient_id column to sessions');
+      }
+    } catch (_) {}
+    try {
+      const pcols = await dbAll("PRAGMA table_info(hospital_patients)");
+      if (!pcols.some(c => c.name === 'patient_id')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN patient_id TEXT");
+        console.log('[hospital] ✅ added patient_id column to patients');
+      }
+      if (!pcols.some(c => c.name === 'last_seen')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN last_seen TEXT");
+        console.log('[hospital] ✅ added last_seen column to patients');
       }
     } catch (_) {}
     // Step 3: Create indexes (after column backfill)
@@ -4013,6 +4028,9 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       CREATE INDEX IF NOT EXISTS idx_hospital_patients_chart ON hospital_patients(chart_number);
       CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);
     `);
+    // patient_id index (may fail if column doesn't exist yet on first run)
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_patients_pid ON hospital_patients(patient_id);`); } catch (_) {}
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_sessions_pid ON hospital_sessions(patient_id);`); } catch (_) {}
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages)');
 
     // ── API 사용량 통계 영속화 테이블 ──
@@ -4048,27 +4066,98 @@ const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, cre
 // POST /api/hospital/join — 환자가 QR 스캔 후 새 room 자동 생성
 app.post('/api/hospital/join', async (req, res) => {
   try {
-    const { department } = req.body || {};
+    const { department, patientId, language } = req.body || {};
     const dept = String(department || 'general').trim();
+    const pid = patientId ? String(patientId).trim() : null;
+    const lang = language ? String(language).trim() : null;
     const newRoomId = uuidv4();
     const createdAt = new Date().toISOString();
 
+    // If patientId provided, update last_seen
+    if (pid) {
+      try {
+        await dbRun(
+          `UPDATE hospital_patients SET last_seen = datetime('now') WHERE patient_id = ?`,
+          [pid]
+        );
+      } catch (_) {}
+    }
+
     // Add to waiting list for this department
     if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
-    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt });
+    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang });
 
     // Notify all staff watching this department via socket
     io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', {
       roomId: newRoomId,
       department: dept,
       createdAt,
+      patientId: pid,
+      language: lang,
     });
 
-    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId}`);
+    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} pid=${pid || 'new'}`);
     res.json({ success: true, roomId: newRoomId, department: dept, createdAt });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
     res.status(500).json({ error: 'join_failed' });
+  }
+});
+
+// POST /api/hospital/patient — 환자 고유번호로 등록 (QR 첫 스캔 시)
+app.post('/api/hospital/patient', async (req, res) => {
+  try {
+    const { patientId, language } = req.body || {};
+    if (!patientId) return res.status(400).json({ error: 'patient_id_required' });
+    const pid = String(patientId).trim();
+    const lang = String(language || 'en').trim();
+
+    // Check if already exists
+    const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+    if (existing) {
+      // Update language + last_seen
+      await dbRun(
+        `UPDATE hospital_patients SET language = ?, last_seen = datetime('now'), updated_at = datetime('now') WHERE patient_id = ?`,
+        [lang, pid]
+      );
+      const updated = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+      return res.json({ success: true, patient: updated, isNew: false });
+    }
+
+    // New registration
+    const id = uuidv4();
+    await dbRun(
+      `INSERT INTO hospital_patients (id, chart_number, patient_id, language, last_seen)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [id, pid, pid, lang]
+    );
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE id = ?', [id]);
+    console.log(`[hospital] 👤 Patient registered: pid=${pid} lang=${lang}`);
+    res.json({ success: true, patient, isNew: true });
+  } catch (e) {
+    console.error('[hospital:patient] register error:', e?.message);
+    res.status(500).json({ error: 'patient_register_failed' });
+  }
+});
+
+// GET /api/hospital/patient/:patientId — 환자 고유번호로 조회
+app.get('/api/hospital/patient/:patientId', async (req, res) => {
+  try {
+    const pid = String(req.params.patientId).trim();
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+    if (!patient) return res.json({ success: true, found: false });
+
+    // Fetch recent sessions
+    const sessions = await dbAll(
+      `SELECT id, room_id, department, host_lang, guest_lang, status, created_at, ended_at
+       FROM hospital_sessions WHERE patient_id = ? ORDER BY created_at DESC LIMIT 10`,
+      [pid]
+    );
+
+    res.json({ success: true, found: true, patient, sessions });
+  } catch (e) {
+    console.error('[hospital:patient] lookup error:', e?.message);
+    res.status(500).json({ error: 'patient_lookup_failed' });
   }
 });
 
@@ -4097,7 +4186,7 @@ app.delete('/api/hospital/waiting/:roomId', (req, res) => {
 // POST /api/hospital/session — 직원이 병원 세션 생성
 app.post('/api/hospital/session', async (req, res) => {
   try {
-    const { chartNumber, stationId, hostLang, roomId, department, guestLang } = req.body || {};
+    const { chartNumber, stationId, hostLang, roomId, department, guestLang, patientId } = req.body || {};
     if (!chartNumber || !/^\d+$/.test(String(chartNumber).trim())) {
       return res.status(400).json({ error: 'chart_number_required', message: '차트번호는 숫자만 입력하세요.' });
     }
@@ -4108,11 +4197,12 @@ app.post('/api/hospital/session', async (req, res) => {
     const lang = String(hostLang || 'ko').trim();
     const dept = String(department || '').trim() || null;
     const gLang = String(guestLang || '').trim() || null;
+    const pid = patientId ? String(patientId).trim() : null;
 
     await dbRun(
-      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, department, host_lang, guest_lang, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-      [sessionId, rid, cleanChart, station, dept, lang, gLang]
+      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, department, host_lang, guest_lang, patient_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [sessionId, rid, cleanChart, station, dept, lang, gLang, pid]
     );
 
     // Register kiosk station mapping

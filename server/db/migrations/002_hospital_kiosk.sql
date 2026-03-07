@@ -1,10 +1,11 @@
 -- 002_hospital_kiosk.sql — 병원 키오스크 + 환자 등록 시스템
 
--- 병원 통역 세션 (차트번호 기반)
+-- 병원 통역 세션 (차트번호 + 환자 고유번호 기반)
 CREATE TABLE IF NOT EXISTS hospital_sessions (
   id TEXT PRIMARY KEY,
   room_id TEXT NOT NULL,
   chart_number TEXT NOT NULL,
+  patient_id TEXT,
   station_id TEXT DEFAULT 'default',
   department TEXT,
   host_lang TEXT,
@@ -28,15 +29,17 @@ CREATE TABLE IF NOT EXISTS hospital_messages (
   FOREIGN KEY (session_id) REFERENCES hospital_sessions(id) ON DELETE CASCADE
 );
 
--- 환자 등록 DB (차트번호 기반, EMR 연동 대비 구조)
+-- 환자 등록 DB (차트번호 + 환자 고유번호 기반, EMR 연동 대비 구조)
 CREATE TABLE IF NOT EXISTS hospital_patients (
   id TEXT PRIMARY KEY,
   chart_number TEXT NOT NULL UNIQUE,
+  patient_id TEXT,
   language TEXT NOT NULL DEFAULT 'en',
   hospital_id TEXT DEFAULT 'default',
   name TEXT,
   phone TEXT,
   notes TEXT,
+  last_seen TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -49,7 +52,9 @@ CREATE INDEX IF NOT EXISTS idx_hospital_sessions_created ON hospital_sessions(cr
 CREATE INDEX IF NOT EXISTS idx_hospital_messages_session ON hospital_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_hospital_messages_room ON hospital_messages(room_id);
 CREATE INDEX IF NOT EXISTS idx_hospital_patients_chart ON hospital_patients(chart_number);
+CREATE INDEX IF NOT EXISTS idx_hospital_patients_pid ON hospital_patients(patient_id);
 CREATE INDEX IF NOT EXISTS idx_hospital_patients_hospital ON hospital_patients(hospital_id);
+CREATE INDEX IF NOT EXISTS idx_hospital_sessions_pid ON hospital_sessions(patient_id);
 
 -- API 사용량 일별 통계 (서버 재시작 시 복원용)
 CREATE TABLE IF NOT EXISTS api_usage_daily (
