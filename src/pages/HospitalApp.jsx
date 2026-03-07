@@ -214,7 +214,7 @@ export default function HospitalApp() {
           <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
 
-        {/* QR — 태블릿은 QR만 표시, 채팅방 절대 열리지 않음 */}
+        {/* QR — 태블릿은 QR만 표시, 소켓 join 안 함, 채팅방 절대 열리지 않음 */}
         <QRCodeBox
           key={roomId}
           roomId={roomId}
@@ -226,6 +226,7 @@ export default function HospitalApp() {
           roomType="oneToOne"
           hospitalDept={selectedDept}
           saveMode={saveMode}
+          kioskOnly={true}
           onGuestJoined={({ roomId: rid, reason }) => {
             // 태블릿은 QR만 표시 — 채팅방으로 절대 이동하지 않음
             console.log(`[KIOSK] Guest joined room=${rid} reason=${reason} — staying on QR screen (kiosk mode)`);
@@ -774,7 +775,7 @@ function StaffModePanel({
     };
   }, [roomId]);
 
-  // ── 통역 시작 (채팅방 입장) ──
+  // ── 통역 시작 (채팅방 입장 — 직원은 호스트로 입장) ──
   const handleStartInterpretation = (patient) => {
     localStorage.setItem("myLang", selectedLang);
     const targetRoomId = patient?.roomId || roomId;
@@ -783,7 +784,7 @@ function StaffModePanel({
         fromLang: selectedLang,
         localName: "",
         role: "Doctor",
-        isCreator: false,
+        isCreator: true,      // 직원 = 호스트 (마이크/채팅 입력 활성화)
         siteContext: `hospital_${selectedDept.id}`,
         roomType: "oneToOne",
         hospitalDept: selectedDept,
