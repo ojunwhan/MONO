@@ -2099,19 +2099,29 @@ io.on('connection', (socket) => {
     const ctx = siteContext || "general";
     const hostRole = role || "Manager";
     const rType = roomType === "broadcast" ? "broadcast" : "oneToOne";
-    const meta = {
-      roomType: rType,
-      ownerLang: hostLangCode,
-      guestLang: "auto",
-      siteContext: ctx,
-      locked: true,
-      ownerPid: participantId || null,
-      // Hospital mode metadata (only if hospital session)
-      ...(chartNumber ? { chartNumber: String(chartNumber), stationId: stationId || 'default', hospitalSessionId: hospitalSessionId || null, sessionType: 'hospital' } : {}),
-      participants: {},
-      callSignCounters: {},
+
+    // If room already exists (e.g. hospital fixed roomId), reuse it — just update this participant
+    let meta;
+    if (roomAlreadyExists) {
+      meta = ROOMS.get(roomId);
+      // Update owner info if this is the creator reconnecting
+      meta.ownerLang = hostLangCode;
+      meta.siteContext = ctx;
+      meta.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+    } else {
+      meta = {
+        roomType: rType,
+        ownerLang: hostLangCode,
+        guestLang: "auto",
+        siteContext: ctx,
+        locked: true,
+        ownerPid: participantId || null,
+        ...(chartNumber ? { chartNumber: String(chartNumber), stationId: stationId || 'default', hospitalSessionId: hospitalSessionId || null, sessionType: 'hospital' } : {}),
+        participants: {},
+        callSignCounters: {},
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    };
+      };
+    }
 
     if (participantId) {
       leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
@@ -2128,7 +2138,7 @@ io.on('connection', (socket) => {
       socket.roomId = roomId;
       socket.data.participantId = participantId;
       SOCKET_ROLES.set(socket.id, { role: "owner" });
-      console.log(`🏠 Host ${socket.id} [${callSign}] created room: ${roomId} [${hostLangCode}] [${ctx}]`);
+      console.log(`🏠 Host ${socket.id} [${callSign}] ${roomAlreadyExists ? 're-joined' : 'created'} room: ${roomId} [${hostLangCode}] [${ctx}]`);
       socket.emit("call-sign-assigned", { callSign, siteContext: ctx });
     }
 

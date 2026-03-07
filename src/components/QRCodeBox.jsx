@@ -5,7 +5,7 @@ import socket from "../socket";
 import { useTranslation } from "react-i18next";
 import { playNotificationSound } from "../audio/notificationSound";
 
-const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, hospitalDept, saveMode }) => {
+const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, hospitalDept, saveMode, onGuestJoined }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const movedRef = useRef(false);
@@ -173,6 +173,14 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       notifyNative(t("interpret.guestJoined"), t("nav.chat"));
       playNotificationSound();
       setGuestJoined(true);
+
+      // If onGuestJoined callback is provided, call it instead of navigating
+      // (used by kiosk mode to stay on QR screen)
+      if (onGuestJoined) {
+        onGuestJoined({ roomId: roomIdRef.current, reason });
+        return;
+      }
+
       movedRef.current = true;
       navigate(`/room/${roomIdRef.current}`, {
         state: {
