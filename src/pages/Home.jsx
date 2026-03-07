@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate, useLocation } from "react-router-dom";
 import QRCodeBox from "../components/QRCodeBox";
 import { LANGUAGE_PROFILES, detectUserLanguage, getLanguageProfileByCode } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
-import { ChevronLeft, Hospital, X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { fetchAuthMe } from "../auth/session";
 import { useTranslation } from "react-i18next";
@@ -45,14 +45,6 @@ export default function Home() {
   const [hostPid, setHostPid] = useState("");
   const [isGuest, setIsGuest] = useState(false);
   const autoGuestStartRef = useRef(false);
-
-  // ── Hospital Mode ──
-  const [hospitalMode, setHospitalMode] = useState(() => localStorage.getItem("hospitalMode") === "true");
-  const [chartNumber, setChartNumber] = useState("");
-  const [stationId] = useState(() => localStorage.getItem("hospitalStation") || "default");
-  const [hospitalSession, setHospitalSession] = useState(null);
-  const [hospitalLoading, setHospitalLoading] = useState(false);
-  const [hospitalError, setHospitalError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -99,71 +91,6 @@ export default function Home() {
     }
     setHostPid(pid);
   }, [authOk, authReady, location.search]);
-
-  // ── Hospital: toggle & create session ──
-  const toggleHospitalMode = useCallback(() => {
-    const next = !hospitalMode;
-    setHospitalMode(next);
-    localStorage.setItem("hospitalMode", String(next));
-    if (!next) {
-      setHospitalSession(null);
-      setChartNumber("");
-      setHospitalError("");
-    }
-  }, [hospitalMode]);
-
-  const createHospitalSession = useCallback(async () => {
-    if (!chartNumber.trim() || !/^\d+$/.test(chartNumber.trim())) {
-      setHospitalError(t("hospital.chartNumberInvalid", "차트번호는 숫자만 입력하세요."));
-      return;
-    }
-    setHospitalLoading(true);
-    setHospitalError("");
-    try {
-      const newRoomId = uuidv4();
-      const res = await fetch("/api/hospital/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chartNumber: chartNumber.trim(),
-          stationId,
-          hostLang: selectedLang,
-          roomId: newRoomId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "failed");
-      setHospitalSession(data);
-      setRoomId(data.roomId);
-      const pidKey = `mro.pid.${data.roomId}`;
-      let pid = localStorage.getItem(pidKey);
-      if (!pid) {
-        pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
-        localStorage.setItem(pidKey, pid);
-      }
-      setHostPid(pid);
-    } catch (e) {
-      setHospitalError(e?.message || "세션 생성 실패");
-    } finally {
-      setHospitalLoading(false);
-    }
-  }, [chartNumber, stationId, selectedLang, t]);
-
-  const endHospitalSession = useCallback(async () => {
-    if (!hospitalSession?.sessionId) return;
-    try {
-      await fetch(`/api/hospital/session/${hospitalSession.sessionId}/end`, { method: "POST" });
-    } catch {}
-    setHospitalSession(null);
-    setChartNumber("");
-    // Generate new room for next patient
-    const newRoomId = uuidv4();
-    setRoomId(newRoomId);
-    const pidKey = `mro.pid.${newRoomId}`;
-    const pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
-    localStorage.setItem(pidKey, pid);
-    setHostPid(pid);
-  }, [hospitalSession]);
 
   const handleHostLangChange = (code) => {
     setSelectedLang(code);
@@ -245,75 +172,6 @@ export default function Home() {
           />
         </div>
 
-        {/* ── Hospital Mode Toggle (Host only) ── */}
-        {!isGuest && !showLangGrid ? (
-          <div className="mt-4 w-full max-w-[360px]">
-            <button
-              type="button"
-              onClick={toggleHospitalMode}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium transition-colors ${
-                hospitalMode
-                  ? "bg-[#DBEAFE] text-[#1D4ED8] border border-[#3B82F6]"
-                  : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
-              }`}
-            >
-              <Hospital size={16} />
-              {t("hospital.mode", "병원 모드")}
-              {hospitalMode && <span className="ml-1 text-[10px]">ON</span>}
-            </button>
-
-            {hospitalMode && !hospitalSession ? (
-              <div className="mt-3 p-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)]">
-                <label className="block text-[13px] font-medium text-[var(--color-text)] mb-2">
-                  {t("hospital.chartNumber", "차트번호")}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={chartNumber}
-                    onChange={(e) => setChartNumber(e.target.value.replace(/\D/g, ""))}
-                    placeholder={t("hospital.chartPlaceholder", "차트번호 입력")}
-                    className="flex-1 h-[44px] px-3 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[15px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={createHospitalSession}
-                    disabled={hospitalLoading || !chartNumber.trim()}
-                    className="h-[44px] px-4 rounded-[8px] bg-[#3B82F6] text-white text-[14px] font-medium disabled:opacity-50"
-                  >
-                    {hospitalLoading ? "..." : t("hospital.startSession", "세션 시작")}
-                  </button>
-                </div>
-                {hospitalError && <p className="mt-2 text-[12px] text-red-500">{hospitalError}</p>}
-                <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
-                  {t("hospital.stationLabel", "창구")}: {stationId}
-                </p>
-              </div>
-            ) : hospitalMode && hospitalSession ? (
-              <div className="mt-3 p-4 rounded-[12px] border border-[#3B82F6] bg-[#EFF6FF]">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13px] font-medium text-[#1D4ED8]">
-                    🏥 {t("hospital.activeSession", "진료 중")} — {t("hospital.chartNumber", "차트번호")}: {hospitalSession.chartNumber}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={endHospitalSession}
-                    className="w-7 h-7 rounded-full flex items-center justify-center bg-red-100 text-red-500 hover:bg-red-200"
-                    title={t("hospital.endSession", "세션 종료")}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                <p className="text-[11px] text-[#1D4ED8]">
-                  {t("hospital.stationLabel", "창구")}: {hospitalSession.stationId} | ID: {hospitalSession.sessionId?.substring(0, 8)}...
-                </p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
         {!isGuest && !showLangGrid ? (
           <div className="mt-6 w-full flex flex-col items-center">
             {!!roomId && !!hostPid && (
@@ -322,13 +180,10 @@ export default function Home() {
                 roomId={roomId}
                 fromLang={selectedLang}
                 participantId={hostPid}
-                siteContext={hospitalMode ? "hospital_general" : "general"}
+                siteContext="general"
                 role="Manager"
                 localName=""
                 roomType="oneToOne"
-                chartNumber={hospitalSession?.chartNumber || ""}
-                stationId={hospitalSession?.stationId || ""}
-                hospitalSessionId={hospitalSession?.sessionId || ""}
               />
             )}
           </div>

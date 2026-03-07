@@ -89,10 +89,9 @@ export default function GuestJoinPage() {
     return getLanguageByCode(preferred)?.code || "";
   }, []);
   const [selectedLang, setSelectedLang] = useState(savedLang || detectBrowserLanguage());
-  // 항상 언어 선택 그리드를 보여줌 — 게스트는 매번 본인 언어를 확인/선택해야 함
-  const [showLangGrid, setShowLangGrid] = useState(true);
-  // 언어 선택 완료 여부 (그리드에서 국기를 탭해야 true)
-  const [langConfirmed, setLangConfirmed] = useState(false);
+  // 저장된 언어가 있으면 그리드 닫고 바로 입장 버튼 표시
+  const [showLangGrid, setShowLangGrid] = useState(!savedLang);
+  const [langConfirmed, setLangConfirmed] = useState(!!savedLang);
 
   const siteContext = useMemo(() => searchParams.get("siteContext") || "general", [searchParams]);
   const roomType = useMemo(() => searchParams.get("roomType") || "oneToOne", [searchParams]);
