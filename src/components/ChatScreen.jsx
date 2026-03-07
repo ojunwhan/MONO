@@ -138,6 +138,7 @@ export default function ChatScreen() {
   const effectiveSiteContext = location.state?.siteContext || querySiteContext || "";
   const isHospitalMode = String(effectiveSiteContext).startsWith("hospital_");
   const hospitalDept = location.state?.hospitalDept || null;
+  const chartNumber = location.state?.chartNumber || "";
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
@@ -1088,7 +1089,7 @@ export default function ChatScreen() {
     cancelSpeech();
     socket.emit("manual-leave");
     if (isHospitalMode) {
-      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
+      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200), hospitalDept, chartNumber } });
     } else {
       navigate("/home");
     }

@@ -134,8 +134,8 @@ export default function HospitalApp() {
     if (location.state?.returnFromSession) {
       const msgs = location.state?.messages || [];
       setSummaryMessages(msgs);
-      setSummaryDept(selectedDept);
-      setSummaryChart(chartNumber);
+      setSummaryDept(location.state?.hospitalDept || selectedDept);
+      setSummaryChart(location.state?.chartNumber || chartNumber);
       if (msgs.length > 0) {
         setStep("summary");
       } else {

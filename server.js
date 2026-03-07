@@ -83,6 +83,9 @@ const ERROR_ALERT_STATE = new Map();
 function resetDailyStats() {
   const today = new Date().toISOString().split('T')[0];
   if (usageStats.date !== today) {
+    // ── 날짜 변경 전 이전 날짜 데이터를 먼저 DB에 저장 ──
+    const previousDate = usageStats.date;
+    persistUsageStats(previousDate);
     usageStats.date = today;
     usageStats.totalVisits = 0;
     usageStats.uniqueIPs = new Set();
@@ -101,8 +104,6 @@ function resetDailyStats() {
     usageStats.openaiSttRequests = 0;
     usageStats.openaiTranslations = 0;
     usageStats.openaiTtsRequests = 0;
-    // ── 날짜 변경 전 이전 날짜 DB에 최종 저장 ──
-    persistUsageStats(usageStats.date === today ? null : usageStats.date);
     usageStats.errorCount = 0;
     usageStats.errors = [];
   }
@@ -507,6 +508,7 @@ const SITE_CONTEXT_PROMPTS = {
   general: `Domain: General workplace. Clear, professional, direct language.`,
 
   // ── Hospital Department-Specific Prompts ──
+  hospital_reception: `You are a professional medical interpreter working at a hospital reception and registration desk. Translate accurately in the context of hospital admission, registration, and general patient guidance. Prioritize precise translation of terms related to: patient registration, insurance, identification, appointment scheduling, waiting area, medical history forms, consent forms, referral letters, copayment, hospital departments, directions within the hospital. Use polite, welcoming, and clear language appropriate for first-time or confused patients. Help patients understand hospital procedures, required documents, and navigation. Patient comfort and understanding are the top priority — use simple, reassuring language.`,
   hospital_internal: `You are a professional medical interpreter specializing in Internal Medicine. Translate accurately in the context of internal medicine consultations. Prioritize precise translation of terms related to: heart conditions, blood pressure, diabetes, digestive disorders, liver/kidney function, cholesterol, blood tests, ECG, endoscopy. Medical terms must be translated using standard medical terminology in the target language. Patient safety is the top priority — never omit or alter dosage, medication names, or critical instructions. Maintain a professional, calm, and reassuring tone appropriate for doctor-patient communication.`,
   hospital_surgery: `You are a professional medical interpreter specializing in Surgery. Translate accurately in the context of surgical consultations and pre/post-operative care. Prioritize precise translation of terms related to: surgical procedures, anesthesia, incision, sutures, drainage, wound care, recovery, complications, consent forms. Medical terms must use standard surgical terminology in the target language. Patient safety is the top priority — never omit or alter surgical instructions, medication dosages, or post-operative care instructions.`,
   hospital_emergency: `You are an EMERGENCY medical interpreter. Speed and accuracy are critical. This is an emergency medical situation. Translate quickly and precisely. Life-threatening terms must be translated with absolute priority: myocardial infarction, stroke, cardiac arrest, airway obstruction, hemorrhage, shock, anaphylaxis, seizure, fracture, burns, poisoning. Use short, direct sentences. No ambiguity allowed. NEVER delay or ask for clarification — always provide best-effort translation immediately.`,
@@ -528,6 +530,7 @@ const SITE_ROLES = {
   airport_event: ["Manager", "Lead", "Security", "Operator", "Guide"],
   general: ["Manager", "Lead", "Tech", "Operator", "Staff"],
   // Hospital departments share the same roles
+  hospital_reception: ["Admin", "Nurse", "Patient", "Guide", "Staff"],
   hospital_internal: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
   hospital_surgery: ["Doctor", "Nurse", "Patient", "Tech", "Admin"],
   hospital_emergency: ["Doctor", "Nurse", "Patient", "Paramedic", "Tech"],
