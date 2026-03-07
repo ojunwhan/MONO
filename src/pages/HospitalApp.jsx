@@ -183,21 +183,28 @@ export default function HospitalApp() {
   }, [chartNumber, selectedLang]);
 
   // ── Socket: watch department for waiting patients (PC) ──
+  // When no dept selected → watch ALL departments
+  // When dept selected → watch that specific dept (+ keep __all__ for transition)
   useEffect(() => {
-    if (!isPC || !selectedDept) return;
-    const dept = selectedDept.id;
+    if (!isPC) return;
 
-    // Unwatch previous
-    if (watchedDeptRef.current && watchedDeptRef.current !== dept) {
+    const dept = selectedDept?.id || null;
+    const watchChannel = dept || "__all__";
+
+    // Unwatch previous if changed
+    if (watchedDeptRef.current && watchedDeptRef.current !== watchChannel) {
       socket.emit("hospital:unwatch", { department: watchedDeptRef.current });
     }
 
-    // Watch new department
-    socket.emit("hospital:watch", { department: dept });
-    watchedDeptRef.current = dept;
+    // Watch new channel
+    socket.emit("hospital:watch", { department: watchChannel });
+    watchedDeptRef.current = watchChannel;
 
-    // Also fetch current waiting list via API
-    fetch(`/api/hospital/waiting?department=${encodeURIComponent(dept)}`)
+    // Fetch current waiting list via API
+    const apiUrl = dept
+      ? `/api/hospital/waiting?department=${encodeURIComponent(dept)}`
+      : `/api/hospital/waiting`;
+    fetch(apiUrl)
       .then((r) => r.json())
       .then((data) => {
         if (data.success) setWaitingPatients(data.waiting || []);
@@ -205,19 +212,16 @@ export default function HospitalApp() {
       .catch(() => {});
 
     const onPatientWaiting = (data) => {
-      if (data.department === dept) {
-        setWaitingPatients((prev) => {
-          // Avoid duplicates
-          if (prev.some((p) => p.roomId === data.roomId)) return prev;
-          return [...prev, data];
-        });
-      }
+      // If watching a specific dept, filter by it; otherwise accept all
+      if (dept && data.department !== dept) return;
+      setWaitingPatients((prev) => {
+        if (prev.some((p) => p.roomId === data.roomId)) return prev;
+        return [...prev, data];
+      });
     };
 
     const onPatientPicked = (data) => {
-      if (data.department === dept) {
-        setWaitingPatients((prev) => prev.filter((p) => p.roomId !== data.roomId));
-      }
+      setWaitingPatients((prev) => prev.filter((p) => p.roomId !== data.roomId));
     };
 
     socket.on("hospital:patient-waiting", onPatientWaiting);
@@ -255,8 +259,7 @@ export default function HospitalApp() {
       const newRoomId = generateRoom();
       createHospitalSession(newRoomId, dept);
     } else {
-      // PC: just select dept, show waiting patients
-      setWaitingPatients([]);
+      // PC: dept selected — useEffect will re-fetch waiting patients for this dept
     }
   };
 
@@ -337,6 +340,9 @@ export default function HospitalApp() {
   // ── Start interpretation with waiting patient (PC) ──
   const handleStartInterpretation = useCallback(async (patient) => {
     const rid = patient.roomId;
+    const patientDept = patient.department || selectedDept?.id || "general";
+    const deptObj = HOSPITAL_DEPARTMENTS.find((d) => d.id === patientDept) || selectedDept;
+
     // Remove from waiting list
     try {
       await fetch(`/api/hospital/waiting/${encodeURIComponent(rid)}`, { method: "DELETE" });
@@ -358,9 +364,9 @@ export default function HospitalApp() {
         localName: "",
         role: "Doctor",
         isCreator: true,
-        siteContext: `hospital_${selectedDept?.id || "general"}`,
+        siteContext: `hospital_${patientDept}`,
         roomType: "oneToOne",
-        hospitalDept: selectedDept,
+        hospitalDept: deptObj,
         saveMode,
       },
     });
@@ -676,19 +682,79 @@ export default function HospitalApp() {
           </div>
         </>
       ) : (
-        /* Empty State — no dept selected yet */
-        <div className="flex flex-col items-center justify-center h-full">
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[var(--color-border)] flex items-center justify-center opacity-40">
-            <QrCode size={48} strokeWidth={1} />
+        /* No dept selected — show all waiting patients */
+        <div className="flex flex-col h-full">
+          <div className="text-center mb-6 pt-4">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--color-border)] flex items-center justify-center opacity-40">
+              <QrCode size={40} strokeWidth={1} />
+            </div>
+            <h3 className="text-[18px] font-semibold text-[var(--color-text)] mb-1 opacity-60">
+              진료과를 선택하세요
+            </h3>
+            <p className="text-[12px] text-[var(--color-text-secondary)] opacity-50 text-center">
+              왼쪽에서 진료과를 선택하면 상세 정보가 표시됩니다
+            </p>
           </div>
-          <h3 className="text-[20px] font-semibold text-[var(--color-text)] mb-2 opacity-60">
-            진료과를 선택하세요
-          </h3>
-          <p className="text-[13px] text-[var(--color-text-secondary)] opacity-50 text-center">
-            왼쪽에서 진료과를 선택하면
-            <br />
-            대기 환자 목록이 여기에 표시됩니다
-          </p>
+
+          {/* All waiting patients across departments */}
+          <div className="flex-1 mt-2">
+            <div className="w-full border-t border-[var(--color-border)] mb-4" />
+            <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
+              <UserCheck size={18} className="text-[#3B82F6]" />
+              전체 대기 환자
+              {waitingPatients.length > 0 && (
+                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-[#EF4444] text-white text-[12px] font-bold animate-pulse">
+                  {waitingPatients.length}
+                </span>
+              )}
+            </h3>
+
+            {waitingPatients.length === 0 ? (
+              <div className="text-center py-8">
+                <Clock size={20} className="mx-auto mb-2 text-[var(--color-text-secondary)] opacity-40" />
+                <p className="text-[13px] text-[var(--color-text-secondary)]">
+                  현재 대기 중인 환자가 없습니다
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {waitingPatients.map((patient, i) => {
+                  const deptInfo = HOSPITAL_DEPARTMENTS.find((d) => d.id === patient.department);
+                  return (
+                    <div
+                      key={patient.roomId}
+                      className="flex items-center justify-between p-4 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#EFF6FF] dark:bg-[#1E3A5F] flex items-center justify-center text-[20px]">
+                          {deptInfo?.icon || "🏥"}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-medium text-[var(--color-text)]">
+                            환자 #{i + 1}
+                            <span className="ml-2 text-[11px] text-[#3B82F6] font-normal">
+                              {deptInfo?.labelKo || patient.department}
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                            <Clock size={10} />
+                            {timeAgo(patient.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleStartInterpretation(patient)}
+                        className="px-4 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] transition-colors"
+                      >
+                        통역 시작
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

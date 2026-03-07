@@ -4088,13 +4088,10 @@ app.post('/api/hospital/join', async (req, res) => {
     HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang });
 
     // Notify all staff watching this department via socket
-    io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', {
-      roomId: newRoomId,
-      department: dept,
-      createdAt,
-      patientId: pid,
-      language: lang,
-    });
+    const waitingData = { roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang };
+    io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
+    // Also notify staff watching ALL departments
+    io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
 
     console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} pid=${pid || 'new'}`);
     res.json({ success: true, roomId: newRoomId, department: dept, createdAt });
@@ -4161,9 +4158,19 @@ app.get('/api/hospital/patient/:patientId', async (req, res) => {
   }
 });
 
-// GET /api/hospital/waiting — 특정 진료과 대기 환자 목록 조회
+// GET /api/hospital/waiting — 대기 환자 목록 조회 (department 없으면 전체)
 app.get('/api/hospital/waiting', (req, res) => {
-  const dept = String(req.query.department || 'general').trim();
+  const dept = req.query.department ? String(req.query.department).trim() : null;
+  if (!dept || dept === 'all') {
+    // Return ALL waiting patients across all departments
+    const all = [];
+    for (const [d, list] of HOSPITAL_WAITING.entries()) {
+      all.push(...list);
+    }
+    // Sort by createdAt ascending
+    all.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return res.json({ success: true, department: 'all', waiting: all });
+  }
   const list = HOSPITAL_WAITING.get(dept) || [];
   res.json({ success: true, department: dept, waiting: list });
 });
@@ -4177,6 +4184,7 @@ app.delete('/api/hospital/waiting/:roomId', (req, res) => {
       list.splice(idx, 1);
       // Notify watchers that patient was picked up
       io.to(`hospital:watch:${dept}`).emit('hospital:patient-picked', { roomId, department: dept });
+      io.to('hospital:watch:__all__').emit('hospital:patient-picked', { roomId, department: dept });
       return res.json({ success: true });
     }
   }
@@ -4477,11 +4485,20 @@ io.on('connection', (kioskSocket) => {
     console.log(`[hospital:watch] 👁️ Staff watching dept=${department} (socket=${kioskSocket.id})`);
 
     // Send current waiting list immediately
-    const waiting = HOSPITAL_WAITING.get(department) || [];
-    if (waiting.length > 0) {
-      waiting.forEach(w => {
-        kioskSocket.emit('hospital:patient-waiting', w);
-      });
+    if (department === '__all__') {
+      // Send ALL waiting patients across all departments
+      for (const [d, list] of HOSPITAL_WAITING.entries()) {
+        list.forEach(w => {
+          kioskSocket.emit('hospital:patient-waiting', w);
+        });
+      }
+    } else {
+      const waiting = HOSPITAL_WAITING.get(department) || [];
+      if (waiting.length > 0) {
+        waiting.forEach(w => {
+          kioskSocket.emit('hospital:patient-waiting', w);
+        });
+      }
     }
   });
 
