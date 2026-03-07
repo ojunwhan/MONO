@@ -2570,50 +2570,47 @@ io.on('connection', (socket) => {
     }
 
     // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
-    // ⚠️ 병원 고정방(hospital_default_*)은 broadcast 전환 제외 — 항상 1:1 유지
-    const isHospitalFixedRoom = String(roomId).startsWith("hospital_default_");
     if (meta.roomType === "oneToOne") {
-      const currentPids = Object.keys(meta.participants);
-      const isReconnect = currentPids.includes(participantId);
-
-      // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
-      if (!isReconnect && currentPids.length >= 2) {
-        const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-        const offlineGuestPids = currentPids.filter(pid => {
-          if (pid === meta.ownerPid) return false; // 호스트는 절대 제거하지 않음
-          const p = meta.participants[pid];
-          return !p?.socketId || !isOnline(p.socketId);
-        });
-
-        if (offlineGuestPids.length > 0) {
-          for (const gPid of offlineGuestPids) {
-            console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
-            delete meta.participants[gPid];
+      // ⚠️ 병원 고정방(hospital_default_*)은 broadcast 전환 절대 금지
+      if (roomId.startsWith('hospital_default_')) {
+        // 이전 게스트만 교체하고 항상 1:1 유지
+        const currentPids = Object.keys(meta.participants);
+        if (!currentPids.includes(participantId) && currentPids.length >= 2) {
+          for (const pid of currentPids) {
+            if (pid !== meta.ownerPid) {
+              console.log(`[JOIN:HOSPITAL] Replacing previous guest ${pid} in ${roomId}`);
+              delete meta.participants[pid];
+            }
           }
           ROOMS.set(roomId, meta);
         }
-      }
-
-      // 병원 고정방: broadcast 전환 절대 금지 — 이전 게스트만 정리하고 항상 1:1 유지
-      if (isHospitalFixedRoom) {
-        // 병원 고정방에서 새 세션: ownerPid가 아닌 기존 참가자 중 오프라인은 이미 위에서 정리됨
-        // 추가로, 새 게스트 입장 시 이전 게스트(오프라인 아닌 경우도) 교체 — 1:1 보장
-        const afterPids = Object.keys(meta.participants);
-        if (!afterPids.includes(participantId) && afterPids.length >= 2) {
-          const oldGuestPids = afterPids.filter(pid => pid !== meta.ownerPid);
-          for (const gPid of oldGuestPids) {
-            console.log(`[JOIN:HOSPITAL] Replacing previous guest ${gPid} in fixed room ${roomId}`);
-            delete meta.participants[gPid];
-          }
-          ROOMS.set(roomId, meta);
-        }
-        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — broadcast conversion skipped (always 1:1)`);
+        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — broadcast conversion skipped`);
       } else {
+        const currentPids = Object.keys(meta.participants);
+        const isReconnect = currentPids.includes(participantId);
+
+        // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
+        if (!isReconnect && currentPids.length >= 2) {
+          const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+          const offlineGuestPids = currentPids.filter(pid => {
+            if (pid === meta.ownerPid) return false;
+            const p = meta.participants[pid];
+            return !p?.socketId || !isOnline(p.socketId);
+          });
+
+          if (offlineGuestPids.length > 0) {
+            for (const gPid of offlineGuestPids) {
+              console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
+              delete meta.participants[gPid];
+            }
+            ROOMS.set(roomId, meta);
+          }
+        }
+
         // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
         const activePids = Object.keys(meta.participants);
         const isReconnectAfterCleanup = activePids.includes(participantId);
         if (!isReconnectAfterCleanup && activePids.length >= 2) {
-          // 실제 온라인 소켓 수도 확인 — 2명 이상 실시간 접속 중인 경우만 전환
           const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
           const onlineCount = activePids.filter(pid => {
             const p = meta.participants[pid];
