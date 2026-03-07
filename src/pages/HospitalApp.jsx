@@ -1,5 +1,5 @@
-// src/pages/HospitalApp.jsx — 병원 전용 진입 컴포넌트 (의료진 측)
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+// src/pages/HospitalApp.jsx — 병원 전용 진입 (기존 MONO 호스트 방식: 방 생성 → QR 표시 → 게스트 입장)
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useLocation, useNavigate as useNav } from "react-router-dom";
 import { detectUserLanguage } from "../constants/languageProfiles";
@@ -8,7 +8,6 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import QRCodeBox from "../components/QRCodeBox";
-import socket from "../socket";
 import {
   ChevronLeft,
   Shield,
@@ -19,11 +18,6 @@ import {
   RotateCcw,
   Check,
   ClipboardList,
-  QrCode,
-  Tablet,
-  UserCheck,
-  Clock,
-  ExternalLink,
 } from "lucide-react";
 
 // ── Emergency quick phrases ──
@@ -64,17 +58,6 @@ function HospitalLogo() {
   );
 }
 
-// ── Time ago helper ──
-function timeAgo(dateStr) {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}초 전`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}분 전`;
-  return `${Math.floor(min / 60)}시간 전`;
-}
-
 export default function HospitalApp() {
   const location = useLocation();
   const navTo = useNav();
@@ -94,7 +77,7 @@ export default function HospitalApp() {
   const [selectedDept, setSelectedDept] = useState(null);
   const [step, setStep] = useState("department"); // 'department' | 'session' | 'summary'
 
-  // ── Session (mobile step 2 only) ──
+  // ── Room (호스트 방 생성 — 기존 MONO Home.jsx 방식) ──
   const [roomId, setRoomId] = useState("");
   const [hostPid, setHostPid] = useState("");
   const [hospitalSessionId, setHospitalSessionId] = useState("");
@@ -107,11 +90,6 @@ export default function HospitalApp() {
   const [summaryDept, setSummaryDept] = useState(null);
   const [summaryChart, setSummaryChart] = useState("");
   const [copiedSummary, setCopiedSummary] = useState(false);
-
-  // ── Waiting patients (PC right panel) ──
-  const [waitingPatients, setWaitingPatients] = useState([]);
-  const watchedDeptRef = useRef(null);
-  const timerRef = useRef(null);
 
   // ── PC layout detection ──
   const [isPC, setIsPC] = useState(
@@ -140,7 +118,7 @@ export default function HospitalApp() {
     }
   }, [location.state]);
 
-  // ── Generate room (for mobile session step) ──
+  // ── Generate room (기존 MONO 방식: uuid 생성 + pid 저장) ──
   const generateRoom = useCallback(() => {
     const newRoomId = uuidv4();
     setRoomId(newRoomId);
@@ -154,11 +132,12 @@ export default function HospitalApp() {
     return newRoomId;
   }, []);
 
+  // step이 바뀔 때마다 새 방 생성 (summary 제외)
   useEffect(() => {
     if (step !== "summary") generateRoom();
   }, [generateRoom, step]);
 
-  // ── Create hospital session via API (mobile) ──
+  // ── Create hospital session via API (선택) ──
   const createHospitalSession = useCallback(async (newRoomId, dept) => {
     try {
       const res = await fetch("/api/hospital/session", {
@@ -182,84 +161,18 @@ export default function HospitalApp() {
     }
   }, [chartNumber, selectedLang]);
 
-  // ── Socket: watch department for waiting patients (PC) ──
-  // When no dept selected → watch ALL departments
-  // When dept selected → watch that specific dept (+ keep __all__ for transition)
-  useEffect(() => {
-    if (!isPC) return;
-
-    const dept = selectedDept?.id || null;
-    const watchChannel = dept || "__all__";
-
-    // Unwatch previous if changed
-    if (watchedDeptRef.current && watchedDeptRef.current !== watchChannel) {
-      socket.emit("hospital:unwatch", { department: watchedDeptRef.current });
-    }
-
-    // Watch new channel
-    socket.emit("hospital:watch", { department: watchChannel });
-    watchedDeptRef.current = watchChannel;
-
-    // Fetch current waiting list via API
-    const apiUrl = dept
-      ? `/api/hospital/waiting?department=${encodeURIComponent(dept)}`
-      : `/api/hospital/waiting`;
-    fetch(apiUrl)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setWaitingPatients(data.waiting || []);
-      })
-      .catch(() => {});
-
-    const onPatientWaiting = (data) => {
-      // If watching a specific dept, filter by it; otherwise accept all
-      if (dept && data.department !== dept) return;
-      setWaitingPatients((prev) => {
-        if (prev.some((p) => p.roomId === data.roomId)) return prev;
-        return [...prev, data];
-      });
-    };
-
-    const onPatientPicked = (data) => {
-      setWaitingPatients((prev) => prev.filter((p) => p.roomId !== data.roomId));
-    };
-
-    socket.on("hospital:patient-waiting", onPatientWaiting);
-    socket.on("hospital:patient-picked", onPatientPicked);
-
-    return () => {
-      socket.off("hospital:patient-waiting", onPatientWaiting);
-      socket.off("hospital:patient-picked", onPatientPicked);
-    };
-  }, [isPC, selectedDept]);
-
-  // Unwatch on unmount
-  useEffect(() => {
-    return () => {
-      if (watchedDeptRef.current) {
-        socket.emit("hospital:unwatch", { department: watchedDeptRef.current });
-      }
-    };
-  }, []);
-
-  // ── Refresh timeAgo display ──
-  useEffect(() => {
-    if (!isPC || waitingPatients.length === 0) return;
-    timerRef.current = setInterval(() => {
-      setWaitingPatients((prev) => [...prev]); // Force re-render
-    }, 10000);
-    return () => clearInterval(timerRef.current);
-  }, [isPC, waitingPatients.length]);
-
   // ── Handlers ──
   const handleDeptSelect = (dept) => {
     setSelectedDept(dept);
     if (!isPC) {
+      // 모바일: step 이동
       setStep("session");
       const newRoomId = generateRoom();
       createHospitalSession(newRoomId, dept);
     } else {
-      // PC: dept selected — useEffect will re-fetch waiting patients for this dept
+      // PC: 오른쪽 패널에 QR 즉시 표시 위해 새 방 생성
+      const newRoomId = generateRoom();
+      createHospitalSession(newRoomId, dept);
     }
   };
 
@@ -267,7 +180,13 @@ export default function HospitalApp() {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
     setShowLangGrid(false);
-    if (!isPC) generateRoom();
+    // 언어 변경 시 새 방 생성 (QR 갱신)
+    if (selectedDept) {
+      const newRoomId = generateRoom();
+      createHospitalSession(newRoomId, selectedDept);
+    } else {
+      generateRoom();
+    }
   };
 
   const handleBackToDept = () => {
@@ -285,7 +204,14 @@ export default function HospitalApp() {
     setChartNumber("");
     setHospitalSessionId("");
     setStep("department");
+    setSelectedDept(null);
     generateRoom();
+  };
+
+  // 세션 완료 후 같은 진료과에서 새 방 생성 (PC)
+  const handleNextPatient = () => {
+    const newRoomId = generateRoom();
+    if (selectedDept) createHospitalSession(newRoomId, selectedDept);
   };
 
   const handleCopyPhrase = (phrase) => {
@@ -336,42 +262,6 @@ export default function HospitalApp() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
-
-  // ── Start interpretation with waiting patient (PC) ──
-  const handleStartInterpretation = useCallback(async (patient) => {
-    const rid = patient.roomId;
-    const patientDept = patient.department || selectedDept?.id || "general";
-
-    // Remove from waiting list
-    try {
-      await fetch(`/api/hospital/waiting/${encodeURIComponent(rid)}`, { method: "DELETE" });
-    } catch {}
-    setWaitingPatients((prev) => prev.filter((p) => p.roomId !== rid));
-
-    // Generate host pid for this room
-    const pidKey = `mro.pid.${rid}`;
-    let pid = localStorage.getItem(pidKey);
-    if (!pid) {
-      pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
-      localStorage.setItem(pidKey, pid);
-    }
-
-    // Open chat in NEW TAB so /hospital stays open for next patients
-    const params = new URLSearchParams({
-      uid: pid,
-      fromLang: selectedLang,
-      localName: "",
-      isCreator: "1",
-      siteContext: `hospital_${patientDept}`,
-      roomType: "oneToOne",
-    });
-    window.open(`/room/${encodeURIComponent(rid)}?${params.toString()}`, "_blank");
-  }, [selectedLang, selectedDept, saveMode]);
-
-  const handleOpenKiosk = useCallback(() => {
-    if (!selectedDept) return;
-    window.open(`/hospital/kiosk/${selectedDept.id}`, "_blank");
-  }, [selectedDept]);
 
   // ════════════════════════════════════════════
   // STEP 3: Summary (after returning from session)
@@ -472,7 +362,6 @@ export default function HospitalApp() {
   // DEPARTMENT SELECTION — shared content
   // ════════════════════════════════════════════
 
-  // ── Left Panel Content (Department Selection) ──
   const leftPanelContent = (
     <>
       {/* Header */}
@@ -503,7 +392,7 @@ export default function HospitalApp() {
               type="button"
               onClick={() => handleDeptSelect(dept)}
               className={`w-full flex items-center gap-4 p-4 mb-3 rounded-[16px] border-2 transition-all active:scale-[0.98] ${
-                isPC && selectedDept?.id === dept.id
+                selectedDept?.id === dept.id
                   ? "border-[#2563EB] bg-[#DBEAFE] dark:bg-[#1E4A7F] ring-2 ring-[#3B82F6]/30"
                   : "border-[#3B82F6] bg-[#EFF6FF] dark:bg-[#1E3A5F] hover:bg-[#DBEAFE] dark:hover:bg-[#1E4A7F]"
               }`}
@@ -533,7 +422,7 @@ export default function HospitalApp() {
                 type="button"
                 onClick={() => handleDeptSelect(dept)}
                 className={`flex flex-col items-center justify-center gap-2 p-4 rounded-[16px] border transition-all active:scale-95 ${
-                  isPC && selectedDept?.id === dept.id
+                  selectedDept?.id === dept.id
                     ? "border-[#3B82F6] bg-[#DBEAFE] dark:bg-[#1E4A7F] ring-2 ring-[#3B82F6]/30"
                     : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]"
                 }`}
@@ -581,14 +470,14 @@ export default function HospitalApp() {
   );
 
   // ════════════════════════════════════════════
-  // PC RIGHT PANEL — waiting patients + kiosk setup
+  // PC RIGHT PANEL — QR Code (기존 MONO 방식)
   // ════════════════════════════════════════════
   const rightPanelContent = (
-    <div className="flex flex-col h-full px-8 py-8">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8">
       {selectedDept ? (
         <>
           {/* Selected Department Info */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-4">
             <span className="text-[56px] block mb-2">{selectedDept.icon}</span>
             <h2 className="text-[24px] font-bold text-[var(--color-text)] mb-1">
               {selectedDept.labelKo}
@@ -598,159 +487,51 @@ export default function HospitalApp() {
             </p>
           </div>
 
-          {/* Tablet QR Setup Button */}
+          {/* QR Code — 기존 QRCodeBox 그대로 사용 */}
+          {roomId && hostPid && (
+            <div className="mb-4">
+              <QRCodeBox
+                key={roomId}
+                roomId={roomId}
+                fromLang={selectedLang}
+                participantId={hostPid}
+                siteContext={`hospital_${selectedDept.id}`}
+                role="Doctor"
+                localName=""
+                roomType="oneToOne"
+                chartNumber={chartNumber}
+                stationId={selectedDept.id}
+                hospitalSessionId={hospitalSessionId}
+                hospitalDept={selectedDept}
+                saveMode={saveMode}
+              />
+            </div>
+          )}
+
+          {/* Next Patient Button (세션 종료 후 새 QR 생성) */}
           <button
             type="button"
-            onClick={handleOpenKiosk}
-            className="mx-auto flex items-center gap-2 px-6 py-3 rounded-[14px] bg-[#3B82F6] text-white text-[14px] font-semibold hover:bg-[#2563EB] transition-colors mb-6"
+            onClick={handleNextPatient}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg)] transition-colors mt-2"
           >
-            <Tablet size={18} />
-            태블릿 QR 설정
-            <ExternalLink size={14} className="opacity-60" />
+            <RotateCcw size={14} />
+            다음 환자 (새 QR)
           </button>
 
-          {/* Divider */}
-          <div className="w-full border-t border-[var(--color-border)] mb-6" />
-
-          {/* Waiting Patients Section */}
-          <div className="flex-1">
-            <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
-              <UserCheck size={18} className="text-[#3B82F6]" />
-              대기 중인 환자
-              {waitingPatients.length > 0 && (
-                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-[#EF4444] text-white text-[12px] font-bold animate-pulse">
-                  {waitingPatients.length}
-                </span>
-              )}
-            </h3>
-
-            {waitingPatients.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-bg)] border-2 border-dashed border-[var(--color-border)] flex items-center justify-center">
-                  <Clock size={24} className="text-[var(--color-text-secondary)] opacity-40" />
-                </div>
-                <p className="text-[14px] text-[var(--color-text-secondary)]">
-                  현재 대기 중인 환자가 없습니다
-                </p>
-                <p className="text-[12px] text-[var(--color-text-secondary)] mt-1 opacity-60">
-                  환자가 QR 코드를 스캔하면 여기에 표시됩니다
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {waitingPatients.map((patient, i) => (
-                  <div
-                    key={patient.roomId}
-                    className="flex items-center justify-between p-4 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#EFF6FF] dark:bg-[#1E3A5F] flex items-center justify-center text-[#3B82F6] font-bold text-[14px]">
-                        {i + 1}
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-medium text-[var(--color-text)]">
-                          환자 #{i + 1}
-                        </p>
-                        <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                          <Clock size={10} />
-                          {timeAgo(patient.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleStartInterpretation(patient)}
-                      className="px-4 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] transition-colors"
-                    >
-                      통역 시작
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Hint */}
-          <div className="mt-4 text-center">
-            <p className="text-[11px] text-[var(--color-text-secondary)]">
-              태블릿에 QR을 표시하면 환자가 스캔하여 자동으로 대기 목록에 추가됩니다
-            </p>
-          </div>
+          <p className="mt-4 text-[11px] text-[var(--color-text-secondary)] text-center">
+            환자가 QR 코드를 스캔하면 자동으로 통역이 시작됩니다
+          </p>
         </>
       ) : (
-        /* No dept selected — show all waiting patients */
-        <div className="flex flex-col h-full">
-          <div className="text-center mb-6 pt-4">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--color-border)] flex items-center justify-center opacity-40">
-              <QrCode size={40} strokeWidth={1} />
-            </div>
-            <h3 className="text-[18px] font-semibold text-[var(--color-text)] mb-1 opacity-60">
-              진료과를 선택하세요
-            </h3>
-            <p className="text-[12px] text-[var(--color-text-secondary)] opacity-50 text-center">
-              왼쪽에서 진료과를 선택하면 상세 정보가 표시됩니다
-            </p>
-          </div>
-
-          {/* All waiting patients across departments */}
-          <div className="flex-1 mt-2">
-            <div className="w-full border-t border-[var(--color-border)] mb-4" />
-            <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
-              <UserCheck size={18} className="text-[#3B82F6]" />
-              전체 대기 환자
-              {waitingPatients.length > 0 && (
-                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-[#EF4444] text-white text-[12px] font-bold animate-pulse">
-                  {waitingPatients.length}
-                </span>
-              )}
-            </h3>
-
-            {waitingPatients.length === 0 ? (
-              <div className="text-center py-8">
-                <Clock size={20} className="mx-auto mb-2 text-[var(--color-text-secondary)] opacity-40" />
-                <p className="text-[13px] text-[var(--color-text-secondary)]">
-                  현재 대기 중인 환자가 없습니다
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {waitingPatients.map((patient, i) => {
-                  const deptInfo = HOSPITAL_DEPARTMENTS.find((d) => d.id === patient.department);
-                  return (
-                    <div
-                      key={patient.roomId}
-                      className="flex items-center justify-between p-4 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-[#EFF6FF] dark:bg-[#1E3A5F] flex items-center justify-center text-[20px]">
-                          {deptInfo?.icon || "🏥"}
-                        </div>
-                        <div>
-                          <p className="text-[13px] font-medium text-[var(--color-text)]">
-                            환자 #{i + 1}
-                            <span className="ml-2 text-[11px] text-[#3B82F6] font-normal">
-                              {deptInfo?.labelKo || patient.department}
-                            </span>
-                          </p>
-                          <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                            <Clock size={10} />
-                            {timeAgo(patient.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleStartInterpretation(patient)}
-                        className="px-4 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] transition-colors"
-                      >
-                        통역 시작
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        /* No dept selected */
+        <div className="text-center">
+          <span className="text-[64px] block mb-4 opacity-30">🏥</span>
+          <h3 className="text-[18px] font-semibold text-[var(--color-text)] mb-1 opacity-60">
+            진료과를 선택하세요
+          </h3>
+          <p className="text-[12px] text-[var(--color-text-secondary)] opacity-50 text-center">
+            왼쪽에서 진료과를 선택하면 QR 코드가 표시됩니다
+          </p>
         </div>
       )}
     </div>
@@ -789,7 +570,7 @@ export default function HospitalApp() {
             {leftPanelContent}
           </div>
         </div>
-        {/* Right Panel */}
+        {/* Right Panel — QR Code */}
         <div
           style={{
             width: "60%",
@@ -907,7 +688,7 @@ export default function HospitalApp() {
           </p>
         </div>
 
-        {/* QR Code */}
+        {/* QR Code — 기존 QRCodeBox 그대로 사용 */}
         {roomId && hostPid && (
           <div className="mb-4">
             <QRCodeBox

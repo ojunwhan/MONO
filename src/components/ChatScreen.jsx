@@ -1088,13 +1088,7 @@ export default function ChatScreen() {
     cancelSpeech();
     socket.emit("manual-leave");
     if (isHospitalMode) {
-      // If opened as new tab (via window.open from /hospital), close the tab
-      // Otherwise fallback to navigating back to /hospital
-      if (window.opener) {
-        window.close();
-      } else {
-        navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
-      }
+      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
     } else {
       navigate("/home");
     }
