@@ -105,6 +105,9 @@ export default function ChatScreen() {
   const queryFromLang = searchParams.get("fromLang") || "";
   const queryLocalName = searchParams.get("localName") || "";
   const convertGuest = searchParams.get("convertGuest") === "1";
+  const queryIsCreator = searchParams.get("isCreator") === "1";
+  const querySiteContext = searchParams.get("siteContext") || "";
+  const queryRoomType = searchParams.get("roomType") || "";
   const isGuestMode = !!location.state?.isGuest;
 
   // PID
@@ -129,17 +132,18 @@ export default function ChatScreen() {
   );
   const [localName] = useState(location.state?.localName || queryLocalName || "");
   const [selectedRole] = useState(location.state?.role || "Tech");
-  const roleHint = isGuestMode ? "guest" : (location.state?.isCreator ? "owner" : "guest");
+  const roleHint = isGuestMode ? "guest" : (location.state?.isCreator || queryIsCreator ? "owner" : "guest");
   const isKioskMode = !!location.state?.isKiosk;
   const kioskStationId = location.state?.stationId || "default";
-  const isHospitalMode = String(location.state?.siteContext || "").startsWith("hospital_");
+  const effectiveSiteContext = location.state?.siteContext || querySiteContext || "";
+  const isHospitalMode = String(effectiveSiteContext).startsWith("hospital_");
   const hospitalDept = location.state?.hospitalDept || null;
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
   const [partnerName, setPartnerName] = useState(location.state?.peerDisplayName || "");
-  const [siteContext, setSiteContext] = useState(location.state?.siteContext || "general");
-  const [roomType, setRoomType] = useState(location.state?.roomType || "oneToOne");
+  const [siteContext, setSiteContext] = useState(effectiveSiteContext || "general");
+  const [roomType, setRoomType] = useState(location.state?.roomType || queryRoomType || "oneToOne");
   const [partnerLang, setPartnerLang] = useState(location.state?.peerLang || "");
   const [peerInfo, setPeerInfo] = useState(null);
 
@@ -1084,7 +1088,13 @@ export default function ChatScreen() {
     cancelSpeech();
     socket.emit("manual-leave");
     if (isHospitalMode) {
-      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
+      // If opened as new tab (via window.open from /hospital), close the tab
+      // Otherwise fallback to navigating back to /hospital
+      if (window.opener) {
+        window.close();
+      } else {
+        navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200) } });
+      }
     } else {
       navigate("/home");
     }

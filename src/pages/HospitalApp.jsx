@@ -341,7 +341,6 @@ export default function HospitalApp() {
   const handleStartInterpretation = useCallback(async (patient) => {
     const rid = patient.roomId;
     const patientDept = patient.department || selectedDept?.id || "general";
-    const deptObj = HOSPITAL_DEPARTMENTS.find((d) => d.id === patientDept) || selectedDept;
 
     // Remove from waiting list
     try {
@@ -357,20 +356,17 @@ export default function HospitalApp() {
       localStorage.setItem(pidKey, pid);
     }
 
-    // Navigate to chat as host
-    navTo(`/room/${rid}`, {
-      state: {
-        fromLang: selectedLang,
-        localName: "",
-        role: "Doctor",
-        isCreator: true,
-        siteContext: `hospital_${patientDept}`,
-        roomType: "oneToOne",
-        hospitalDept: deptObj,
-        saveMode,
-      },
+    // Open chat in NEW TAB so /hospital stays open for next patients
+    const params = new URLSearchParams({
+      uid: pid,
+      fromLang: selectedLang,
+      localName: "",
+      isCreator: "1",
+      siteContext: `hospital_${patientDept}`,
+      roomType: "oneToOne",
     });
-  }, [selectedLang, selectedDept, saveMode, navTo]);
+    window.open(`/room/${encodeURIComponent(rid)}?${params.toString()}`, "_blank");
+  }, [selectedLang, selectedDept, saveMode]);
 
   const handleOpenKiosk = useCallback(() => {
     if (!selectedDept) return;
