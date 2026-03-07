@@ -182,12 +182,14 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       }
 
       movedRef.current = true;
+      // pidRef.current를 myUserId로 넘겨야 ChatScreen이 같은 participantId로 join
       navigate(`/room/${roomIdRef.current}`, {
         state: {
           fromLang: langRef.current,
           localName: localNameRef.current,
           role: roleRef.current,
           isCreator: true,
+          myUserId: pidRef.current,
           siteContext: siteContextRef.current,
           roomType: roomTypeRef.current,
           ...(hospitalDept ? { hospitalDept, saveMode: !!saveMode } : {}),
