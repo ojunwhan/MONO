@@ -188,11 +188,11 @@ export default function ChatScreen() {
   }, [fromLang]);
   const myFlagUrl = useMemo(() => getLanguageProfileByCode(fromLang)?.flagUrl || getFlagUrlByLang(fromLang), [fromLang]);
   const myShort = useMemo(() => getLanguageProfileByCode(fromLang)?.shortLabel || getLabelFromCode(fromLang), [fromLang]);
-  const partnerFlagUrl = useMemo(() => getLanguageProfileByCode(partnerLang)?.flagUrl || getFlagUrlByLang(partnerLang), [partnerLang]);
-  const partnerShort = useMemo(() => getLanguageProfileByCode(partnerLang)?.shortLabel || getLabelFromCode(partnerLang), [partnerLang]);
-  // partnerLang이 존재하면 partnerLang 기준 라벨을 우선 사용 (실시간 반영)
-  const resolvedPartnerFlagUrl = (partnerLang && partnerFlagUrl) ? partnerFlagUrl : (peerInfo?.peerFlagUrl || partnerFlagUrl);
-  const resolvedPartnerShort = (partnerLang && partnerShort) ? partnerShort : (peerInfo?.peerLabel || partnerShort);
+  const partnerFlagUrl = useMemo(() => partnerLang ? (getLanguageProfileByCode(partnerLang)?.flagUrl || getFlagUrlByLang(partnerLang)) : "", [partnerLang]);
+  const partnerShort = useMemo(() => partnerLang ? (getLanguageProfileByCode(partnerLang)?.shortLabel || getLabelFromCode(partnerLang)) : "", [partnerLang]);
+  // partnerLang이 세팅되면 항상 partnerLang 기준, 아니면 peerInfo fallback
+  const resolvedPartnerFlagUrl = partnerFlagUrl || peerInfo?.peerFlagUrl || "";
+  const resolvedPartnerShort = partnerShort || peerInfo?.peerLabel || "";
 
   const localizeWarning = useCallback((msg) => {
     const code = String(fromLangRef.current || "en").toLowerCase();
@@ -285,6 +285,19 @@ export default function ChatScreen() {
   useEffect(() => {
     partnerShortRef.current = partnerShort;
   }, [partnerShort]);
+
+  // partnerLang 변경 시 peerInfo도 강제 동기화 — 헤더 언어 표시 정확성 보장
+  useEffect(() => {
+    if (!partnerLang) return;
+    const flag = getLanguageProfileByCode(partnerLang)?.flagUrl || getFlagUrlByLang(partnerLang);
+    const label = getLanguageProfileByCode(partnerLang)?.shortLabel || getLabelFromCode(partnerLang);
+    setPeerInfo((prev) => ({
+      ...(prev || {}),
+      peerLang: partnerLang,
+      peerFlagUrl: flag || prev?.peerFlagUrl || "",
+      peerLabel: label || prev?.peerLabel || "",
+    }));
+  }, [partnerLang]);
 
   useEffect(() => {
     try {
