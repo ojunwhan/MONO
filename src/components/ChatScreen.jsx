@@ -1272,8 +1272,8 @@ export default function ChatScreen() {
     );
   }, []);
 
-  // Broadcast listeners cannot send
-  const isBroadcastListener = roomType === "broadcast" && roleHint !== "owner";
+  // Broadcast listeners cannot send — 병원 모드는 항상 1:1이므로 수신전용 안 됨
+  const isBroadcastListener = !isHospitalMode && roomType === "broadcast" && roleHint !== "owner";
   const partnerOnline = useMemo(
     () => participants.some((p) => p?.pid && p.pid !== participantId && p.online !== false),
     [participants, participantId]

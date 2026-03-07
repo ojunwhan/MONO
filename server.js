@@ -2545,41 +2545,63 @@ io.on('connection', (socket) => {
 
     // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
     if (meta.roomType === "oneToOne") {
-      const currentPids = Object.keys(meta.participants);
-      const isReconnect = currentPids.includes(participantId);
-
-      // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
-      if (!isReconnect && currentPids.length >= 2) {
-        const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-        const offlineGuestPids = currentPids.filter(pid => {
-          if (pid === meta.ownerPid) return false;
-          const p = meta.participants[pid];
-          return !p?.socketId || !isOnline(p.socketId);
-        });
-
-        if (offlineGuestPids.length > 0) {
-          for (const gPid of offlineGuestPids) {
-            console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
-            delete meta.participants[gPid];
+      // 병원 모드 방은 절대 broadcast 전환하지 않음 — 항상 1:1 유지
+      const isHospitalRoom = String(meta.siteContext || "").startsWith("hospital_");
+      if (isHospitalRoom) {
+        // 병원 모드: 오프라인 게스트만 정리하고, broadcast 전환 안 함
+        const currentPids = Object.keys(meta.participants);
+        const isReconnect = currentPids.includes(participantId);
+        if (!isReconnect && currentPids.length >= 2) {
+          const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+          for (const pid of currentPids) {
+            if (pid === meta.ownerPid) continue;
+            const p = meta.participants[pid];
+            if (!p?.socketId || !isOnline(p.socketId)) {
+              console.log(`[JOIN:hospital] Removing offline guest ${pid} from room ${roomId}`);
+              delete meta.participants[pid];
+            }
           }
           ROOMS.set(roomId, meta);
         }
-      }
+        console.log(`[JOIN:hospital] Skipping broadcast conversion for hospital room ${roomId} (siteContext=${meta.siteContext})`);
+      } else {
+        // 일반 모드: 기존 broadcast 전환 로직 유지
+        const currentPids = Object.keys(meta.participants);
+        const isReconnect = currentPids.includes(participantId);
 
-      // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
-      const activePids = Object.keys(meta.participants);
-      const isReconnectAfterCleanup = activePids.includes(participantId);
-      if (!isReconnectAfterCleanup && activePids.length >= 2) {
-        const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-        const onlineCount = activePids.filter(pid => {
-          const p = meta.participants[pid];
-          return p?.socketId && isOnline2(p.socketId);
-        }).length;
-        if (onlineCount >= 2) {
-          console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
-          convertOneToOneRoomToBroadcast(roomId, meta);
-        } else {
-          console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
+        // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
+        if (!isReconnect && currentPids.length >= 2) {
+          const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+          const offlineGuestPids = currentPids.filter(pid => {
+            if (pid === meta.ownerPid) return false;
+            const p = meta.participants[pid];
+            return !p?.socketId || !isOnline(p.socketId);
+          });
+
+          if (offlineGuestPids.length > 0) {
+            for (const gPid of offlineGuestPids) {
+              console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
+              delete meta.participants[gPid];
+            }
+            ROOMS.set(roomId, meta);
+          }
+        }
+
+        // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
+        const activePids = Object.keys(meta.participants);
+        const isReconnectAfterCleanup = activePids.includes(participantId);
+        if (!isReconnectAfterCleanup && activePids.length >= 2) {
+          const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+          const onlineCount = activePids.filter(pid => {
+            const p = meta.participants[pid];
+            return p?.socketId && isOnline2(p.socketId);
+          }).length;
+          if (onlineCount >= 2) {
+            console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
+            convertOneToOneRoomToBroadcast(roomId, meta);
+          } else {
+            console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
+          }
         }
       }
     }
