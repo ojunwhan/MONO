@@ -2395,6 +2395,26 @@ io.on('connection', (socket) => {
     socket.emit("room-members", { roomId, members });
   });
 
+  // ── Staff 모니터링: 소켓 룸에만 join (참가자 등록 X) ──
+  socket.on("monitor-room", ({ roomId } = {}) => {
+    if (!roomId || typeof roomId !== "string") return;
+    socket.join(roomId);
+    console.log(`[STAFF-MONITOR] Socket ${socket.id} monitoring room ${roomId}`);
+    // 현재 방 상태를 즉시 전달
+    const meta = ROOMS.get(roomId);
+    if (meta && meta.participants) {
+      const members = Object.entries(meta.participants)
+        .filter(([, info]) => !!info?.socketId)
+        .map(([pid, info]) => ({
+          partnerId: pid,
+          language: info.lang || "en",
+          isOwner: pid === meta.ownerPid,
+        }));
+      const guestCount = members.filter((m) => !m.isOwner).length;
+      socket.emit("room-monitor-status", { roomId, members, guestCount });
+    }
+  });
+
   socket.on("mono-ping", (data = {}) => {
     socket.emit("mono-pong", data);
   });
