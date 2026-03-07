@@ -210,7 +210,7 @@ export default function HospitalApp() {
           <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
 
-        {/* QR — onGuestJoined 콜백으로 navigate 방지 */}
+        {/* QR — 환자 입장 시 호스트도 자동으로 채팅방 입장 */}
         <QRCodeBox
           key={roomId}
           roomId={roomId}
@@ -223,7 +223,19 @@ export default function HospitalApp() {
           hospitalDept={selectedDept}
           saveMode={saveMode}
           onGuestJoined={({ roomId: rid, reason }) => {
-            console.log(`[KIOSK] Guest joined room=${rid} reason=${reason} — staying on QR`);
+            console.log(`[KIOSK] Guest joined room=${rid} reason=${reason} — navigating to chat`);
+            navTo(`/room/${rid}`, {
+              state: {
+                fromLang: selectedLang,
+                localName: "",
+                role: "Doctor",
+                isCreator: true,
+                siteContext: `hospital_${selectedDept.id}`,
+                roomType: "oneToOne",
+                hospitalDept: selectedDept,
+                saveMode,
+              },
+            });
           }}
         />
 
