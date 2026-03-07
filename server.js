@@ -4239,8 +4239,8 @@ app.post('/api/hospital/join', async (req, res) => {
           );
         } else {
           await dbRun(
-            `INSERT INTO hospital_patients (patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, datetime('now'), datetime('now'))`,
-            [pToken, dept]
+            `INSERT INTO hospital_patients (id, chart_number, patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+            [pToken, pToken, pToken, dept]
           );
         }
       } catch (dbErr) {
@@ -4319,8 +4319,8 @@ app.post('/api/hospital/patient', async (req, res) => {
 
     // New registration
     await dbRun(
-      `INSERT INTO hospital_patients (patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, datetime('now'), datetime('now'))`,
-      [token, dept]
+      `INSERT INTO hospital_patients (id, chart_number, patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [token, token, token, dept]
     );
     const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
     console.log(`[hospital] 👤 Patient registered: token=${token} lang=${lang} dept=${dept}`);
