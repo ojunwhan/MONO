@@ -1001,6 +1001,7 @@ const io = new Server(server, {
 app.set("trust proxy", true);
 
 const { bindGoogleSTT } = require("./server/stt_google_stream.js");
+const { getMedicalTermContext } = require("./server/constants/medicalKnowledge.js");
 if (process.env.STT_PROVIDER === "google") {
   bindGoogleSTT(io);
 }
@@ -1627,10 +1628,15 @@ function buildSystemPrompt(from, to, ctx, siteContext) {
 
   if (isHospital) {
     // Hospital mode: medical-specific system prompt (no slang instructions)
+    // siteContext "hospital_plastic_surgery" → dept "plastic_surgery"
+    const dept = String(siteContext).replace(/^hospital_/, '');
+    const medicalTerms = getMedicalTermContext(dept, to);
     return [
       siteDomain,
+      medicalTerms,
       `Translate from ${label(from)} to ${label(to)} with conversation context awareness.`,
       `Maintain a professional medical tone. Use standard medical terminology in the target language.`,
+      `When medical terms from the glossary above appear, you MUST use the provided translations.`,
       `Preserve proper nouns, medication names, dosages, numbers, units, and medical terms accurately.`,
       `If message is ambiguous, use conversation context to resolve. Always output best-effort translation.`,
       ctx ? `Recent conversation context:\n${ctx}` : '',
