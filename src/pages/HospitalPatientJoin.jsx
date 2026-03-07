@@ -1,6 +1,6 @@
-// src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 자동 입장 페이지
-// 첫 스캔: 언어 선택 → 고유번호 생성 → 서버 등록 → 통역 시작
-// 재스캔: localStorage에 저장된 언어/고유번호로 바로 통역 시작
+// src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 입장 페이지
+// 환자가 QR 스캔 → 언어 선택 → "통역 시작" 클릭 → 새 roomId 생성 → ChatScreen 진입
+// patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -23,40 +23,15 @@ function getPatientLabel(langCode) {
   return PATIENT_LABEL[code] || "Patient";
 }
 
-// ── localStorage key ──
-const STORAGE_KEY = "mono_hospital_patient";
+// ── patientToken localStorage 관리 ──
+const PATIENT_TOKEN_KEY = "mono_hospital_patient_token";
 
-// ── Generate patient ID: PT-YYYYMMDD-XXXX ──
-function generatePatientId() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let rand = "";
-  for (let i = 0; i < 4; i++) rand += chars[Math.floor(Math.random() * chars.length)];
-  return `PT-${y}${m}${d}-${rand}`;
-}
-
-// ── Load saved patient data from localStorage ──
-function loadSavedPatient() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (data?.patientId && data?.language) return data;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Save patient data to localStorage ──
-function savePatientLocal(patientId, language) {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ patientId, language, savedAt: Date.now() })
-  );
+function getOrCreatePatientToken() {
+  const existing = localStorage.getItem(PATIENT_TOKEN_KEY);
+  if (existing) return existing;
+  const token = `pt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  localStorage.setItem(PATIENT_TOKEN_KEY, token);
+  return token;
 }
 
 export default function HospitalPatientJoin() {
@@ -69,14 +44,6 @@ export default function HospitalPatientJoin() {
     [department]
   );
 
-  // Check if patient already registered (재방문)
-  const savedPatient = useMemo(() => loadSavedPatient(), []);
-
-  // States
-  // 'auto' → 재방문 자동 연결 | 'language' → 첫 방문 언어 선택 | 'connecting' | 'error'
-  const [step, setStep] = useState(savedPatient ? "auto" : "language");
-  const [error, setError] = useState("");
-
   // Language
   const detected = useMemo(() => detectUserLanguage(), []);
   const savedLang = useMemo(() => {
@@ -84,9 +51,11 @@ export default function HospitalPatientJoin() {
     return getLanguageByCode(saved)?.code || "";
   }, []);
   const [selectedLang, setSelectedLang] = useState(
-    savedPatient?.language || savedLang || detected?.code || "en"
+    savedLang || detected?.code || "en"
   );
   const [showLangGrid, setShowLangGrid] = useState(true);
+  const [step, setStep] = useState("language"); // 'language' | 'connecting' | 'error'
+  const [error, setError] = useState("");
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -94,28 +63,32 @@ export default function HospitalPatientJoin() {
     setShowLangGrid(false);
   }, []);
 
-  // ── Core join logic (공통) ──
-  const doJoin = useCallback(async (lang, patientId) => {
+  // ── 통역 시작: 새 roomId 생성 → 서버에 등록 → ChatScreen 입장 ──
+  const handleJoin = useCallback(async () => {
     if (joinCalledRef.current) return;
     joinCalledRef.current = true;
     setStep("connecting");
     setError("");
 
     try {
-      // 1. Register/update patient on server
+      const patientToken = getOrCreatePatientToken();
+      const lang = selectedLang;
+      const dept = department || "general";
+
+      // 1. 환자 등록/업데이트
       await fetch("/api/hospital/patient", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, language: lang }),
+        body: JSON.stringify({ patientToken, language: lang, department: dept }),
       });
 
-      // 2. Create new room via POST /api/hospital/join
+      // 2. 새 room 생성 (서버가 roomId 반환)
       const res = await fetch("/api/hospital/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          department: department || "general",
-          patientId,
+          department: dept,
+          patientToken,
           language: lang,
         }),
       });
@@ -128,11 +101,10 @@ export default function HospitalPatientJoin() {
       const guestId = `guest_${uuidv4().slice(0, 8)}`;
       const cleanName = getPatientLabel(lang);
 
-      // 3. Save to localStorage for future visits
-      savePatientLocal(patientId, lang);
+      // 3. localStorage에 언어 저장
       localStorage.setItem("myLang", lang);
 
-      // 4. Save guest session
+      // 4. guest session 저장
       sessionStorage.setItem(
         "mono_guest",
         JSON.stringify({
@@ -140,14 +112,14 @@ export default function HospitalPatientJoin() {
           lang,
           name: cleanName,
           guestId,
-          siteContext: `hospital_${department || "general"}`,
+          siteContext: `hospital_${dept}`,
           roomType: "oneToOne",
           joinedAt: Date.now(),
-          patientId,
+          patientToken,
         })
       );
 
-      // 5. Navigate to chat room as guest
+      // 5. ChatScreen으로 이동 (게스트)
       navigate(`/room/${roomId}`, {
         replace: true,
         state: {
@@ -156,9 +128,9 @@ export default function HospitalPatientJoin() {
           guestId,
           isGuest: true,
           isCreator: false,
-          siteContext: `hospital_${department || "general"}`,
+          siteContext: `hospital_${dept}`,
           roomType: "oneToOne",
-          patientId,
+          patientToken,
         },
       });
     } catch (e) {
@@ -167,58 +139,9 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate]);
+  }, [department, navigate, selectedLang]);
 
-  // ── 재방문 자동 연결 (step === 'auto') ──
-  useEffect(() => {
-    if (step !== "auto" || !savedPatient) return;
-    doJoin(savedPatient.language, savedPatient.patientId);
-  }, [step, savedPatient, doJoin]);
-
-  // ── 첫 방문: 언어 선택 후 join 버튼 클릭 ──
-  const handleJoin = useCallback(() => {
-    const patientId = generatePatientId();
-    doJoin(selectedLang, patientId);
-  }, [selectedLang, doJoin]);
-
-  // ── Render: Auto connecting (재방문) ──
-  if (step === "auto") {
-    return (
-      <div
-        style={{
-          minHeight: "100dvh",
-          background: "#ffffff",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "32px 20px",
-        }}
-      >
-        <MonoLogo />
-        <div
-          style={{
-            marginTop: "32px",
-            width: "48px",
-            height: "48px",
-            border: "4px solid #e5e7eb",
-            borderTopColor: "#3B82F6",
-            borderRadius: "50%",
-            animation: "spin 0.8s linear infinite",
-          }}
-        />
-        <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-          자동 연결 중... / Auto connecting...
-        </p>
-        <p style={{ marginTop: "8px", fontSize: "13px", color: "#9ca3af" }}>
-          {savedPatient?.patientId}
-        </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Render: Language Selection (첫 방문) ──
+  // ── Render: Language Selection ──
   if (step === "language") {
     return (
       <div

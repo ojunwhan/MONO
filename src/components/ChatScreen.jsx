@@ -1094,7 +1094,7 @@ export default function ChatScreen() {
     cancelSpeech();
     socket.emit("manual-leave");
     if (isHospitalMode) {
-      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200), hospitalDept, chartNumber } });
+      navigate("/hospital", { state: { returnFromSession: true, messages: messages.slice(-200), hospitalDept } });
     } else {
       navigate("/home");
     }

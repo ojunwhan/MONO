@@ -1,5 +1,5 @@
 // src/pages/HospitalApp.jsx — 병원 전용 진입
-// 태블릿(kiosk): QR만 표시 (채팅방 절대 X) / 직원PC(staff): 환자 대기 알림 → 통역 시작 / 기본: 모바일 플로우
+// 태블릿(kiosk): QR만 표시 (소켓 연결 없음) / 직원PC(staff): 대기 환자 목록 → 통역 시작 / 기본: 진료과 선택 → QR 표시
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useLocation, useNavigate as useNav, useSearchParams } from "react-router-dom";
 import { detectUserLanguage } from "../constants/languageProfiles";
@@ -7,7 +7,7 @@ import { getLanguageByCode } from "../constants/languages";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
-import QRCodeBox from "../components/QRCodeBox";
+import QRCode from "react-qr-code";
 import socket from "../socket";
 import { playNotificationSound } from "../audio/notificationSound";
 import {
@@ -25,23 +25,6 @@ import {
   Bell,
   Users,
 } from "lucide-react";
-
-// ── 고정 roomId 생성 ──
-const HOSPITAL_ID = "default"; // 나중에 멀티 병원 지원 시 .env 또는 설정으로
-function makeFixedRoomId(department) {
-  return `hospital_${HOSPITAL_ID}_${department}`;
-}
-
-// ── 고정 PID (기기별로 localStorage에 저장) ──
-function getOrCreatePid(roomId) {
-  const pidKey = `mro.pid.${roomId}`;
-  let pid = localStorage.getItem(pidKey);
-  if (!pid) {
-    pid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
-    localStorage.setItem(pidKey, pid);
-  }
-  return pid;
-}
 
 // ── Emergency quick phrases ──
 const EMERGENCY_PHRASES = {
@@ -81,6 +64,28 @@ function HospitalLogo() {
   );
 }
 
+// ── Kiosk: 다국어 안내 문구 순환 ──
+function KioskGuideText() {
+  const messages = [
+    "QR을 스캔하세요",
+    "Scan QR Code",
+    "扫描二维码",
+    "Quét mã QR",
+    "QRコードをスキャン",
+  ];
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setIdx((prev) => (prev + 1) % messages.length), 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center animate-pulse h-[28px]">
+      {messages[idx]}
+    </p>
+  );
+}
+
 export default function HospitalApp() {
   const location = useLocation();
   const navTo = useNav();
@@ -108,12 +113,8 @@ export default function HospitalApp() {
   });
   const [step, setStep] = useState("department"); // 'department' | 'session' | 'summary'
 
-  // ── Room (고정 roomId) ──
-  const [roomId, setRoomId] = useState("");
-  const [hostPid, setHostPid] = useState("");
-  const [hospitalSessionId, setHospitalSessionId] = useState("");
+  // ── States ──
   const [saveMode, setSaveMode] = useState(false);
-  const [chartNumber, setChartNumber] = useState("");
   const [copiedPhrase, setCopiedPhrase] = useState("");
 
   // ── Summary ──
@@ -133,13 +134,23 @@ export default function HospitalApp() {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
+  // ── URL에서 dept가 있으면 자동 세팅 (kiosk/staff 모드) ──
+  useEffect(() => {
+    if (urlDept && (mode === "kiosk" || mode === "staff")) {
+      const dept = HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept);
+      if (dept) {
+        setSelectedDept(dept);
+      }
+    }
+  }, [urlDept, mode]);
+
   // ── Detect return from ChatScreen ──
   useEffect(() => {
     if (location.state?.returnFromSession) {
       const msgs = location.state?.messages || [];
       setSummaryMessages(msgs);
       setSummaryDept(location.state?.hospitalDept || selectedDept);
-      setSummaryChart(location.state?.chartNumber || chartNumber);
+      setSummaryChart(location.state?.chartNumber || "");
       if (msgs.length > 0) {
         setStep("summary");
       } else {
@@ -149,54 +160,12 @@ export default function HospitalApp() {
     }
   }, [location.state]);
 
-  // ── 진료과 선택 시 고정 roomId 세팅 ──
-  const setupFixedRoom = useCallback((dept) => {
-    const fixedRoomId = makeFixedRoomId(dept.id);
-    setRoomId(fixedRoomId);
-    const pid = getOrCreatePid(fixedRoomId);
-    setHostPid(pid);
-    return fixedRoomId;
-  }, []);
-
-  // ── URL에서 dept가 있으면 자동 세팅 (kiosk/staff 모드) ──
-  useEffect(() => {
-    if (urlDept && (mode === "kiosk" || mode === "staff")) {
-      const dept = HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept);
-      if (dept) {
-        setSelectedDept(dept);
-        setupFixedRoom(dept);
-      }
-    }
-  }, [urlDept, mode, setupFixedRoom]);
-
-  // ── Create hospital session via API ──
-  const createHospitalSession = useCallback(async (rid, dept) => {
-    try {
-      const res = await fetch("/api/hospital/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chartNumber: chartNumber || "0",
-          roomId: rid,
-          department: dept?.id || "general",
-          hostLang: selectedLang,
-          stationId: dept?.id || "default",
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.sessionId) {
-        setHospitalSessionId(data.sessionId);
-        console.log("[hospital] Session created:", data.sessionId);
-      }
-    } catch (e) {
-      console.warn("[hospital] Session creation failed:", e?.message);
-    }
-  }, [chartNumber, selectedLang]);
-
   // ═══════════════════════════════════════
-  // MODE: KIOSK (태블릿 거치용 — QR만 표시, 채팅방 절대 열리지 않음)
+  // MODE: KIOSK (태블릿 거치용 — QR만 표시, 소켓 연결 없음)
+  // QR URL은 /hospital/join/{dept} (방 번호 없음, 진료과 정보만)
   // ═══════════════════════════════════════
-  if (mode === "kiosk" && selectedDept && roomId && hostPid) {
+  if (mode === "kiosk" && selectedDept) {
+    const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDept.id)}`;
     return (
       <div
         className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]"
@@ -214,24 +183,19 @@ export default function HospitalApp() {
           <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
 
-        {/* QR — 태블릿은 QR만 표시, 소켓 join 안 함, 채팅방 절대 열리지 않음 */}
-        <QRCodeBox
-          key={roomId}
-          roomId={roomId}
-          fromLang={selectedLang}
-          participantId={hostPid}
-          siteContext={`hospital_${selectedDept.id}`}
-          role="Doctor"
-          localName=""
-          roomType="oneToOne"
-          hospitalDept={selectedDept}
-          saveMode={saveMode}
-          kioskOnly={true}
-          onGuestJoined={({ roomId: rid, reason }) => {
-            // 태블릿은 QR만 표시 — 채팅방으로 절대 이동하지 않음
-            console.log(`[KIOSK] Guest joined room=${rid} reason=${reason} — staying on QR screen (kiosk mode)`);
-          }}
-        />
+        {/* QR — 소켓 연결 없음, 순수 QR만 표시 */}
+        <div
+          className="p-6 rounded-[20px]"
+          style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}
+        >
+          <QRCode
+            value={qrUrl}
+            size={280}
+            bgColor="#FFFFFF"
+            fgColor="#3B82F6"
+            level="M"
+          />
+        </div>
 
         {/* 안내 문구 */}
         <KioskGuideText />
@@ -248,12 +212,11 @@ export default function HospitalApp() {
   }
 
   // ═══════════════════════════════════════
-  // MODE: STAFF (직원 PC — 환자 대기 알림 → 통역 시작)
+  // MODE: STAFF (직원 PC — 대기 환자 목록 표시 → 통역 시작)
   // ═══════════════════════════════════════
-  if (mode === "staff" && selectedDept && roomId) {
+  if (mode === "staff" && selectedDept) {
     return (
       <StaffModePanel
-        roomId={roomId}
         selectedDept={selectedDept}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
@@ -264,8 +227,6 @@ export default function HospitalApp() {
         onBack={() => {
           setSearchParams({});
           setSelectedDept(null);
-          setRoomId("");
-          setHostPid("");
         }}
       />
     );
@@ -276,9 +237,6 @@ export default function HospitalApp() {
   // ═══════════════════════════════════════
   const handleDeptSelect = (dept) => {
     setSelectedDept(dept);
-    const rid = setupFixedRoom(dept);
-    createHospitalSession(rid, dept);
-
     if (!isPC) {
       setStep("session");
     }
@@ -288,31 +246,19 @@ export default function HospitalApp() {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
     setShowLangGrid(false);
-    if (selectedDept) {
-      const rid = setupFixedRoom(selectedDept);
-      createHospitalSession(rid, selectedDept);
-    }
   };
 
   const handleBackToDept = () => {
     setStep("department");
     setSelectedDept(null);
-    setChartNumber("");
-    setHospitalSessionId("");
-    setRoomId("");
-    setHostPid("");
   };
 
   const handleNewSession = () => {
     setSummaryMessages([]);
     setSummaryDept(null);
     setSummaryChart("");
-    setChartNumber("");
-    setHospitalSessionId("");
     setStep("department");
     setSelectedDept(null);
-    setRoomId("");
-    setHostPid("");
   };
 
   const handleCopyPhrase = (phrase) => {
@@ -339,7 +285,6 @@ export default function HospitalApp() {
     const lines = [
       `=== MONO Hospital - 진료 대화 요약 ===`,
       `진료과: ${summaryDept?.labelKo || selectedDept?.labelKo || "N/A"}`,
-      `차트번호: ${summaryChart || chartNumber || "N/A"}`,
       `날짜: ${new Date().toLocaleString()}`,
       `언어: ${selectedLang}`,
       `---`,
@@ -359,7 +304,7 @@ export default function HospitalApp() {
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `mono_hospital_${summaryChart || chartNumber || "session"}_${Date.now()}.txt`;
+    a.download = `mono_hospital_session_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -383,7 +328,6 @@ export default function HospitalApp() {
             <h2 className="text-[16px] font-semibold text-[var(--color-text)] mb-2">📋 진료 대화 요약</h2>
             <div className="text-[12px] text-[var(--color-text-secondary)] space-y-0.5">
               <p>진료과: {summaryDept?.labelKo || "N/A"} {summaryDept?.icon || ""}</p>
-              <p>차트번호: {summaryChart || "N/A"}</p>
               <p>날짜: {new Date().toLocaleString()}</p>
               <p>대화 수: {summaryMessages.filter((m) => m.text || m.original).length}건</p>
             </div>
@@ -503,11 +447,11 @@ export default function HospitalApp() {
   );
 
   // ════════════════════════════════════════════
-  // PC RIGHT PANEL — QR Code (고정 roomId)
+  // PC RIGHT PANEL — QR Code (환자 join URL 기반)
   // ════════════════════════════════════════════
   const rightPanelContent = (
     <div className="flex flex-col items-center justify-center h-full px-8 py-8">
-      {selectedDept && roomId && hostPid ? (
+      {selectedDept ? (
         <>
           <div className="text-center mb-4">
             <span className="text-[56px] block mb-2">{selectedDept.icon}</span>
@@ -515,23 +459,20 @@ export default function HospitalApp() {
             <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
           </div>
 
-          {/* QR Code — 기존 QRCodeBox 그대로 */}
+          {/* QR Code — /hospital/join/{dept} 로 연결 (방 번호 없음) */}
           <div className="mb-4">
-            <QRCodeBox
-              key={roomId}
-              roomId={roomId}
-              fromLang={selectedLang}
-              participantId={hostPid}
-              siteContext={`hospital_${selectedDept.id}`}
-              role="Doctor"
-              localName=""
-              roomType="oneToOne"
-              chartNumber={chartNumber}
-              stationId={selectedDept.id}
-              hospitalSessionId={hospitalSessionId}
-              hospitalDept={selectedDept}
-              saveMode={saveMode}
-            />
+            <div
+              className="p-4 rounded-[12px]"
+              style={{ backgroundColor: "#FFFFFF", boxShadow: "0 2px 12px rgba(0, 0, 0, 0.08)" }}
+            >
+              <QRCode
+                value={`${window.location.origin}/hospital/join/${encodeURIComponent(selectedDept.id)}`}
+                size={200}
+                bgColor="#FFFFFF"
+                fgColor="#3B82F6"
+                level="M"
+              />
+            </div>
           </div>
 
           {/* 모드 전환 버튼 */}
@@ -549,9 +490,9 @@ export default function HospitalApp() {
           </div>
 
           <p className="mt-4 text-[11px] text-[var(--color-text-secondary)] text-center max-w-[320px]">
-            고정 QR: 태블릿·직원PC·환자 모두 같은 방에 연결됩니다.
+            환자가 QR을 스캔하면 새로운 방이 자동 생성됩니다.
             <br />
-            <span className="font-mono text-[10px] text-[#3B82F6]">Room: {roomId}</span>
+            직원 PC에서 대기 환자를 확인하고 통역을 시작하세요.
           </p>
         </>
       ) : (
@@ -591,8 +532,12 @@ export default function HospitalApp() {
   }
 
   // ════════════════════════════════════════════
-  // STEP 2: Session Setup — Mobile only
+  // STEP 2: Session Setup — Mobile only (QR 표시)
   // ════════════════════════════════════════════
+  const mobileQrUrl = selectedDept
+    ? `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDept.id)}`
+    : "";
+
   return (
     <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
       <div className="mx-auto w-full max-w-[480px] px-4 py-4">
@@ -609,13 +554,6 @@ export default function HospitalApp() {
             <span className="text-[11px] text-[var(--color-text-secondary)]">{selectedDept?.label}</span>
           </div>
           <HospitalLogo />
-        </div>
-
-        <div className="mb-4 p-3 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)]">
-          <label className="block text-[12px] font-medium text-[var(--color-text-secondary)] mb-1.5 uppercase">차트번호 (선택)</label>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={chartNumber}
-            onChange={(e) => setChartNumber(e.target.value.replace(/\D/g, ""))} placeholder="환자 차트번호 입력"
-            className="w-full h-[40px] px-3 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[14px] focus:outline-none focus:border-[#3B82F6]" />
         </div>
 
         <div className="mb-4 flex items-center gap-3">
@@ -656,32 +594,25 @@ export default function HospitalApp() {
           <p className="text-[10px] text-blue-500 mt-0.5">{selectedDept?.labelKo} 전문 의료 번역 프롬프트 적용 중</p>
         </div>
 
-        {roomId && hostPid && (
-          <div className="mb-4">
-            <QRCodeBox
-              key={roomId}
-              roomId={roomId}
-              fromLang={selectedLang}
-              participantId={hostPid}
-              siteContext={`hospital_${selectedDept?.id || "general"}`}
-              role="Doctor"
-              localName=""
-              roomType="oneToOne"
-              chartNumber={chartNumber}
-              stationId={selectedDept?.id || ""}
-              hospitalSessionId={hospitalSessionId}
-              hospitalDept={selectedDept}
-              saveMode={saveMode}
-            />
+        {mobileQrUrl && (
+          <div className="mb-4 flex flex-col items-center">
+            <div
+              className="p-4 rounded-[12px]"
+              style={{ backgroundColor: "#FFFFFF", boxShadow: "0 2px 12px rgba(0, 0, 0, 0.08)" }}
+            >
+              <QRCode
+                value={mobileQrUrl}
+                size={200}
+                bgColor="#FFFFFF"
+                fgColor="#3B82F6"
+                level="M"
+              />
+            </div>
+            <p className="mt-3 text-[13px] text-[var(--color-text-secondary)] text-center">
+              환자가 QR을 스캔하면 새로운 방이 자동 생성됩니다
+            </p>
           </div>
         )}
-
-        <div className="text-center mt-2">
-          <p className="text-[11px] text-[var(--color-text-secondary)]">
-            환자가 QR 코드를 스캔하면 자동으로 통역 세션이 시작됩니다
-          </p>
-          <p className="mt-1 text-[10px] text-[#3B82F6] font-mono">{roomId}</p>
-        </div>
 
         <div className="mt-8 text-center">
           <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
@@ -691,9 +622,8 @@ export default function HospitalApp() {
   );
 }
 
-// ── Staff 모드: 환자 대기 알림 + 통역 시작 ──
+// ── Staff 모드: hospital:watch 소켓으로 대기 환자 실시간 수신 → 통역 시작 ──
 function StaffModePanel({
-  roomId,
   selectedDept,
   selectedLang,
   setSelectedLang,
@@ -707,36 +637,38 @@ function StaffModePanel({
   const [staffJoined, setStaffJoined] = useState(false);
   const joinedRef = useRef(false);
 
-  // ── 직원 PC: 소켓 룸 모니터링만 (참가자로 등록 X) ──
+  // ── 직원 PC: hospital:watch 소켓으로 대기 환자 구독 ──
   useEffect(() => {
-    if (!roomId || joinedRef.current) return;
+    if (!selectedDept || joinedRef.current) return;
     joinedRef.current = true;
 
-    const doMonitor = () => {
-      console.log(`[STAFF] Monitoring room ${roomId} (no participant registration)`);
-      socket.emit("monitor-room", { roomId });
+    const doWatch = () => {
+      console.log(`[STAFF] Watching department: ${selectedDept.id}`);
+      socket.emit("hospital:watch", { department: selectedDept.id });
       setStaffJoined(true);
     };
 
-    if (socket.connected) doMonitor();
+    if (socket.connected) doWatch();
     else socket.connect();
 
-    const onConnect = () => doMonitor();
+    const onConnect = () => doWatch();
     socket.on("connect", onConnect);
 
     return () => {
       socket.off("connect", onConnect);
+      if (socket.connected && selectedDept) {
+        socket.emit("hospital:unwatch", { department: selectedDept.id });
+      }
       joinedRef.current = false;
     };
-  }, [roomId]);
+  }, [selectedDept]);
 
-  // ── 환자 입장 감지 ──
+  // ── 환자 대기 알림 수신 ──
   useEffect(() => {
-    if (!roomId) return;
+    if (!selectedDept) return;
 
-    const onGuestJoined = (data) => {
-      if (data?.socketId === socket.id) return; // 자기 자신 무시
-      console.log("[STAFF] Guest joined:", data);
+    const onPatientWaiting = (data) => {
+      console.log("[STAFF] Patient waiting:", data);
       playNotificationSound();
 
       // 브라우저 알림
@@ -748,37 +680,45 @@ function StaffModePanel({
       } catch {}
 
       setWaitingPatients((prev) => {
-        // 중복 방지
-        if (prev.some((p) => p.socketId === data?.socketId)) return prev;
+        // 중복 방지 (같은 roomId)
+        if (prev.some((p) => p.roomId === data?.roomId)) return prev;
         return [...prev, {
-          socketId: data?.socketId,
-          lang: data?.lang || "unknown",
-          joinedAt: Date.now(),
-          roomId: data?.roomId || roomId,
+          roomId: data?.roomId,
+          department: data?.department || selectedDept.id,
+          language: data?.language || "unknown",
+          patientToken: data?.patientToken || null,
+          createdAt: data?.createdAt || new Date().toISOString(),
         }];
       });
     };
 
-    const onPartnerJoined = (data) => {
-      console.log("[STAFF] Partner joined:", data);
-      onGuestJoined({ socketId: data?.socketId || "unknown", lang: data?.peerLang || "unknown", roomId });
+    const onPatientPicked = (data) => {
+      console.log("[STAFF] Patient picked:", data);
+      setWaitingPatients((prev) => prev.filter((p) => p.roomId !== data?.roomId));
     };
 
-    socket.on("guest:joined", onGuestJoined);
-    socket.on("user-joined", onGuestJoined);
-    socket.on("partner-joined", onPartnerJoined);
+    socket.on("hospital:patient-waiting", onPatientWaiting);
+    socket.on("hospital:patient-picked", onPatientPicked);
 
     return () => {
-      socket.off("guest:joined", onGuestJoined);
-      socket.off("user-joined", onGuestJoined);
-      socket.off("partner-joined", onPartnerJoined);
+      socket.off("hospital:patient-waiting", onPatientWaiting);
+      socket.off("hospital:patient-picked", onPatientPicked);
     };
-  }, [roomId]);
+  }, [selectedDept]);
 
-  // ── 통역 시작 (채팅방 입장 — 직원은 호스트로 입장) ──
-  const handleStartInterpretation = (patient) => {
+  // ── 통역 시작: 직원이 해당 roomId로 입장 (호스트) ──
+  const handleStartInterpretation = async (patient) => {
     localStorage.setItem("myLang", selectedLang);
-    const targetRoomId = patient?.roomId || roomId;
+    const targetRoomId = patient.roomId;
+
+    // 대기 목록에서 제거 (서버에도 알림)
+    try {
+      await fetch(`/api/hospital/waiting/${encodeURIComponent(targetRoomId)}`, { method: "DELETE" });
+    } catch {}
+
+    // 로컬 대기 목록에서 즉시 제거
+    setWaitingPatients((prev) => prev.filter((p) => p.roomId !== targetRoomId));
+
     navTo(`/room/${targetRoomId}`, {
       state: {
         fromLang: selectedLang,
@@ -789,9 +729,17 @@ function StaffModePanel({
         roomType: "oneToOne",
         hospitalDept: selectedDept,
         saveMode,
+        patientToken: patient.patientToken || null,
       },
     });
   };
+
+  // ── Notification 권한 요청 ──
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
@@ -814,7 +762,6 @@ function StaffModePanel({
           <span className="text-[48px] block mb-2">{selectedDept.icon}</span>
           <h2 className="text-[22px] font-bold mb-1">{selectedDept.labelKo}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
-          <p className="text-[11px] text-[#3B82F6] font-mono mt-1">Room: {roomId}</p>
         </div>
 
         {/* 언어 선택 */}
@@ -856,11 +803,11 @@ function StaffModePanel({
                 </div>
 
                 {waitingPatients.map((patient, idx) => {
-                  const waitTime = Math.floor((Date.now() - patient.joinedAt) / 1000);
-                  const langInfo = getLanguageByCode(patient.lang);
+                  const waitSec = Math.floor((Date.now() - new Date(patient.createdAt).getTime()) / 1000);
+                  const langInfo = getLanguageByCode(patient.language);
                   return (
                     <div
-                      key={patient.socketId || idx}
+                      key={patient.roomId || idx}
                       className="flex items-center justify-between p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006] animate-pulse"
                     >
                       <div className="flex items-center gap-3">
@@ -870,8 +817,13 @@ function StaffModePanel({
                             환자 #{idx + 1}
                           </p>
                           <p className="text-[11px] text-[var(--color-text-secondary)]">
-                            언어: {langInfo?.name || patient.lang} · 대기 {waitTime < 60 ? `${waitTime}초` : `${Math.floor(waitTime / 60)}분`}
+                            언어: {langInfo?.name || patient.language} · 대기 {waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}
                           </p>
+                          {patient.patientToken && (
+                            <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
+                              {patient.patientToken}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <button
@@ -918,27 +870,5 @@ function StaffModePanel({
         <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
       </div>
     </div>
-  );
-}
-
-// ── Kiosk: 다국어 안내 문구 순환 ──
-function KioskGuideText() {
-  const messages = [
-    "QR을 스캔하세요",
-    "Scan QR Code",
-    "扫描二维码",
-    "Quét mã QR",
-    "QRコードをスキャン",
-  ];
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setIdx((prev) => (prev + 1) % messages.length), 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center animate-pulse h-[28px]">
-      {messages[idx]}
-    </p>
   );
 }

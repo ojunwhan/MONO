@@ -5,7 +5,7 @@ import socket from "../socket";
 import { useTranslation } from "react-i18next";
 import { playNotificationSound } from "../audio/notificationSound";
 
-const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, hospitalDept, saveMode, onGuestJoined, kioskOnly }) => {
+const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, hospitalDept, saveMode, onGuestJoined }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const movedRef = useRef(false);
@@ -61,59 +61,37 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
     const lang = langRef.current;
     const r = roleRef.current;
     if (!rid || !lang || !pid || !r) return;
-    console.log(`[HOST] emit create-room${kioskOnly ? " (kiosk-only, no join)" : "/join"} (${reason}) rid=${rid} connected=${socket.connected}`);
-    if (kioskOnly) {
-      // Kiosk 태블릿: 방 생성 + ownerPid 등록 (참가자로는 join 안 함)
-      // participantId를 보내서 서버에서 ownerPid가 null이 되지 않도록 함
-      socket.emit("create-room", {
-        roomId: rid,
-        fromLang: lang,
-        participantId: pid,
-        siteContext: siteContextRef.current || "general",
-        role: r,
-        localName: "",
-        roomType: roomTypeRef.current || "oneToOne",
-        kioskOnly: true, // 서버에서 참가자 등록은 하되 소켓 join은 kiosk임을 표시
-      });
-      // 소켓 룸에만 join (이벤트 수신용, 채팅 참가자로는 활동 안 함)
-      socket.emit("monitor-room", { roomId: rid });
-    } else {
-      socket.emit("create-room", {
-        roomId: rid,
-        fromLang: lang,
-        participantId: pid,
-        siteContext: siteContextRef.current || "general",
-        role: r,
-        localName: localNameRef.current || "",
-        roomType: roomTypeRef.current || "oneToOne",
-        ...(chartNumberRef.current ? {
-          chartNumber: chartNumberRef.current,
-          stationId: stationIdRef.current || "default",
-          hospitalSessionId: hospitalSessionIdRef.current || "",
-        } : {}),
-      });
-      socket.emit("join", {
-        roomId: rid,
-        fromLang: lang,
-        participantId: pid,
-        role: r,
-        localName: localNameRef.current || "",
-        roleHint: "owner",
-      });
-    }
+    console.log(`[HOST] emit create-room/join (${reason}) rid=${rid} connected=${socket.connected}`);
+    socket.emit("create-room", {
+      roomId: rid,
+      fromLang: lang,
+      participantId: pid,
+      siteContext: siteContextRef.current || "general",
+      role: r,
+      localName: localNameRef.current || "",
+      roomType: roomTypeRef.current || "oneToOne",
+      ...(chartNumberRef.current ? {
+        chartNumber: chartNumberRef.current,
+        stationId: stationIdRef.current || "default",
+        hospitalSessionId: hospitalSessionIdRef.current || "",
+      } : {}),
+    });
+    socket.emit("join", {
+      roomId: rid,
+      fromLang: lang,
+      participantId: pid,
+      role: r,
+      localName: localNameRef.current || "",
+      roleHint: "owner",
+    });
     saveSessionState();
-  }, [saveSessionState, kioskOnly]);
+  }, [saveSessionState]);
 
   const emitHostRejoin = useCallback((reason = "rejoin") => {
     const rid = roomIdRef.current;
     const pid = pidRef.current;
     const lang = langRef.current;
     if (!rid || !pid) return;
-    // kioskOnly: rejoin도 하지 않음 (태블릿은 참가자 아님)
-    if (kioskOnly) {
-      console.log(`[HOST] skip rejoin (kiosk-only) rid=${rid}`);
-      return;
-    }
     console.log(`[HOST] emit rejoin-room (${reason}) rid=${rid} connected=${socket.connected}`);
     socket.emit("rejoin-room", {
       roomId: rid,
@@ -130,7 +108,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
       roleHint: "owner",
     });
     saveSessionState();
-  }, [saveSessionState, kioskOnly]);
+  }, [saveSessionState]);
 
   // ── Host: create room + join ──
   useEffect(() => {
@@ -266,17 +244,15 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
   }, [navigate, emitHostCreateAndJoin, t]);
 
   useEffect(() => {
-    if (kioskOnly) return; // 태블릿은 heartbeat 불필요
     const iv = setInterval(() => {
       if (socket.connected && roomIdRef.current && pidRef.current) {
         socket.emit("heartbeat", { roomId: roomIdRef.current, userId: pidRef.current });
       }
     }, 5000);
     return () => clearInterval(iv);
-  }, [kioskOnly]);
+  }, []);
 
   useEffect(() => {
-    if (kioskOnly) return; // 태블릿은 visibility check 불필요
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       if (!roomIdRef.current || !pidRef.current) return;
@@ -284,7 +260,7 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [kioskOnly]);
+  }, []);
 
   const copyToClipboard = useCallback(async () => {
     const showCopySuccess = () => {

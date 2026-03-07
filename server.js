@@ -2094,17 +2094,16 @@ io.on('connection', (socket) => {
   // ======================================================
   // ✅ [수정됨] 호스트 방 생성 + 즉시 조인 (증발 방지 핵심)
   // ======================================================
-  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, kioskOnly } = {}) => {
+  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId } = {}) => {
     if (!roomId) return;
     const roomAlreadyExists = ROOMS.has(roomId);
-    const isHospitalFixed = String(roomId).startsWith("hospital_default_");
 
     const hostLangCode = mapLang(fromLang);
     const ctx = siteContext || "general";
     const hostRole = role || "Manager";
     const rType = roomType === "broadcast" ? "broadcast" : "oneToOne";
 
-    // If room already exists (e.g. hospital fixed roomId), reuse it — just update this participant
+    // If room already exists, reuse it — just update this participant
     let meta;
     if (roomAlreadyExists) {
       meta = ROOMS.get(roomId);
@@ -2112,24 +2111,6 @@ io.on('connection', (socket) => {
       meta.ownerLang = hostLangCode;
       meta.siteContext = ctx;
       meta.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-      // 병원 고정방: create-room 시 기존 게스트 참가자 클리어 (ownerPid는 유지)
-      // 이전 세션의 잔여 데이터가 broadcast 전환을 유발하지 않도록 정리
-      if (isHospitalFixed && participantId) {
-        const prevPids = Object.keys(meta.participants);
-        for (const pid of prevPids) {
-          if (pid !== participantId && pid !== meta.ownerPid) {
-            console.log(`[CREATE:HOSPITAL] Clearing previous guest ${pid} from fixed room ${roomId}`);
-            delete meta.participants[pid];
-          }
-        }
-        // ownerPid 갱신 (kiosk 재접속 시 새 pid가 올 수 있음)
-        meta.ownerPid = participantId;
-        // broadcast로 전환되었던 방을 다시 oneToOne으로 복구
-        if (meta.roomType === "broadcast") {
-          console.log(`[CREATE:HOSPITAL] Reverting broadcast -> oneToOne for fixed room ${roomId}`);
-          meta.roomType = "oneToOne";
-        }
-      }
     } else {
       meta = {
         roomType: rType,
@@ -2146,31 +2127,22 @@ io.on('connection', (socket) => {
     }
 
     if (participantId) {
-      // kioskOnly: ownerPid 등록 + 참가자 메타 등록은 하지만, 소켓 룸에는 join 안 함
-      // (kiosk 태블릿은 채팅 참여자가 아님, monitor-room으로 이벤트만 수신)
-      if (kioskOnly) {
-        meta.ownerPid = participantId;
-        // 참가자 등록은 최소한으로 (isAuthorizedParticipant 체크용이 아닌, ownerPid 식별용)
-        // kiosk는 실제 채팅하지 않으므로 participants에 등록하지 않음
-        console.log(`🏥 Kiosk ${socket.id} created/refreshed room: ${roomId} ownerPid=${participantId} [${hostLangCode}] [${ctx}]`);
-      } else {
-        leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
-        const callSign = assignCallSign(meta, hostRole);
-        meta.participants[participantId] = {
-          callSign,
-          localName: localName || "",
-          role: hostRole,
-          lang: hostLangCode,
-          socketId: socket.id,
-          phoneticVariants: generateCallSignPhonetics(callSign),
-        };
-        socket.join(roomId);
-        socket.roomId = roomId;
-        socket.data.participantId = participantId;
-        SOCKET_ROLES.set(socket.id, { role: "owner" });
-        console.log(`🏠 Host ${socket.id} [${callSign}] ${roomAlreadyExists ? 're-joined' : 'created'} room: ${roomId} [${hostLangCode}] [${ctx}]`);
-        socket.emit("call-sign-assigned", { callSign, siteContext: ctx });
-      }
+      leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
+      const callSign = assignCallSign(meta, hostRole);
+      meta.participants[participantId] = {
+        callSign,
+        localName: localName || "",
+        role: hostRole,
+        lang: hostLangCode,
+        socketId: socket.id,
+        phoneticVariants: generateCallSignPhonetics(callSign),
+      };
+      socket.join(roomId);
+      socket.roomId = roomId;
+      socket.data.participantId = participantId;
+      SOCKET_ROLES.set(socket.id, { role: "owner" });
+      console.log(`🏠 Host ${socket.id} [${callSign}] ${roomAlreadyExists ? 're-joined' : 'created'} room: ${roomId} [${hostLangCode}] [${ctx}]`);
+      socket.emit("call-sign-assigned", { callSign, siteContext: ctx });
     }
 
     ROOMS.set(roomId, meta);
@@ -2571,55 +2543,41 @@ io.on('connection', (socket) => {
 
     // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
     if (meta.roomType === "oneToOne") {
-      // ⚠️ 병원 고정방(hospital_default_*)은 broadcast 전환 절대 금지
-      if (roomId.startsWith('hospital_default_')) {
-        // 새 환자 입장 시 ownerPid 외 기존 참가자 전부 클리어 후 새로 등록
-        const currentPids = Object.keys(meta.participants);
-        for (const pid of currentPids) {
-          if (pid !== meta.ownerPid) {
-            console.log(`[JOIN:HOSPITAL] Clearing previous participant ${pid} in ${roomId}`);
-            delete meta.participants[pid];
+      const currentPids = Object.keys(meta.participants);
+      const isReconnect = currentPids.includes(participantId);
+
+      // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
+      if (!isReconnect && currentPids.length >= 2) {
+        const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+        const offlineGuestPids = currentPids.filter(pid => {
+          if (pid === meta.ownerPid) return false;
+          const p = meta.participants[pid];
+          return !p?.socketId || !isOnline(p.socketId);
+        });
+
+        if (offlineGuestPids.length > 0) {
+          for (const gPid of offlineGuestPids) {
+            console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
+            delete meta.participants[gPid];
           }
+          ROOMS.set(roomId, meta);
         }
-        ROOMS.set(roomId, meta);
-        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — participants cleared, broadcast conversion skipped`);
-      } else {
-        const currentPids = Object.keys(meta.participants);
-        const isReconnect = currentPids.includes(participantId);
+      }
 
-        // 새 게스트가 들어올 때, 오프라인인 이전 게스트를 정리 (방 소유자는 유지)
-        if (!isReconnect && currentPids.length >= 2) {
-          const isOnline = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-          const offlineGuestPids = currentPids.filter(pid => {
-            if (pid === meta.ownerPid) return false;
-            const p = meta.participants[pid];
-            return !p?.socketId || !isOnline(p.socketId);
-          });
-
-          if (offlineGuestPids.length > 0) {
-            for (const gPid of offlineGuestPids) {
-              console.log(`[JOIN:1:1] Removing offline guest ${gPid} from room ${roomId}`);
-              delete meta.participants[gPid];
-            }
-            ROOMS.set(roomId, meta);
-          }
-        }
-
-        // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
-        const activePids = Object.keys(meta.participants);
-        const isReconnectAfterCleanup = activePids.includes(participantId);
-        if (!isReconnectAfterCleanup && activePids.length >= 2) {
-          const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-          const onlineCount = activePids.filter(pid => {
-            const p = meta.participants[pid];
-            return p?.socketId && isOnline2(p.socketId);
-          }).length;
-          if (onlineCount >= 2) {
-            console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
-            convertOneToOneRoomToBroadcast(roomId, meta);
-          } else {
-            console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
-          }
+      // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
+      const activePids = Object.keys(meta.participants);
+      const isReconnectAfterCleanup = activePids.includes(participantId);
+      if (!isReconnectAfterCleanup && activePids.length >= 2) {
+        const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+        const onlineCount = activePids.filter(pid => {
+          const p = meta.participants[pid];
+          return p?.socketId && isOnline2(p.socketId);
+        }).length;
+        if (onlineCount >= 2) {
+          console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
+          convertOneToOneRoomToBroadcast(roomId, meta);
+        } else {
+          console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
         }
       }
     }
@@ -3182,19 +3140,29 @@ io.on('connection', (socket) => {
         // ── Hospital mode: auto-save message to DB ──
         if (isHospitalMsg && roomId) {
           try {
-            // Find active session for this room
-            const activeSession = await dbGet(
-              `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-              [roomId]
-            );
-            if (activeSession) {
-              const isOwner = meta.ownerPid === participantId;
-              await dbRun(
-                `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [msgId, activeSession.id, roomId, isOwner ? 'host' : 'guest', fromLang, finalText, translated || '', toLang]
-              );
+            const pToken = meta?.patientToken || null;
+            // Find active session for this room (try new patient_token-based first)
+            let activeSession = null;
+            if (pToken) {
+              activeSession = await dbGet(
+                `SELECT id FROM hospital_sessions WHERE room_id = ? ORDER BY started_at DESC LIMIT 1`,
+                [roomId]
+              ).catch(() => null);
             }
+            if (!activeSession) {
+              activeSession = await dbGet(
+                `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+                [roomId]
+              ).catch(() => null);
+            }
+            const isOwner = meta.ownerPid === participantId;
+            const senderRole = isOwner ? 'host' : 'guest';
+            // Save to hospital_messages with patient_token
+            await dbRun(
+              `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [msgId, activeSession?.id || null, roomId, senderRole, fromLang, finalText, translated || '', toLang, pToken]
+            );
           } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); }
         }
         return;
@@ -3516,12 +3484,13 @@ io.on('connection', (socket) => {
     ackReply({ ok: true, accepted: true });
 
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
-    if (meta.hospitalSessionId) {
+    if (meta.hospitalSessionId || meta.hospitalMode) {
       const senderRole = (rec.role === 'owner' || meta.ownerPid === participantId) ? 'host' : 'guest';
+      const pToken = meta.patientToken || null;
       dbRun(
-        `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, meta.hospitalSessionId, roomId, senderRole, senderP?.lang || '', trimmedText]
+        `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, meta.hospitalSessionId || null, roomId, senderRole, senderP?.lang || '', trimmedText, pToken]
       ).catch(e => console.warn('[hospital] msg save error:', e?.message));
     }
 
@@ -3605,10 +3574,10 @@ io.on('connection', (socket) => {
           io.to(otherP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
         }
         // ── Hospital: update translated text ──
-        if (meta.hospitalSessionId) {
+        if (meta.hospitalSessionId || meta.hospitalMode) {
           dbRun(
-            `UPDATE hospital_messages SET translated_text = ?, translated_lang = ? WHERE id = ? AND session_id = ?`,
-            [finalizedForTts, toLang, id, meta.hospitalSessionId]
+            `UPDATE hospital_messages SET translated_text = ?, translated_lang = ? WHERE id = ?`,
+            [finalizedForTts, toLang, id]
           ).catch(() => {});
         }
       } catch (e) {}
@@ -3626,18 +3595,26 @@ io.on('connection', (socket) => {
       // ── Hospital mode: auto-save message to DB ──
       if (isHospitalMsg2 && roomId) {
         try {
-          const activeSession2 = await dbGet(
-            `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-            [roomId]
-          );
-          if (activeSession2) {
-            const isOwner2 = meta.ownerPid === participantId;
-            await dbRun(
-              `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [id, activeSession2.id, roomId, isOwner2 ? 'host' : 'guest', fromLang, trimmedText, draft || '', toLang]
-            );
+          const pToken2 = meta?.patientToken || null;
+          let activeSession2 = null;
+          if (pToken2) {
+            activeSession2 = await dbGet(
+              `SELECT id FROM hospital_sessions WHERE room_id = ? ORDER BY started_at DESC LIMIT 1`,
+              [roomId]
+            ).catch(() => null);
           }
+          if (!activeSession2) {
+            activeSession2 = await dbGet(
+              `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+              [roomId]
+            ).catch(() => null);
+          }
+          const isOwner2 = meta.ownerPid === participantId;
+          await dbRun(
+            `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, activeSession2?.id || null, roomId, isOwner2 ? 'host' : 'guest', fromLang, trimmedText, draft || '', toLang, pToken2]
+          );
         } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); }
       }
       return;
@@ -4105,7 +4082,68 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     // patient_id index (may fail if column doesn't exist yet on first run)
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_patients_pid ON hospital_patients(patient_id);`); } catch (_) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_sessions_pid ON hospital_sessions(patient_id);`); } catch (_) {}
-    console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages)');
+
+    // ── patient_token 기반 새 테이블 (v2) ──
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS hospital_patients (
+        patient_token TEXT PRIMARY KEY,
+        dept TEXT,
+        first_visit_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_visit_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `).catch(() => {
+      // hospital_patients가 이미 다른 스키마로 존재할 수 있음 — patient_token 컬럼 추가 시도
+    });
+    // 기존 hospital_patients에 patient_token 컬럼이 없으면 추가
+    try {
+      const ptCols = await dbAll("PRAGMA table_info(hospital_patients)");
+      if (!ptCols.some(c => c.name === 'patient_token')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN patient_token TEXT");
+        console.log('[hospital] ✅ added patient_token column to hospital_patients');
+      }
+      if (!ptCols.some(c => c.name === 'first_visit_at')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN first_visit_at TEXT");
+      }
+      if (!ptCols.some(c => c.name === 'last_visit_at')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN last_visit_at TEXT");
+      }
+      if (!ptCols.some(c => c.name === 'dept')) {
+        await dbRun("ALTER TABLE hospital_patients ADD COLUMN dept TEXT");
+      }
+    } catch (_) {}
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hp_patient_token ON hospital_patients(patient_token);`); } catch (_) {}
+
+    // hospital_sessions에 patient_token 컬럼 추가 (기존 테이블 호환)
+    try {
+      const sesCols = await dbAll("PRAGMA table_info(hospital_sessions)");
+      if (!sesCols.some(c => c.name === 'patient_token')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN patient_token TEXT");
+        console.log('[hospital] ✅ added patient_token column to hospital_sessions');
+      }
+      if (!sesCols.some(c => c.name === 'dept')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN dept TEXT");
+        console.log('[hospital] ✅ added dept column to hospital_sessions');
+      }
+      if (!sesCols.some(c => c.name === 'started_at')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN started_at TEXT");
+      }
+    } catch (_) {}
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hs_patient_token ON hospital_sessions(patient_token);`); } catch (_) {}
+
+    // hospital_messages에 patient_token, lang 컬럼 추가 (기존 테이블 호환)
+    try {
+      const msgCols = await dbAll("PRAGMA table_info(hospital_messages)");
+      if (!msgCols.some(c => c.name === 'patient_token')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN patient_token TEXT");
+        console.log('[hospital] ✅ added patient_token column to hospital_messages');
+      }
+      if (!msgCols.some(c => c.name === 'lang')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN lang TEXT");
+      }
+    } catch (_) {}
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hm_patient_token ON hospital_messages(patient_token);`); } catch (_) {}
+
+    console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages + patient_token columns)');
 
     // ── API 사용량 통계 영속화 테이블 ──
     await dbExec(`
@@ -4138,27 +4176,50 @@ const KIOSK_STATIONS = new Map();
 const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, createdAt }]
 
 // POST /api/hospital/join — 환자가 QR 스캔 후 새 room 자동 생성
+// 매 스캔마다 새 roomId 생성 (고정 roomId 없음)
 app.post('/api/hospital/join', async (req, res) => {
   try {
-    const { department, patientId, language } = req.body || {};
+    const { department, patientToken, patientId, language } = req.body || {};
     const dept = String(department || 'general').trim();
-    const pid = patientId ? String(patientId).trim() : null;
+    const pToken = patientToken ? String(patientToken).trim() : (patientId ? String(patientId).trim() : null);
     const lang = language ? String(language).trim() : null;
-    const newRoomId = uuidv4();
+    const newRoomId = `patient_${dept}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const createdAt = new Date().toISOString();
     const hospitalSiteContext = `hospital_${dept}`;
 
-    // If patientId provided, update last_seen
-    if (pid) {
+    // patientToken이 있으면 hospital_patients upsert
+    if (pToken) {
       try {
-        await dbRun(
-          `UPDATE hospital_patients SET last_seen = datetime('now') WHERE patient_id = ?`,
-          [pid]
-        );
-      } catch (_) {}
+        const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [pToken]);
+        if (existing) {
+          await dbRun(
+            `UPDATE hospital_patients SET last_visit_at = datetime('now'), dept = ? WHERE patient_token = ?`,
+            [dept, pToken]
+          );
+        } else {
+          await dbRun(
+            `INSERT INTO hospital_patients (patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, datetime('now'), datetime('now'))`,
+            [pToken, dept]
+          );
+        }
+      } catch (dbErr) {
+        console.warn('[hospital:join] patient upsert warning:', dbErr?.message);
+      }
     }
 
-    // ★ Pre-create room meta in ROOMS map so both guest and host can find it
+    // hospital_sessions에 세션 기록
+    const sessionId = uuidv4();
+    try {
+      await dbRun(
+        `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+        [sessionId, pToken || null, newRoomId, dept, createdAt, pToken || 'auto', 'hospital']
+      );
+    } catch (dbErr) {
+      console.warn('[hospital:join] session insert warning:', dbErr?.message);
+    }
+
+    // ★ Pre-create room meta in ROOMS map so guest can immediately join
     const guestLangCode = lang ? mapLang(lang) : 'auto';
     ROOMS.set(newRoomId, {
       roomType: 'oneToOne',
@@ -4166,62 +4227,62 @@ app.post('/api/hospital/join', async (req, res) => {
       guestLang: guestLangCode,
       siteContext: hospitalSiteContext,
       locked: true,
-      ownerPid: null, // will be set when host joins
+      ownerPid: null, // will be set when staff joins
       participants: {},
       callSignCounters: {},
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
       hospitalMode: true,
       department: dept,
-      patientId: pid,
+      patientToken: pToken,
+      hospitalSessionId: sessionId,
     });
 
     // Add to waiting list for this department
     if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
-    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang });
+    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId });
 
     // Notify all staff watching this department via socket
-    const waitingData = { roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang };
+    const waitingData = { roomId: newRoomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId };
     io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
     // Also notify staff watching ALL departments
     io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
 
-    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} ctx=${hospitalSiteContext} pid=${pid || 'new'}`);
-    res.json({ success: true, roomId: newRoomId, department: dept, createdAt });
+    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'}`);
+    res.json({ success: true, roomId: newRoomId, department: dept, createdAt, sessionId });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
     res.status(500).json({ error: 'join_failed' });
   }
 });
 
-// POST /api/hospital/patient — 환자 고유번호로 등록 (QR 첫 스캔 시)
+// POST /api/hospital/patient — 환자 토큰으로 등록/업데이트 (QR 스캔 시)
 app.post('/api/hospital/patient', async (req, res) => {
   try {
-    const { patientId, language } = req.body || {};
-    if (!patientId) return res.status(400).json({ error: 'patient_id_required' });
-    const pid = String(patientId).trim();
+    const { patientToken, patientId, language, department } = req.body || {};
+    const pToken = patientToken || patientId;
+    if (!pToken) return res.status(400).json({ error: 'patient_token_required' });
+    const token = String(pToken).trim();
     const lang = String(language || 'en').trim();
+    const dept = String(department || 'general').trim();
 
-    // Check if already exists
-    const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+    // Check if already exists in new table
+    const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
     if (existing) {
-      // Update language + last_seen
       await dbRun(
-        `UPDATE hospital_patients SET language = ?, last_seen = datetime('now'), updated_at = datetime('now') WHERE patient_id = ?`,
-        [lang, pid]
+        `UPDATE hospital_patients SET last_visit_at = datetime('now'), dept = ? WHERE patient_token = ?`,
+        [dept, token]
       );
-      const updated = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+      const updated = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
       return res.json({ success: true, patient: updated, isNew: false });
     }
 
     // New registration
-    const id = uuidv4();
     await dbRun(
-      `INSERT INTO hospital_patients (id, chart_number, patient_id, language, last_seen)
-       VALUES (?, ?, ?, ?, datetime('now'))`,
-      [id, pid, pid, lang]
+      `INSERT INTO hospital_patients (patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, datetime('now'), datetime('now'))`,
+      [token, dept]
     );
-    const patient = await dbGet('SELECT * FROM hospital_patients WHERE id = ?', [id]);
-    console.log(`[hospital] 👤 Patient registered: pid=${pid} lang=${lang}`);
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
+    console.log(`[hospital] 👤 Patient registered: token=${token} lang=${lang} dept=${dept}`);
     res.json({ success: true, patient, isNew: true });
   } catch (e) {
     console.error('[hospital:patient] register error:', e?.message);
@@ -4229,19 +4290,34 @@ app.post('/api/hospital/patient', async (req, res) => {
   }
 });
 
-// GET /api/hospital/patient/:patientId — 환자 고유번호로 조회
-app.get('/api/hospital/patient/:patientId', async (req, res) => {
+// GET /api/hospital/patient/:patientToken — 환자 토큰으로 조회 (이전 방문 기록 포함)
+app.get('/api/hospital/patient/:patientToken', async (req, res) => {
   try {
-    const pid = String(req.params.patientId).trim();
-    const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [pid]);
+    const token = String(req.params.patientToken).trim();
+    // 새 테이블에서 먼저 조회
+    let patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
+    if (!patient) {
+      // 이전 테이블 호환: patient_id 로도 조회 시도
+      patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_id = ?', [token]);
+    }
     if (!patient) return res.json({ success: true, found: false });
 
-    // Fetch recent sessions
-    const sessions = await dbAll(
-      `SELECT id, room_id, department, host_lang, guest_lang, status, created_at, ended_at
-       FROM hospital_sessions WHERE patient_id = ? ORDER BY created_at DESC LIMIT 10`,
-      [pid]
-    );
+    // Fetch recent sessions from new table
+    let sessions = [];
+    try {
+      sessions = await dbAll(
+        `SELECT id, patient_token, room_id, dept, started_at, ended_at
+         FROM hospital_sessions WHERE patient_token = ? ORDER BY started_at DESC LIMIT 20`,
+        [token]
+      );
+    } catch {
+      // Fallback: try old table
+      sessions = await dbAll(
+        `SELECT id, room_id, department, host_lang, guest_lang, status, created_at, ended_at
+         FROM hospital_sessions WHERE patient_id = ? ORDER BY created_at DESC LIMIT 10`,
+        [token]
+      ).catch(() => []);
+    }
 
     res.json({ success: true, found: true, patient, sessions });
   } catch (e) {
@@ -4281,6 +4357,36 @@ app.delete('/api/hospital/waiting/:roomId', (req, res) => {
     }
   }
   res.json({ success: true }); // already removed or not found
+});
+
+// GET /api/hospital/patient/:patientToken/history — 환자 이전 방문 기록 + 대화 요약
+app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
+  try {
+    const token = String(req.params.patientToken).trim();
+    const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
+    if (!patient) return res.json({ success: true, found: false, sessions: [] });
+
+    // Fetch sessions
+    const sessions = await dbAll(
+      `SELECT id, patient_token, room_id, dept, started_at, ended_at
+       FROM hospital_sessions WHERE patient_token = ? ORDER BY started_at DESC LIMIT 50`,
+      [token]
+    ).catch(() => []);
+
+    // Fetch messages per session
+    for (const sess of sessions) {
+      sess.messages = await dbAll(
+        `SELECT id, sender_role, original_text, translated_text, lang, created_at
+         FROM hospital_messages WHERE room_id = ? ORDER BY created_at ASC LIMIT 200`,
+        [sess.room_id]
+      ).catch(() => []);
+    }
+
+    res.json({ success: true, found: true, patient, sessions });
+  } catch (e) {
+    console.error('[hospital:patient:history] error:', e?.message);
+    res.status(500).json({ error: 'history_lookup_failed' });
+  }
 });
 
 // POST /api/hospital/session — 직원이 병원 세션 생성
