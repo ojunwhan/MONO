@@ -153,7 +153,8 @@ export default function HospitalPatientJoin() {
         state: {
           fromLang: lang,
           localName: cleanName,
-          role: "Manager",
+          guestId,
+          isGuest: true,
           isCreator: false,
           siteContext: `hospital_${department || "general"}`,
           roomType: "oneToOne",

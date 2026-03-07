@@ -4072,6 +4072,7 @@ app.post('/api/hospital/join', async (req, res) => {
     const lang = language ? String(language).trim() : null;
     const newRoomId = uuidv4();
     const createdAt = new Date().toISOString();
+    const hospitalSiteContext = `hospital_${dept}`;
 
     // If patientId provided, update last_seen
     if (pid) {
@@ -4083,6 +4084,23 @@ app.post('/api/hospital/join', async (req, res) => {
       } catch (_) {}
     }
 
+    // ★ Pre-create room meta in ROOMS map so both guest and host can find it
+    const guestLangCode = lang ? mapLang(lang) : 'auto';
+    ROOMS.set(newRoomId, {
+      roomType: 'oneToOne',
+      ownerLang: 'auto',
+      guestLang: guestLangCode,
+      siteContext: hospitalSiteContext,
+      locked: true,
+      ownerPid: null, // will be set when host joins
+      participants: {},
+      callSignCounters: {},
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      hospitalMode: true,
+      department: dept,
+      patientId: pid,
+    });
+
     // Add to waiting list for this department
     if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
     HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientId: pid, language: lang });
@@ -4093,7 +4111,7 @@ app.post('/api/hospital/join', async (req, res) => {
     // Also notify staff watching ALL departments
     io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
 
-    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} pid=${pid || 'new'}`);
+    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} ctx=${hospitalSiteContext} pid=${pid || 'new'}`);
     res.json({ success: true, roomId: newRoomId, department: dept, createdAt });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
