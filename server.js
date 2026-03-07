@@ -71,7 +71,7 @@ const usageStats = {
 
   // 에러
   errorCount: 0,           // 에러 발생 수
-  errors: [],              // 최근 에러 목록 (최대 10개)
+  errors: [],              // 최근 에러 목록 (최대 100개)
 };
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -173,11 +173,20 @@ function sendErrorAlertOnce(source, error) {
 function trackUsageError(error, options = {}) {
   const { source = 'runtime', notify = true } = options;
   usageStats.errorCount += 1;
-  if (usageStats.errors.length >= 10) usageStats.errors.shift();
-  usageStats.errors.push({
-    time: new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }),
+  if (usageStats.errors.length >= 100) usageStats.errors.shift();
+  const errorEntry = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    time: new Date().toISOString(),
+    timeKR: new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }),
+    source,
     message: makeErrorMessage(error),
-  });
+    stack: error?.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
+  };
+  usageStats.errors.push(errorEntry);
+  // 실시간 에러 소켓 전파 (admin room)
+  if (typeof io !== 'undefined') {
+    io.to('admin:errors').emit('admin:error', errorEntry);
+  }
   if (notify) sendErrorAlertOnce(source, error);
 }
 
@@ -875,6 +884,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {})
     if (forceGroq) {
       // Hospital mode: no fallback, log and rethrow
       console.error("[stt:hospital] Groq STT failed, no fallback allowed:", e?.message);
+      trackUsageError(e, { source: 'stt:hospital' });
       throw e;
     }
     if (!groq) markOpenAIQuotaBlocked(e);
@@ -926,6 +936,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = 
   } catch (e) {
     if (forceGroq) {
       console.error("[stt:hospital] Groq STT failed, no fallback:", e?.message);
+      trackUsageError(e, { source: 'stt:hospital' });
       throw e;
     }
     if (!groq) markOpenAIQuotaBlocked(e);
@@ -1882,6 +1893,18 @@ io.on('connection', (socket) => {
     usageStats.peakConnections = usageStats.currentConnections;
   }
   console.log('🟢 New client connected:', socket.id);
+
+  // ── Admin 실시간 에러 모니터링 구독 ──
+  socket.on('admin:subscribe-errors', (data) => {
+    const key = data?.key || '';
+    if (STATS_API_KEY && key === STATS_API_KEY) {
+      socket.join('admin:errors');
+      socket.emit('admin:subscribed', { ok: true, errorCount: usageStats.errors.length });
+      console.log(`[admin] 🔔 Error monitor subscribed: ${socket.id}`);
+    } else {
+      socket.emit('admin:subscribed', { ok: false, reason: 'invalid_key' });
+    }
+  });
 
   const leaveRoomInternal = ({ roomId, participantId, reason } = {}) => {
     const rid = String(roomId || socket.roomId || "").trim();
@@ -3204,7 +3227,7 @@ io.on('connection', (socket) => {
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [msgId, activeSession?.id || null, roomId, senderRole, fromLang, finalText, translated || '', toLang, pToken]
             );
-          } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); }
+          } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); trackUsageError(dbErr, { source: 'hospital:msg-save' }); }
         }
         return;
       }
@@ -3532,7 +3555,7 @@ io.on('connection', (socket) => {
         `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [id, meta.hospitalSessionId || null, roomId, senderRole, senderP?.lang || '', trimmedText, pToken]
-      ).catch(e => console.warn('[hospital] msg save error:', e?.message));
+      ).catch(e => { console.warn('[hospital] msg save error:', e?.message); trackUsageError(e, { source: 'hospital:msg-save' }); });
     }
 
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
@@ -3656,7 +3679,7 @@ io.on('connection', (socket) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, activeSession2?.id || null, roomId, isOwner2 ? 'host' : 'guest', fromLang, trimmedText, draft || '', toLang, pToken2]
           );
-        } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); }
+        } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); trackUsageError(dbErr2, { source: 'hospital:msg-save2' }); }
       }
       return;
     }
@@ -3856,7 +3879,7 @@ io.on('connection', (socket) => {
               );
               console.log(`[hospital] 🔚 Session ${activeSess.id} auto-ended (room empty)`);
             }
-          } catch (e) { console.warn('[hospital:auto-end]', e?.message); }
+          } catch (e) { console.warn('[hospital:auto-end]', e?.message); trackUsageError(e, { source: 'hospital:auto-end' }); }
           ROOMS.delete(capturedRoomId);
           delete messageBuffer[capturedRoomId];
           syncRoomsActive();
@@ -3892,7 +3915,7 @@ io.on('connection', (socket) => {
                 );
                 console.log(`[hospital] 🔚 Session ${activeSessHost.id} ended (host left)`);
               }
-            } catch (e) { console.warn('[hospital:host-left-end]', e?.message); }
+            } catch (e) { console.warn('[hospital:host-left-end]', e?.message); trackUsageError(e, { source: 'hospital:host-left-end' }); }
           })();
         }
         setTimeout(() => {
@@ -4206,6 +4229,7 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     restoreUsageStats();
   } catch (e) {
     console.warn('[hospital] ⚠ table init failed:', e?.message);
+    trackUsageError(e, { source: 'hospital:table-init' });
   }
 })();
 
@@ -4245,6 +4269,7 @@ app.post('/api/hospital/join', async (req, res) => {
         }
       } catch (dbErr) {
         console.warn('[hospital:join] patient upsert warning:', dbErr?.message);
+        trackUsageError(dbErr, { source: 'hospital:join:patient-upsert' });
       }
     }
 
@@ -4258,6 +4283,7 @@ app.post('/api/hospital/join', async (req, res) => {
       );
     } catch (dbErr) {
       console.warn('[hospital:join] session insert warning:', dbErr?.message);
+      trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
     }
 
     // ★ Pre-create room meta in ROOMS map so guest can immediately join
@@ -4292,6 +4318,7 @@ app.post('/api/hospital/join', async (req, res) => {
     res.json({ success: true, roomId: newRoomId, department: dept, createdAt, sessionId });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
+    trackUsageError(e, { source: 'hospital:join' });
     res.status(500).json({ error: 'join_failed' });
   }
 });
@@ -4327,6 +4354,7 @@ app.post('/api/hospital/patient', async (req, res) => {
     res.json({ success: true, patient, isNew: true });
   } catch (e) {
     console.error('[hospital:patient] register error:', e?.message);
+    trackUsageError(e, { source: 'hospital:patient:register' });
     res.status(500).json({ error: 'patient_register_failed' });
   }
 });
@@ -4363,6 +4391,7 @@ app.get('/api/hospital/patient/:patientToken', async (req, res) => {
     res.json({ success: true, found: true, patient, sessions });
   } catch (e) {
     console.error('[hospital:patient] lookup error:', e?.message);
+    trackUsageError(e, { source: 'hospital:patient:lookup' });
     res.status(500).json({ error: 'patient_lookup_failed' });
   }
 });
@@ -4426,6 +4455,7 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
     res.json({ success: true, found: true, patient, sessions });
   } catch (e) {
     console.error('[hospital:patient:history] error:', e?.message);
+    trackUsageError(e, { source: 'hospital:patient:history' });
     res.status(500).json({ error: 'history_lookup_failed' });
   }
 });
@@ -4467,6 +4497,7 @@ app.post('/api/hospital/session', async (req, res) => {
     res.json({ success: true, sessionId, roomId: rid, chartNumber: cleanChart, stationId: station });
   } catch (e) {
     console.error('[hospital] session create error:', e?.message);
+    trackUsageError(e, { source: 'hospital:session-create' });
     res.status(500).json({ error: 'session_create_failed' });
   }
 });
@@ -4594,6 +4625,7 @@ app.get('/api/hospital/dashboard/stats', async (req, res) => {
     });
   } catch (e) {
     console.error('[hospital:dashboard:stats]', e?.message);
+    trackUsageError(e, { source: 'hospital:dashboard:stats' });
     res.status(500).json({ error: 'stats_query_failed' });
   }
 });
@@ -4647,6 +4679,7 @@ app.get('/api/hospital/dashboard/sessions', async (req, res) => {
     });
   } catch (e) {
     console.error('[hospital:dashboard:sessions]', e?.message);
+    trackUsageError(e, { source: 'hospital:dashboard:sessions' });
     res.status(500).json({ error: 'sessions_query_failed' });
   }
 });
@@ -4783,6 +4816,7 @@ app.post('/api/hospital/patients', async (req, res) => {
     res.json({ success: true, patient, isNew: true });
   } catch (e) {
     console.error('[hospital] patient register error:', e?.message);
+    trackUsageError(e, { source: 'hospital:patient:register2' });
     res.status(500).json({ error: 'patient_register_failed' });
   }
 });
@@ -4934,6 +4968,232 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
+
+// ── 실시간 에러 모니터링 페이지 ──
+app.get('/admin/errors', (req, res) => {
+  if (!STATS_API_KEY || req.query.key !== STATS_API_KEY) {
+    return res.status(403).send('Forbidden — ?key= 필요');
+  }
+  const apiKey = req.query.key;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MONO 실시간 에러 모니터</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', -apple-system, sans-serif; background:#0d1117; color:#c9d1d9; }
+  .header { background:#161b22; border-bottom:1px solid #30363d; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+  .header h1 { font-size:18px; color:#58a6ff; }
+  .header .stats { font-size:13px; color:#8b949e; }
+  .status { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; }
+  .status.connected { background:#3fb950; }
+  .status.disconnected { background:#f85149; }
+  .controls { padding:12px 24px; background:#161b22; border-bottom:1px solid #30363d; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .controls input, .controls select { background:#0d1117; border:1px solid #30363d; color:#c9d1d9; padding:6px 10px; border-radius:6px; font-size:13px; }
+  .controls button { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
+  .controls button:hover { background:#30363d; }
+  .controls button.danger { border-color:#f85149; color:#f85149; }
+  .errors { padding:8px 24px; max-height:calc(100vh - 140px); overflow-y:auto; }
+  .error-card { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 16px; margin:6px 0; transition:border-color .2s; }
+  .error-card.new { border-color:#f85149; animation:flashIn .5s; }
+  @keyframes flashIn { 0%{background:#2d1214;} 100%{background:#161b22;} }
+  .error-meta { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .error-time { font-size:12px; color:#8b949e; font-family:monospace; }
+  .error-source { font-size:11px; background:#21262d; color:#79c0ff; padding:2px 8px; border-radius:10px; }
+  .error-msg { font-size:14px; color:#f0f6fc; word-break:break-all; }
+  .error-stack { font-size:11px; color:#6e7681; font-family:monospace; margin-top:6px; white-space:pre-wrap; }
+  .empty { text-align:center; padding:60px; color:#484f58; font-size:16px; }
+  .count-badge { background:#f85149; color:#fff; font-size:12px; padding:2px 8px; border-radius:10px; margin-left:8px; }
+  .sound-toggle { cursor:pointer; font-size:18px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><span class="status disconnected" id="connStatus"></span>MONO 실시간 에러 모니터</h1>
+  <div class="stats">
+    총 에러: <strong id="totalCount">0</strong>
+    | 세션 에러: <strong id="sessionCount">0</strong>
+    | <span class="sound-toggle" id="soundToggle" title="알림 소리">🔔</span>
+  </div>
+</div>
+<div class="controls">
+  <input type="text" id="filterSource" placeholder="source 필터 (예: hospital)" />
+  <input type="text" id="filterMsg" placeholder="메시지 검색" />
+  <select id="sortOrder">
+    <option value="newest">최신순</option>
+    <option value="oldest">오래된순</option>
+  </select>
+  <button onclick="clearErrors()">화면 클리어</button>
+  <button onclick="loadHistory()" style="background:#1f6feb;border-color:#1f6feb;color:#fff;">이전 에러 로드</button>
+  <label style="font-size:12px;color:#8b949e;"><input type="checkbox" id="autoScroll" checked /> 자동 스크롤</label>
+</div>
+<div class="errors" id="errorList">
+  <div class="empty" id="emptyMsg">에러 없음 — 실시간 대기 중...</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const API_KEY = '${apiKey}';
+let soundEnabled = true;
+let sessionErrors = 0;
+const errorCards = [];
+
+// 알림 사운드
+const beep = () => {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 800; gain.gain.value = 0.3;
+    osc.start(); osc.stop(ctx.currentTime + 0.15);
+  } catch {}
+};
+
+document.getElementById('soundToggle').onclick = () => {
+  soundEnabled = !soundEnabled;
+  document.getElementById('soundToggle').textContent = soundEnabled ? '🔔' : '🔕';
+};
+
+// Socket 연결
+const socket = io({ transports: ['websocket', 'polling'] });
+
+socket.on('connect', () => {
+  document.getElementById('connStatus').className = 'status connected';
+  socket.emit('admin:subscribe-errors', { key: API_KEY });
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('connStatus').className = 'status disconnected';
+});
+
+socket.on('admin:subscribed', (data) => {
+  if (!data.ok) { alert('인증 실패: ' + (data.reason || '')); return; }
+  document.getElementById('totalCount').textContent = data.errorCount || 0;
+});
+
+socket.on('admin:error', (err) => {
+  sessionErrors++;
+  document.getElementById('sessionCount').textContent = sessionErrors;
+  const tc = parseInt(document.getElementById('totalCount').textContent) || 0;
+  document.getElementById('totalCount').textContent = tc + 1;
+  addErrorCard(err, true);
+  beep();
+});
+
+function addErrorCard(err, isNew) {
+  const el = document.getElementById('emptyMsg');
+  if (el) el.remove();
+
+  // 필터 체크
+  const fs = document.getElementById('filterSource').value.toLowerCase();
+  const fm = document.getElementById('filterMsg').value.toLowerCase();
+  if (fs && !(err.source || '').toLowerCase().includes(fs)) return;
+  if (fm && !(err.message || '').toLowerCase().includes(fm)) return;
+
+  const card = document.createElement('div');
+  card.className = 'error-card' + (isNew ? ' new' : '');
+  card.innerHTML = \`
+    <div class="error-meta">
+      <span class="error-time">\${err.timeKR || new Date(err.time).toLocaleTimeString('ko-KR')}</span>
+      <span class="error-source">\${err.source || 'unknown'}</span>
+    </div>
+    <div class="error-msg">\${escapeHtml(err.message || '')}</div>
+    \${err.stack ? '<div class="error-stack">' + escapeHtml(err.stack) + '</div>' : ''}
+  \`;
+
+  const list = document.getElementById('errorList');
+  const order = document.getElementById('sortOrder').value;
+  if (order === 'newest') {
+    list.prepend(card);
+  } else {
+    list.append(card);
+  }
+
+  errorCards.push({ el: card, data: err });
+
+  if (document.getElementById('autoScroll').checked && order === 'newest') {
+    list.scrollTop = 0;
+  }
+
+  // 카드 수 제한
+  while (errorCards.length > 200) {
+    const old = errorCards.shift();
+    old.el.remove();
+  }
+
+  if (isNew) {
+    setTimeout(() => card.classList.remove('new'), 3000);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearErrors() {
+  document.getElementById('errorList').innerHTML = '<div class="empty" id="emptyMsg">화면 클리어됨</div>';
+  errorCards.length = 0;
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/errors?key=' + API_KEY + '&limit=100');
+    const data = await res.json();
+    if (data.errors) {
+      clearErrors();
+      document.getElementById('totalCount').textContent = data.totalErrorCount || 0;
+      const sorted = document.getElementById('sortOrder').value === 'newest' ? data.errors : data.errors.reverse();
+      sorted.forEach(e => addErrorCard(e, false));
+    }
+  } catch (e) { alert('로드 실패: ' + e.message); }
+}
+
+// 필터 변경 시 다시 로드
+document.getElementById('filterSource').addEventListener('input', () => loadHistory());
+document.getElementById('filterMsg').addEventListener('input', () => {
+  clearTimeout(window._fmTimer);
+  window._fmTimer = setTimeout(loadHistory, 300);
+});
+
+// 초기 로드
+loadHistory();
+</script>
+</body>
+</html>`);
+});
+
+// ── 에러 전용 API ──
+app.get('/api/errors', (req, res) => {
+  if (!STATS_API_KEY || req.query.key !== STATS_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { source, limit: lim, since } = req.query;
+  let errors = [...usageStats.errors];
+  
+  // source 필터
+  if (source) {
+    errors = errors.filter(e => e.source && e.source.includes(source));
+  }
+  // since 필터 (ISO timestamp)
+  if (since) {
+    errors = errors.filter(e => e.time >= since);
+  }
+  // 최신순 정렬
+  errors.reverse();
+  // limit
+  const limit = Math.min(parseInt(lim) || 100, 100);
+  errors = errors.slice(0, limit);
+
+  res.json({
+    totalErrorCount: usageStats.errorCount,
+    showing: errors.length,
+    errors,
+  });
+});
 
 // ── 비용 리포트 수동 트리거 ──
 app.get('/api/cost-report', async (req, res) => {
