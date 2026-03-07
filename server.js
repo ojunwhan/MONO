@@ -2094,9 +2094,10 @@ io.on('connection', (socket) => {
   // ======================================================
   // ✅ [수정됨] 호스트 방 생성 + 즉시 조인 (증발 방지 핵심)
   // ======================================================
-  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId }) => {
+  socket.on("create-room", ({ roomId, fromLang, participantId, siteContext, role, localName, roomType, chartNumber, stationId, hospitalSessionId, kioskOnly } = {}) => {
     if (!roomId) return;
     const roomAlreadyExists = ROOMS.has(roomId);
+    const isHospitalFixed = String(roomId).startsWith("hospital_default_");
 
     const hostLangCode = mapLang(fromLang);
     const ctx = siteContext || "general";
@@ -2111,6 +2112,24 @@ io.on('connection', (socket) => {
       meta.ownerLang = hostLangCode;
       meta.siteContext = ctx;
       meta.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      // 병원 고정방: create-room 시 기존 게스트 참가자 클리어 (ownerPid는 유지)
+      // 이전 세션의 잔여 데이터가 broadcast 전환을 유발하지 않도록 정리
+      if (isHospitalFixed && participantId) {
+        const prevPids = Object.keys(meta.participants);
+        for (const pid of prevPids) {
+          if (pid !== participantId && pid !== meta.ownerPid) {
+            console.log(`[CREATE:HOSPITAL] Clearing previous guest ${pid} from fixed room ${roomId}`);
+            delete meta.participants[pid];
+          }
+        }
+        // ownerPid 갱신 (kiosk 재접속 시 새 pid가 올 수 있음)
+        meta.ownerPid = participantId;
+        // broadcast로 전환되었던 방을 다시 oneToOne으로 복구
+        if (meta.roomType === "broadcast") {
+          console.log(`[CREATE:HOSPITAL] Reverting broadcast -> oneToOne for fixed room ${roomId}`);
+          meta.roomType = "oneToOne";
+        }
+      }
     } else {
       meta = {
         roomType: rType,
@@ -2127,22 +2146,31 @@ io.on('connection', (socket) => {
     }
 
     if (participantId) {
-      leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
-      const callSign = assignCallSign(meta, hostRole);
-      meta.participants[participantId] = {
-        callSign,
-        localName: localName || "",
-        role: hostRole,
-        lang: hostLangCode,
-        socketId: socket.id,
-        phoneticVariants: generateCallSignPhonetics(callSign),
-      };
-      socket.join(roomId);
-      socket.roomId = roomId;
-      socket.data.participantId = participantId;
-      SOCKET_ROLES.set(socket.id, { role: "owner" });
-      console.log(`🏠 Host ${socket.id} [${callSign}] ${roomAlreadyExists ? 're-joined' : 'created'} room: ${roomId} [${hostLangCode}] [${ctx}]`);
-      socket.emit("call-sign-assigned", { callSign, siteContext: ctx });
+      // kioskOnly: ownerPid 등록 + 참가자 메타 등록은 하지만, 소켓 룸에는 join 안 함
+      // (kiosk 태블릿은 채팅 참여자가 아님, monitor-room으로 이벤트만 수신)
+      if (kioskOnly) {
+        meta.ownerPid = participantId;
+        // 참가자 등록은 최소한으로 (isAuthorizedParticipant 체크용이 아닌, ownerPid 식별용)
+        // kiosk는 실제 채팅하지 않으므로 participants에 등록하지 않음
+        console.log(`🏥 Kiosk ${socket.id} created/refreshed room: ${roomId} ownerPid=${participantId} [${hostLangCode}] [${ctx}]`);
+      } else {
+        leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "create-room" });
+        const callSign = assignCallSign(meta, hostRole);
+        meta.participants[participantId] = {
+          callSign,
+          localName: localName || "",
+          role: hostRole,
+          lang: hostLangCode,
+          socketId: socket.id,
+          phoneticVariants: generateCallSignPhonetics(callSign),
+        };
+        socket.join(roomId);
+        socket.roomId = roomId;
+        socket.data.participantId = participantId;
+        SOCKET_ROLES.set(socket.id, { role: "owner" });
+        console.log(`🏠 Host ${socket.id} [${callSign}] ${roomAlreadyExists ? 're-joined' : 'created'} room: ${roomId} [${hostLangCode}] [${ctx}]`);
+        socket.emit("call-sign-assigned", { callSign, siteContext: ctx });
+      }
     }
 
     ROOMS.set(roomId, meta);
@@ -2542,6 +2570,8 @@ io.on('connection', (socket) => {
     }
 
     // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
+    // ⚠️ 병원 고정방(hospital_default_*)은 broadcast 전환 제외 — 항상 1:1 유지
+    const isHospitalFixedRoom = String(roomId).startsWith("hospital_default_");
     if (meta.roomType === "oneToOne") {
       const currentPids = Object.keys(meta.participants);
       const isReconnect = currentPids.includes(participantId);
@@ -2564,21 +2594,37 @@ io.on('connection', (socket) => {
         }
       }
 
-      // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
-      const activePids = Object.keys(meta.participants);
-      const isReconnectAfterCleanup = activePids.includes(participantId);
-      if (!isReconnectAfterCleanup && activePids.length >= 2) {
-        // 실제 온라인 소켓 수도 확인 — 2명 이상 실시간 접속 중인 경우만 전환
-        const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
-        const onlineCount = activePids.filter(pid => {
-          const p = meta.participants[pid];
-          return p?.socketId && isOnline2(p.socketId);
-        }).length;
-        if (onlineCount >= 2) {
-          console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
-          convertOneToOneRoomToBroadcast(roomId, meta);
-        } else {
-          console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
+      // 병원 고정방: broadcast 전환 절대 금지 — 이전 게스트만 정리하고 항상 1:1 유지
+      if (isHospitalFixedRoom) {
+        // 병원 고정방에서 새 세션: ownerPid가 아닌 기존 참가자 중 오프라인은 이미 위에서 정리됨
+        // 추가로, 새 게스트 입장 시 이전 게스트(오프라인 아닌 경우도) 교체 — 1:1 보장
+        const afterPids = Object.keys(meta.participants);
+        if (!afterPids.includes(participantId) && afterPids.length >= 2) {
+          const oldGuestPids = afterPids.filter(pid => pid !== meta.ownerPid);
+          for (const gPid of oldGuestPids) {
+            console.log(`[JOIN:HOSPITAL] Replacing previous guest ${gPid} in fixed room ${roomId}`);
+            delete meta.participants[gPid];
+          }
+          ROOMS.set(roomId, meta);
+        }
+        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — broadcast conversion skipped (always 1:1)`);
+      } else {
+        // 정리 후 다시 체크: 여전히 3명 이상이면 broadcast 전환
+        const activePids = Object.keys(meta.participants);
+        const isReconnectAfterCleanup = activePids.includes(participantId);
+        if (!isReconnectAfterCleanup && activePids.length >= 2) {
+          // 실제 온라인 소켓 수도 확인 — 2명 이상 실시간 접속 중인 경우만 전환
+          const isOnline2 = (sid) => !!(sid && io?.sockets?.sockets?.get(sid));
+          const onlineCount = activePids.filter(pid => {
+            const p = meta.participants[pid];
+            return p?.socketId && isOnline2(p.socketId);
+          }).length;
+          if (onlineCount >= 2) {
+            console.log(`[JOIN] oneToOne -> broadcast conversion: ${roomId} (${activePids.length + 1} ppl, ${onlineCount} online)`);
+            convertOneToOneRoomToBroadcast(roomId, meta);
+          } else {
+            console.log(`[JOIN:1:1] Skipping broadcast conversion: only ${onlineCount} online in ${roomId}`);
+          }
         }
       }
     }

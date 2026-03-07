@@ -63,16 +63,19 @@ const QRCodeBox = ({ roomId, fromLang, participantId, siteContext, role, localNa
     if (!rid || !lang || !pid || !r) return;
     console.log(`[HOST] emit create-room${kioskOnly ? " (kiosk-only, no join)" : "/join"} (${reason}) rid=${rid} connected=${socket.connected}`);
     if (kioskOnly) {
-      // Kiosk 태블릿: 방만 생성, participantId 없이 (참가자 등록 X, 소켓 룸에만 모니터링용으로 join)
+      // Kiosk 태블릿: 방 생성 + ownerPid 등록 (참가자로는 join 안 함)
+      // participantId를 보내서 서버에서 ownerPid가 null이 되지 않도록 함
       socket.emit("create-room", {
         roomId: rid,
         fromLang: lang,
+        participantId: pid,
         siteContext: siteContextRef.current || "general",
         role: r,
         localName: "",
         roomType: roomTypeRef.current || "oneToOne",
+        kioskOnly: true, // 서버에서 참가자 등록은 하되 소켓 join은 kiosk임을 표시
       });
-      // 소켓 룸에만 join (이벤트 수신용, 참가자 등록 X)
+      // 소켓 룸에만 join (이벤트 수신용, 채팅 참가자로는 활동 안 함)
       socket.emit("monitor-room", { roomId: rid });
     } else {
       socket.emit("create-room", {
