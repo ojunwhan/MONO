@@ -11,7 +11,12 @@ const App = () => {
   const [showOnboarding, setShowOnboarding] = React.useState(
     () => localStorage.getItem("mono.onboardingDone") !== "1"
   );
-  const isGuestJoinRoute = window.location.pathname.startsWith("/join/");
+  const pathname = window.location.pathname;
+  const isGuestJoinRoute = pathname.startsWith("/join/")
+    || pathname.startsWith("/hospital/kiosk/")
+    || pathname.startsWith("/hospital/join/")
+    || pathname.startsWith("/kiosk")
+    || pathname.startsWith("/hospital");
 
   useEffect(() => {
     const theme = localStorage.getItem("mono.theme");
