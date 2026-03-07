@@ -15,6 +15,8 @@ import PrivacyPage from "./pages/Privacy";
 import HospitalApp from "./pages/HospitalApp";
 import HospitalRecords from "./pages/HospitalRecords";
 import HospitalDashboard from "./pages/HospitalDashboard";
+import HospitalKiosk from "./pages/HospitalKiosk";
+import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -92,6 +94,14 @@ const router = createBrowserRouter([
   {
     path: "/hospital/records",
     element: <HospitalRecords />,
+  },
+  {
+    path: "/hospital/kiosk/:department",
+    element: <HospitalKiosk />,
+  },
+  {
+    path: "/hospital/join/:department",
+    element: <HospitalPatientJoin />,
   },
   {
     path: "/hospital-dashboard",

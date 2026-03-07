@@ -4041,6 +4041,59 @@ app.post("/api/auth/convert-guest", async (req, res) => {
 // In-memory kiosk station registry: stationId → { roomId, sessionId, chartNumber, hostLang }
 const KIOSK_STATIONS = new Map();
 
+// In-memory hospital department watchers: department → Set<socketId>
+// Each watching staff member's socket joins room `hospital:watch:${department}`
+const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, createdAt }]
+
+// POST /api/hospital/join — 환자가 QR 스캔 후 새 room 자동 생성
+app.post('/api/hospital/join', async (req, res) => {
+  try {
+    const { department } = req.body || {};
+    const dept = String(department || 'general').trim();
+    const newRoomId = uuidv4();
+    const createdAt = new Date().toISOString();
+
+    // Add to waiting list for this department
+    if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
+    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt });
+
+    // Notify all staff watching this department via socket
+    io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', {
+      roomId: newRoomId,
+      department: dept,
+      createdAt,
+    });
+
+    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId}`);
+    res.json({ success: true, roomId: newRoomId, department: dept, createdAt });
+  } catch (e) {
+    console.error('[hospital:join] error:', e?.message);
+    res.status(500).json({ error: 'join_failed' });
+  }
+});
+
+// GET /api/hospital/waiting — 특정 진료과 대기 환자 목록 조회
+app.get('/api/hospital/waiting', (req, res) => {
+  const dept = String(req.query.department || 'general').trim();
+  const list = HOSPITAL_WAITING.get(dept) || [];
+  res.json({ success: true, department: dept, waiting: list });
+});
+
+// DELETE /api/hospital/waiting/:roomId — 대기 목록에서 제거 (통역 시작 시)
+app.delete('/api/hospital/waiting/:roomId', (req, res) => {
+  const { roomId } = req.params;
+  for (const [dept, list] of HOSPITAL_WAITING.entries()) {
+    const idx = list.findIndex(w => w.roomId === roomId);
+    if (idx !== -1) {
+      list.splice(idx, 1);
+      // Notify watchers that patient was picked up
+      io.to(`hospital:watch:${dept}`).emit('hospital:patient-picked', { roomId, department: dept });
+      return res.json({ success: true });
+    }
+  }
+  res.json({ success: true }); // already removed or not found
+});
+
 // POST /api/hospital/session — 직원이 병원 세션 생성
 app.post('/api/hospital/session', async (req, res) => {
   try {
@@ -4324,6 +4377,29 @@ io.on('connection', (kioskSocket) => {
         hostLang: data.hostLang,
       });
     }
+  });
+
+  // ── Hospital: staff watches department for incoming patients ──
+  kioskSocket.on('hospital:watch', ({ department }) => {
+    if (!department) return;
+    const channel = `hospital:watch:${department}`;
+    kioskSocket.join(channel);
+    console.log(`[hospital:watch] 👁️ Staff watching dept=${department} (socket=${kioskSocket.id})`);
+
+    // Send current waiting list immediately
+    const waiting = HOSPITAL_WAITING.get(department) || [];
+    if (waiting.length > 0) {
+      waiting.forEach(w => {
+        kioskSocket.emit('hospital:patient-waiting', w);
+      });
+    }
+  });
+
+  kioskSocket.on('hospital:unwatch', ({ department }) => {
+    if (!department) return;
+    const channel = `hospital:watch:${department}`;
+    kioskSocket.leave(channel);
+    console.log(`[hospital:unwatch] 🔇 Staff unwatching dept=${department} (socket=${kioskSocket.id})`);
   });
 });
 

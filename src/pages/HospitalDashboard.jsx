@@ -54,6 +54,14 @@ const LANG_LABELS = {
   pt: "Português", hi: "हिन्दी",
 };
 
+const LANG_NAMES_KO = {
+  ko: "한국어", en: "영어", zh: "중국어", ja: "일본어", vi: "베트남어",
+  th: "태국어", ne: "네팔어", km: "크메르어", my: "미얀마어", id: "인도네시아어",
+  mn: "몽골어", ru: "러시아어", uz: "우즈베크어", tl: "필리핀어", bn: "벵골어",
+  si: "싱할라어", ar: "아랍어", es: "스페인어", fr: "프랑스어", de: "독일어",
+  pt: "포르투갈어", hi: "힌디어",
+};
+
 const CHART_COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
   "#EC4899", "#06B6D4", "#84CC16", "#F97316", "#6366F1",
@@ -64,6 +72,10 @@ HOSPITAL_DEPARTMENTS.forEach((d) => { DEPT_MAP[d.id] = d; });
 
 function getLangLabel(code) {
   return LANG_LABELS[code?.toLowerCase()] || code?.toUpperCase() || "-";
+}
+
+function getLanguageNameKo(code) {
+  return LANG_NAMES_KO[code?.toLowerCase()] || code?.toUpperCase() || "-";
 }
 
 function getDeptLabel(id) {
@@ -131,14 +143,14 @@ export default function HospitalDashboard() {
       >
         {/* Logo */}
         <div className="p-5 border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <MonoLogo />
-            <div className="flex flex-col">
-              <span className="text-[11px] font-semibold tracking-[2px] text-[#7C6FEB] uppercase">
-                Hospital
+            <div className="flex flex-col min-w-0">
+              <span className="text-[12px] font-bold text-[#7C6FEB] whitespace-nowrap">
+                병원 관리
               </span>
-              <span className="text-[10px] text-[var(--color-text-secondary)]">
-                Dashboard
+              <span className="text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">
+                대시보드
               </span>
             </div>
           </div>
@@ -248,7 +260,7 @@ function OverviewPanel() {
   const langChart = useMemo(() => {
     if (!stats?.languageStats) return [];
     return stats.languageStats.map((l) => ({
-      name: getLangLabel(l.language),
+      name: getLanguageNameKo(l.language),
       value: l.count,
     }));
   }, [stats?.languageStats]);
