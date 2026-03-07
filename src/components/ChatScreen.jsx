@@ -142,9 +142,16 @@ export default function ChatScreen() {
   // 병원 모드에서 환자(게스트)가 보는 상대방 이름 — 나중에 병원 이름으로 교체 가능
   const HOSPITAL_DISPLAY_NAME = hospitalDept?.labelKo || "병원";
 
+  // 병원 모드 초기 상대방 이름: 게스트(환자)→"병원", 호스트(직원)→"환자"
+  const hospitalInitialPartnerName = isHospitalMode
+    ? (isGuestMode ? HOSPITAL_DISPLAY_NAME : "환자")
+    : "";
+
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
   const [myCallSign, setMyCallSign] = useState("");
-  const [partnerName, setPartnerName] = useState(location.state?.peerDisplayName || "");
+  const [partnerName, setPartnerName] = useState(
+    location.state?.peerDisplayName || hospitalInitialPartnerName || ""
+  );
   const [siteContext, setSiteContext] = useState(effectiveSiteContext || "general");
   const [roomType, setRoomType] = useState(location.state?.roomType || queryRoomType || "oneToOne");
   const [partnerLang, setPartnerLang] = useState(location.state?.peerLang || "");
@@ -183,8 +190,9 @@ export default function ChatScreen() {
   const myShort = useMemo(() => getLanguageProfileByCode(fromLang)?.shortLabel || getLabelFromCode(fromLang), [fromLang]);
   const partnerFlagUrl = useMemo(() => getLanguageProfileByCode(partnerLang)?.flagUrl || getFlagUrlByLang(partnerLang), [partnerLang]);
   const partnerShort = useMemo(() => getLanguageProfileByCode(partnerLang)?.shortLabel || getLabelFromCode(partnerLang), [partnerLang]);
-  const resolvedPartnerFlagUrl = peerInfo?.peerFlagUrl || partnerFlagUrl;
-  const resolvedPartnerShort = peerInfo?.peerLabel || partnerShort;
+  // partnerLang이 존재하면 partnerLang 기준 라벨을 우선 사용 (실시간 반영)
+  const resolvedPartnerFlagUrl = (partnerLang && partnerFlagUrl) ? partnerFlagUrl : (peerInfo?.peerFlagUrl || partnerFlagUrl);
+  const resolvedPartnerShort = (partnerLang && partnerShort) ? partnerShort : (peerInfo?.peerLabel || partnerShort);
 
   const localizeWarning = useCallback((msg) => {
     const code = String(fromLangRef.current || "en").toLowerCase();
