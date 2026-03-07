@@ -5008,21 +5008,65 @@ const distPath = path.resolve(__dirname, "dist");
 // 정적파일 서빙
 app.use(express.static(distPath));
 
-// ✅ Cloudflare 404 방지용 — dist 루트 fallback 절대경로 보정
-// Cloudflare 터널을 통해 접근할 때 SPA 라우팅 404 방지
-app.get("/", (req, res) => {
-  const indexPath = path.join(distPath, "index.html");
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(500).send("dist/index.html not found. Run `npm run build` first.");
+// ✅ 페이지별 OG 메타태그 (카카오톡 미리보기 대응)
+const OG_ROUTES = [
+  // 일반 MONO
+  { path: "/", title: "MONO | AI 실시간 통역 메신저", desc: "앱 설치 없이 QR 스캔만으로 외국인과 바로 대화. 99개 언어 실시간 양방향 통역." },
+  { path: "/interpret", title: "MONO | QR 통역 시작 - 바로 연결", desc: "QR 코드를 생성하거나 스캔하여 즉시 AI 실시간 통역을 시작하세요." },
+  { path: "/home", title: "MONO | 대화방 목록", desc: "MONO 대화방 목록. AI 실시간 통역 메신저." },
+  { path: "/contacts", title: "MONO | 연락처", desc: "MONO 연락처 관리. AI 실시간 통역 메신저." },
+  { path: "/settings", title: "MONO | 설정", desc: "MONO 설정. AI 실시간 통역 메신저." },
+  // 병원 - 접수
+  { path: "/hospital", query: { mode: "kiosk", dept: "reception" }, title: "MONO 병원 키오스크 | 접수 QR 통역", desc: "병원 접수처 키오스크에서 QR 코드를 표시하여 환자가 스캔 후 AI 통역을 시작합니다." },
+  { path: "/hospital", query: { mode: "staff", dept: "reception" }, title: "MONO 직원 모드 | 접수 대기 환자 목록", desc: "접수처 대기 환자 목록을 실시간으로 확인하고 통역을 시작하세요." },
+  // 병원 - 성형외과
+  { path: "/hospital/kiosk/plastic_surgery", title: "MONO 성형외과 키오스크 | QR 스캔으로 통역 시작", desc: "성형외과 키오스크에서 QR 코드를 표시하여 환자가 스캔 후 AI 통역을 시작합니다." },
+  { path: "/hospital/aesthetic", title: "MONO 성형/피부 클리닉 | 키오스크 · 상담실", desc: "성형외과·피부과 전용 AI 실시간 통역. 키오스크 모드와 상담실 모드를 지원합니다." },
+  { path: "/hospital", query: { mode: "staff", dept: "plastic_surgery" }, title: "MONO 직원 모드 | 성형외과 대기 환자 목록", desc: "성형외과 대기 환자 목록을 실시간으로 확인하고 통역을 시작하세요." },
+  { path: "/hospital", query: { mode: "normal", dept: "plastic_surgery" }, title: "MONO 성형외과 상담실 | 1:1 통역", desc: "성형외과 1:1 상담 통역. QR 코드로 환자와 즉시 연결됩니다." },
+];
+
+function matchOgRoute(reqPath, reqQuery) {
+  // query 있는 룰 먼저 매칭 (더 구체적)
+  for (const r of OG_ROUTES) {
+    if (r.query && r.path === reqPath) {
+      const allMatch = Object.keys(r.query).every(k => reqQuery[k] === r.query[k]);
+      if (allMatch) return r;
+    }
   }
-});
+  // path만 매칭
+  for (const r of OG_ROUTES) {
+    if (!r.query && r.path === reqPath) return r;
+  }
+  return null;
+}
+
+function sendWithOg(req, res) {
+  const indexPath = path.join(distPath, "index.html");
+  if (!fs.existsSync(indexPath)) {
+    return res.status(500).send("dist/index.html not found. Run `npm run build` first.");
+  }
+  const matched = matchOgRoute(req.path, req.query || {});
+  if (!matched) return res.sendFile(indexPath);
+
+  let html = fs.readFileSync(indexPath, "utf-8");
+  const t = matched.title;
+  const d = matched.desc;
+  html = html
+    .replace(/<title>[^<]*<\/title>/i, `<title>${t}</title>`)
+    .replace(/<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:title" content="${t}" />`)
+    .replace(/<meta\s+property="og:description"[\s\S]*?\/>/i, `<meta property="og:description" content="${d}" />`)
+    .replace(/<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/?>/i, `<meta name="twitter:title" content="${t}" />`)
+    .replace(/<meta\s+name="twitter:description"[\s\S]*?\/>/i, `<meta name="twitter:description" content="${d}" />`)
+    .replace(/<meta\s+name="description"[\s\S]*?\/>/i, `<meta name="description" content="${d}" />`);
+  return res.type("html").send(html);
+}
+
+// ✅ Cloudflare 404 방지용 — dist 루트 fallback 절대경로 보정
+app.get("/", (req, res) => sendWithOg(req, res));
 
 // SPA 라우팅 (React fallback)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(distPath, "index.html"));
-});
+app.get("*", (req, res) => sendWithOg(req, res));
 
 const MAX_PORT_RETRIES = 8;
 
