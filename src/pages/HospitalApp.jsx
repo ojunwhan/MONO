@@ -26,6 +26,7 @@ import {
   Monitor,
   Bell,
   Users,
+  FolderOpen,
 } from "lucide-react";
 
 // ── Emergency quick phrases ──
@@ -64,6 +65,100 @@ function HospitalLogo() {
       </div>
     </div>
   );
+}
+
+// ── 통역 내용 자동 저장 유틸 ──
+const IDB_STORE = "mono_fs_handles";
+const IDB_KEY = "hospital_save_dir";
+
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("mono_hospital_fs", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveDirHandle(handle) {
+  const db = await openHandleDB();
+  const tx = db.transaction(IDB_STORE, "readwrite");
+  tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+
+async function loadDirHandle() {
+  try {
+    const db = await openHandleDB();
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+    return new Promise((res) => { req.onsuccess = () => res(req.result || null); req.onerror = () => res(null); });
+  } catch { return null; }
+}
+
+function buildFileName(deptLabel) {
+  const now = new Date();
+  const d = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+  const t = [String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0"), String(now.getSeconds()).padStart(2, "0")].join("-");
+  const dept = (deptLabel || "일반").replace(/[/\\?*:|"<>]/g, "_");
+  return `MONO_통역_${d}_${t}_${dept}.txt`;
+}
+
+function buildFileContent(messages, deptLabel, lang) {
+  const now = new Date();
+  const lines = [
+    `=== MONO Hospital - 진료 대화 기록 ===`,
+    `날짜: ${now.toLocaleDateString()}`,
+    `시간: ${now.toLocaleTimeString()}`,
+    `진료과: ${deptLabel || "N/A"}`,
+    `언어: ${lang || "N/A"}`,
+    `대화 수: ${messages.filter((m) => m.text || m.original).length}건`,
+    `${"─".repeat(40)}`,
+    "",
+    ...messages
+      .filter((m) => m.text || m.original)
+      .map((m) => {
+        const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : "";
+        const speaker = m.isMine ? "의료진" : "환자";
+        const orig = m.original || m.text || "";
+        const translated = m.translated || "";
+        return translated
+          ? `[${time}] ${speaker}: ${orig}\n         → ${translated}`
+          : `[${time}] ${speaker}: ${orig}`;
+      }),
+    "",
+    `${"─".repeat(40)}`,
+    `Powered by MONO Medical Interpreter`,
+  ];
+  return lines.join("\n");
+}
+
+async function autoSaveFile(content, fileName) {
+  // 1) File System Access API — 지정 폴더에 저장 시도
+  if (window.showDirectoryPicker) {
+    try {
+      const dirHandle = await loadDirHandle();
+      if (dirHandle) {
+        // 권한 확인/요청
+        const perm = await dirHandle.queryPermission({ mode: "readwrite" });
+        if (perm === "granted" || (await dirHandle.requestPermission({ mode: "readwrite" })) === "granted") {
+          const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(new Blob(["\uFEFF" + content], { type: "text/plain;charset=utf-8" }));
+          await writable.close();
+          return "folder"; // 폴더 저장 성공
+        }
+      }
+    } catch { /* 권한 거부 등 — fallback */ }
+  }
+  // 2) Fallback: 브라우저 기본 다운로드
+  const blob = new Blob(["\uFEFF" + content], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  return "download";
 }
 
 // ── Kiosk: 다국어 안내 문구 순환 ──
@@ -153,6 +248,19 @@ export default function HospitalApp() {
     }
   }, [urlDept, mode]);
 
+  // ── 저장 폴더 상태 ──
+  const [hasSaveDir, setHasSaveDir] = useState(false);
+  const [saveDirName, setSaveDirName] = useState("");
+  const [autoSaveResult, setAutoSaveResult] = useState(""); // "" | "folder" | "download" | "none"
+  const autoSaveTriggered = useRef(false);
+
+  // 저장 폴더 존재 여부 체크
+  useEffect(() => {
+    loadDirHandle().then((h) => {
+      if (h) { setHasSaveDir(true); setSaveDirName(h.name || ""); }
+    });
+  }, []);
+
   // ── Detect return from ChatScreen ──
   useEffect(() => {
     if (location.state?.returnFromSession) {
@@ -160,6 +268,8 @@ export default function HospitalApp() {
       setSummaryMessages(msgs);
       setSummaryDept(location.state?.hospitalDept || selectedDept);
       setSummaryChart(location.state?.chartNumber || "");
+      autoSaveTriggered.current = false;
+      setAutoSaveResult("");
       if (msgs.length > 0) {
         setStep("summary");
       } else {
@@ -168,6 +278,18 @@ export default function HospitalApp() {
       window.history.replaceState({}, "");
     }
   }, [location.state]);
+
+  // ── summary 진입 시 자동 저장 ──
+  useEffect(() => {
+    if (step !== "summary" || autoSaveTriggered.current) return;
+    const filteredMsgs = summaryMessages.filter((m) => m.text || m.original);
+    if (filteredMsgs.length === 0) return;
+    autoSaveTriggered.current = true;
+    const deptLabel = summaryDept?.labelKo || selectedDept?.labelKo || "일반";
+    const content = buildFileContent(summaryMessages, deptLabel, selectedLang);
+    const fileName = buildFileName(deptLabel);
+    autoSaveFile(content, fileName).then((r) => setAutoSaveResult(r)).catch(() => setAutoSaveResult("none"));
+  }, [step, summaryMessages, summaryDept, selectedDept, selectedLang]);
 
   // ═══════════════════════════════════════
   // MODE: KIOSK (태블릿 거치용 — QR만 표시, 소켓 연결 없음)
@@ -398,31 +520,23 @@ export default function HospitalApp() {
   };
 
   const handleDownloadSummary = () => {
-    const lines = [
-      `=== MONO Hospital - 진료 대화 요약 ===`,
-      `진료과: ${summaryDept?.labelKo || selectedDept?.labelKo || "N/A"}`,
-      `날짜: ${new Date().toLocaleString()}`,
-      `언어: ${selectedLang}`,
-      `---`,
-      ...summaryMessages
-        .filter((m) => m.text || m.original)
-        .map((m) => {
-          const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : "";
-          const speaker = m.isMine ? "의료진" : "환자";
-          const orig = m.original || m.text || "";
-          const translated = m.translated || "";
-          return translated
-            ? `[${time}] ${speaker}: ${orig}\n         → ${translated}`
-            : `[${time}] ${speaker}: ${orig}`;
-        }),
-    ];
-    const text = lines.join("\n");
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `mono_hospital_session_${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const deptLabel = summaryDept?.labelKo || selectedDept?.labelKo || "일반";
+    const content = buildFileContent(summaryMessages, deptLabel, selectedLang);
+    const fileName = buildFileName(deptLabel);
+    autoSaveFile(content, fileName).then((r) => setAutoSaveResult(r)).catch(() => {});
+  };
+
+  const handlePickSaveDir = async () => {
+    if (!window.showDirectoryPicker) {
+      alert("이 브라우저는 폴더 지정 기능을 지원하지 않습니다.\n파일은 기본 다운로드 폴더에 저장됩니다.");
+      return;
+    }
+    try {
+      const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      await saveDirHandle(dirHandle);
+      setHasSaveDir(true);
+      setSaveDirName(dirHandle.name || "");
+    } catch { /* 사용자 취소 */ }
   };
 
   // ════════════════════════════════════════════
@@ -470,6 +584,22 @@ export default function HospitalApp() {
             )}
           </div>
 
+          {/* 자동 저장 결과 알림 */}
+          {autoSaveResult === "folder" && (
+            <div className="mb-3 px-3 py-2 rounded-[8px] bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+              <p className="text-[11px] text-green-700 dark:text-green-400">
+                ✅ 통역 내용이 <strong>{saveDirName || "지정 폴더"}</strong>에 자동 저장되었습니다.
+              </p>
+            </div>
+          )}
+          {autoSaveResult === "download" && (
+            <div className="mb-3 px-3 py-2 rounded-[8px] bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+              <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                ✅ 통역 내용이 다운로드 폴더에 자동 저장되었습니다.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button type="button" onClick={handleCopySummary}
               className="flex-1 flex items-center justify-center gap-1.5 h-[44px] rounded-[12px] border border-[var(--color-border)] text-[13px] font-medium">
@@ -480,6 +610,20 @@ export default function HospitalApp() {
               className="flex-1 flex items-center justify-center gap-1.5 h-[44px] rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-medium">
               <Download size={14} /> 파일 다운로드
             </button>
+          </div>
+
+          {/* 저장 폴더 지정 */}
+          <div className="mt-3">
+            <button type="button" onClick={handlePickSaveDir}
+              className="w-full flex items-center justify-center gap-1.5 h-[40px] rounded-[12px] border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] transition-colors">
+              <FolderOpen size={14} />
+              {hasSaveDir ? `저장 폴더: ${saveDirName || "지정됨"} (변경)` : "저장 폴더 지정"}
+            </button>
+            {!window.showDirectoryPicker && (
+              <p className="mt-1 text-[10px] text-[var(--color-text-secondary)] text-center">
+                이 브라우저는 폴더 지정을 지원하지 않습니다. 기본 다운로드 폴더에 저장됩니다.
+              </p>
+            )}
           </div>
 
           <div className="mt-8 text-center">
