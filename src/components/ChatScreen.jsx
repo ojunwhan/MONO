@@ -474,7 +474,20 @@ export default function ChatScreen() {
         // Fallback: derive peer language from participants list in 1:1 rooms.
         if (roomTypeRef.current === "oneToOne") {
           const peer = list.find((p) => p?.pid && p.pid !== participantIdRef.current);
-          if (peer?.lang) setPartnerLang(peer.lang);
+          if (peer?.lang) {
+            setPartnerLang(peer.lang);
+            // peerInfo도 동기화하여 헤더 언어 표시 정확성 보장
+            const pFlag = getLanguageProfileByCode(peer.lang)?.flagUrl || getFlagUrlByLang(peer.lang);
+            const pLabel = getLanguageProfileByCode(peer.lang)?.shortLabel || getLabelFromCode(peer.lang);
+            if (pFlag || pLabel) {
+              setPeerInfo((prev) => ({
+                ...(prev || {}),
+                peerLang: peer.lang,
+                peerFlagUrl: pFlag || prev?.peerFlagUrl || "",
+                peerLabel: pLabel || prev?.peerLabel || "",
+              }));
+            }
+          }
         }
       }
     };

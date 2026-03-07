@@ -2529,6 +2529,17 @@ io.on('connection', (socket) => {
             partnerNativeName: peer.nativeName || "",
             peerLang: peer.lang || "en",
           });
+          // 헤더 언어 표시 동기화를 위해 partner-joined도 재전송
+          const peerLangCode = peer.lang || "en";
+          const peerLK = String(peerLangCode).toLowerCase().split("-")[0];
+          const pjFlagMap = { ko:"kr",vi:"vn",zh:"cn",en:"us",ja:"jp",th:"th",km:"kh",my:"mm",id:"id",mn:"mn",uz:"uz",ne:"np",tl:"ph",ms:"my",lo:"la",bn:"bd",hi:"in",ur:"pk",ru:"ru",uk:"ua",de:"de",fr:"fr",es:"es",pt:"pt",it:"it",ar:"sa",tr:"tr" };
+          const pjLabelMap = { ko:"KOR",vi:"VNM",zh:"CHN",en:"ENG",ja:"JPN",th:"THA",km:"KHM",my:"MMR",id:"IDN",mn:"MNG",uz:"UZB",ne:"NPL",tl:"PHL",ms:"MYS",lo:"LAO",bn:"BGD",hi:"IND",ur:"PAK",ru:"RUS",uk:"UKR",de:"DEU",fr:"FRA",es:"ESP",pt:"PRT",it:"ITA",ar:"ARA",tr:"TUR" };
+          socket.emit("partner-joined", {
+            roomId,
+            peerLang: peerLangCode,
+            peerFlagUrl: `https://flagcdn.com/w40/${pjFlagMap[peerLK] || "un"}.png`,
+            peerLabel: pjLabelMap[peerLK] || peerLK.toUpperCase(),
+          });
         }
         generateNameAdaptations(roomId).catch(() => {});
       } else if (existing?.callSign) {
