@@ -2573,18 +2573,16 @@ io.on('connection', (socket) => {
     if (meta.roomType === "oneToOne") {
       // ⚠️ 병원 고정방(hospital_default_*)은 broadcast 전환 절대 금지
       if (roomId.startsWith('hospital_default_')) {
-        // 이전 게스트만 교체하고 항상 1:1 유지
+        // 새 환자 입장 시 ownerPid 외 기존 참가자 전부 클리어 후 새로 등록
         const currentPids = Object.keys(meta.participants);
-        if (!currentPids.includes(participantId) && currentPids.length >= 2) {
-          for (const pid of currentPids) {
-            if (pid !== meta.ownerPid) {
-              console.log(`[JOIN:HOSPITAL] Replacing previous guest ${pid} in ${roomId}`);
-              delete meta.participants[pid];
-            }
+        for (const pid of currentPids) {
+          if (pid !== meta.ownerPid) {
+            console.log(`[JOIN:HOSPITAL] Clearing previous participant ${pid} in ${roomId}`);
+            delete meta.participants[pid];
           }
-          ROOMS.set(roomId, meta);
         }
-        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — broadcast conversion skipped`);
+        ROOMS.set(roomId, meta);
+        console.log(`[JOIN:HOSPITAL] Fixed room ${roomId} — participants cleared, broadcast conversion skipped`);
       } else {
         const currentPids = Object.keys(meta.participants);
         const isReconnect = currentPids.includes(participantId);

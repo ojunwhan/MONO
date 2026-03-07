@@ -291,6 +291,11 @@ export default function ChatScreen() {
   useEffect(() => {
     let cancelled = false;
     if (!roomId) return;
+    // 병원 고정방: 이전 대화 히스토리 로드 안 함 (매 세션 새로 시작)
+    if (isHospitalMode) {
+      historyLoadedRef.current = true;
+      return;
+    }
     (async () => {
       const prevMessages = await getMessages(roomId, 100, 0).catch(() => []);
       if (cancelled) return;
