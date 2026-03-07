@@ -98,52 +98,13 @@ export default function GuestJoinPage() {
   const roomType = useMemo(() => searchParams.get("roomType") || "oneToOne", [searchParams]);
   const isHospitalMode = String(siteContext).startsWith("hospital_");
 
-  // ── Hospital: chart number + revisit flow ──
-  const [hospitalStep, setHospitalStep] = useState("chart"); // 'chart' | 'lang' | 'connecting'
-  const [chartNumber, setChartNumber] = useState("");
-  const [chartError, setChartError] = useState("");
-  const [isRevisit, setIsRevisit] = useState(false);
-  const [patientInfo, setPatientInfo] = useState(null);
+  // ── Hospital: language selection flow (chart number removed) ──
+  const [hospitalStep, setHospitalStep] = useState("lang"); // 'lang' | 'connecting'
 
   useEffect(() => {
     const normalized = String(selectedLang || "").toLowerCase();
     if (!getLanguageByCode(normalized)) setSelectedLang("en");
   }, [selectedLang]);
-
-  // Hospital: lookup chart number for revisit
-  const handleChartLookup = useCallback(async () => {
-    if (!chartNumber.trim()) {
-      // Skip chart → go to language selection (new patient without chart)
-      setHospitalStep("lang");
-      return;
-    }
-    try {
-      const r = await fetch(`/api/hospital/patients/${encodeURIComponent(chartNumber.trim())}`);
-      if (r.ok) {
-        const data = await r.json();
-        if (data.found && data.patient) {
-          setPatientInfo(data.patient);
-          setIsRevisit(true);
-          // Auto-set saved language
-          if (data.patient.language) {
-            const code = getLanguageByCode(data.patient.language)?.code;
-            if (code) {
-              setSelectedLang(code);
-              setLangConfirmed(true);
-              setShowLangGrid(false);
-            }
-          }
-        }
-      }
-    } catch { /* ignore */ }
-    setHospitalStep("lang");
-  }, [chartNumber]);
-
-  // Hospital: skip chart (first visit, no chart number)
-  const handleSkipChart = useCallback(() => {
-    setChartNumber("");
-    setHospitalStep("lang");
-  }, []);
 
   const startGuestSession = async () => {
     if (!roomId) return;
@@ -158,17 +119,6 @@ export default function GuestJoinPage() {
     saveGuestSession(roomId, selectedLang, cleanName, guestId, siteContext, roomType);
     localStorage.setItem("myLang", selectedLang);
 
-    // Hospital: register patient if chart number provided
-    if (isHospitalMode && chartNumber.trim()) {
-      try {
-        await fetch("/api/hospital/patients", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chartNumber: chartNumber.trim(), language: selectedLang }),
-        });
-      } catch { /* ignore */ }
-    }
-
     navigate(`/room/${roomId}`, {
       replace: true,
       state: {
@@ -180,7 +130,6 @@ export default function GuestJoinPage() {
         roomType,
         isGuest: true,
         guestId,
-        chartNumber: chartNumber.trim() || undefined,
       },
     });
   };
@@ -205,68 +154,10 @@ export default function GuestJoinPage() {
             </div>
           </div>
 
-          {/* Step 1: Chart Number Input */}
-          {hospitalStep === "chart" && (
-            <div className="flex-1 flex flex-col items-center justify-start">
-              <div className="w-full max-w-[360px] space-y-4">
-                <div className="text-center mb-2">
-                  <p className="text-[15px] font-semibold text-[var(--color-text)]">
-                    📋 차트번호 입력
-                  </p>
-                  <p className="text-[12px] text-[var(--color-text-secondary)] mt-1">
-                    Enter your chart number / 차트번호를 입력하세요
-                  </p>
-                </div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={chartNumber}
-                  onChange={(e) => {
-                    setChartNumber(e.target.value.replace(/\D/g, ""));
-                    setChartError("");
-                  }}
-                  placeholder="Chart Number"
-                  className="w-full h-[52px] px-4 rounded-[12px] border-2 border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[18px] text-center font-mono tracking-[4px] focus:outline-none focus:border-[#3B82F6] transition-colors"
-                  autoFocus
-                />
-                {chartError && (
-                  <p className="text-[12px] text-red-500 text-center">{chartError}</p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleChartLookup}
-                  className="w-full h-[48px] rounded-[12px] text-[15px] font-semibold bg-[#3B82F6] text-white border-0 active:scale-[0.98] transition-transform"
-                >
-                  {chartNumber.trim() ? "확인 / Confirm" : "차트번호 없이 진행 / Continue without chart"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSkipChart}
-                  className="w-full h-[40px] rounded-[12px] text-[13px] text-[var(--color-text-secondary)] bg-transparent border border-[var(--color-border)] active:scale-[0.98] transition-transform"
-                >
-                  건너뛰기 / Skip
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Language Selection */}
+          {/* Language Selection */}
           {hospitalStep === "lang" && (
             <div className="flex-1 flex flex-col items-center justify-start">
               <div className="w-full max-w-[360px] space-y-4">
-                {/* Revisit badge */}
-                {isRevisit && patientInfo && (
-                  <div className="p-3 rounded-[12px] bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 text-center">
-                    <p className="text-[13px] font-medium text-green-700 dark:text-green-300">
-                      ✅ 재방문 환자 / Returning Patient
-                    </p>
-                    <p className="text-[11px] text-green-600 dark:text-green-400 mt-0.5">
-                      차트 #{patientInfo.chart_number} · 이전 언어: {patientInfo.language?.toUpperCase()}
-                    </p>
-                  </div>
-                )}
-
                 <p className="text-[14px] text-[var(--color-text-secondary)] text-center">
                   Select your language / 언어를 선택하세요
                 </p>
@@ -296,15 +187,6 @@ export default function GuestJoinPage() {
                     🏥 통역 시작
                   </button>
                 ) : null}
-
-                {/* Back to chart step */}
-                <button
-                  type="button"
-                  onClick={() => setHospitalStep("chart")}
-                  className="w-full h-[36px] text-[12px] text-[var(--color-text-secondary)] bg-transparent"
-                >
-                  ← 차트번호 다시 입력 / Re-enter chart number
-                </button>
               </div>
             </div>
           )}
