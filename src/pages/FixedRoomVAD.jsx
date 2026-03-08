@@ -22,7 +22,7 @@ import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
-import { getLanguageProfileByCode } from "../constants/languageProfiles";
+import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle } from "lucide-react";
 
 const STATUS = {
@@ -35,7 +35,7 @@ const STATUS = {
 };
 
 // ── 채팅 말풍선 컴포넌트 ──
-function ChatBubble({ originalText, translatedText, mine }) {
+function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel }) {
   return (
     <div style={{
       display: "flex",
@@ -43,34 +43,53 @@ function ChatBubble({ originalText, translatedText, mine }) {
       marginBottom: "10px",
       padding: "0 16px",
     }}>
-      <div style={{
-        maxWidth: "80%",
-        padding: "10px 14px",
-        borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-        background: mine ? "#3b82f6" : "rgba(255,255,255,0.1)",
-        color: "white",
-        wordBreak: "keep-all",
-      }}>
-        {/* 번역문 (주 텍스트) */}
-        <p style={{
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          margin: "0 0 4px 0",
-          lineHeight: 1.4,
+      <div style={{ maxWidth: "80%" }}>
+        {/* 국기 + 언어명 라벨 */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+          marginBottom: "3px",
+          justifyContent: mine ? "flex-end" : "flex-start",
         }}>
-          {translatedText || originalText}
-        </p>
-        {/* 원문 (번역이 있을 때만, 작게 표시) */}
-        {translatedText && originalText && translatedText !== originalText && (
+          {flagUrl && (
+            <img src={flagUrl} alt="" style={{ width: 16, height: 12, borderRadius: 1, objectFit: "cover" }} />
+          )}
+          {langLabel && (
+            <span style={{ fontSize: "0.65rem", opacity: 0.5, fontWeight: 500 }}>
+              {langLabel}
+            </span>
+          )}
+        </div>
+        {/* 말풍선 본체 */}
+        <div style={{
+          padding: "10px 14px",
+          borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+          background: mine ? "#3b82f6" : "rgba(255,255,255,0.1)",
+          color: "white",
+          wordBreak: "keep-all",
+        }}>
+          {/* 번역문 (주 텍스트) */}
           <p style={{
-            fontSize: "0.78rem",
-            margin: 0,
-            opacity: 0.55,
-            lineHeight: 1.3,
+            fontSize: "0.95rem",
+            fontWeight: 600,
+            margin: "0 0 4px 0",
+            lineHeight: 1.4,
           }}>
-            {originalText}
+            {translatedText || originalText}
           </p>
-        )}
+          {/* 원문 (번역이 있을 때만, 작게 표시) */}
+          {translatedText && originalText && translatedText !== originalText && (
+            <p style={{
+              fontSize: "0.78rem",
+              margin: 0,
+              opacity: 0.55,
+              lineHeight: 1.3,
+            }}>
+              {originalText}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -440,13 +459,19 @@ export default function FixedRoomVAD() {
 
   const partnerFlagUrl = useMemo(() => {
     if (partnerInfo?.flagUrl) return partnerInfo.flagUrl;
+    if (partnerInfo?.lang) return getLanguageProfileByCode(partnerInfo.lang)?.flagUrl || getFlagUrlByLang(partnerInfo.lang);
     if (patientData?.language) {
-      return getLanguageProfileByCode(patientData.language)?.flagUrl || "";
+      return getLanguageProfileByCode(patientData.language)?.flagUrl || getFlagUrlByLang(patientData.language);
     }
     return "";
   }, [partnerInfo, patientData]);
 
-  const myProfile = useMemo(() => getLanguageProfileByCode(fromLang), [fromLang]);
+  const myProfile = useMemo(() => {
+    const profile = getLanguageProfileByCode(fromLang);
+    if (profile) return profile;
+    // fallback: 최소한 flagUrl과 shortLabel 제공
+    return { flagUrl: getFlagUrlByLang(fromLang), shortLabel: String(fromLang || "").toUpperCase() };
+  }, [fromLang]);
 
   // ── VAD 상태 아이콘 색상 ──
   const statusColor = useMemo(() => {
@@ -744,6 +769,8 @@ export default function FixedRoomVAD() {
                   originalText={msg.originalText}
                   translatedText={msg.translatedText}
                   mine={msg.mine}
+                  flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")}
+                  langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")}
                 />
               ))
             )}
