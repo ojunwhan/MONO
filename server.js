@@ -5266,8 +5266,8 @@ app.get("/healthz", async (req, res) => {
 // ✅ --- 정적파일 절대경로 기반 서빙 (Cloudflare 대응 버전) ---
 const distPath = path.resolve(__dirname, "dist");
 
-// ✅ COOP/COEP 헤더 (SharedArrayBuffer 활성화 — VAD ONNX Runtime 필수)
-app.use((req, res, next) => {
+// ✅ COOP/COEP 헤더 — VAD 사용 경로에만 적용 (전체 적용 시 카카오 등 외부 리소스 차단됨)
+app.use(["/fixed-room", "/fixed"], (req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   next();
