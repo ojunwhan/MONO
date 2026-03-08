@@ -18,7 +18,9 @@ const App = () => {
     || pathname.startsWith("/kiosk")
     || pathname.startsWith("/hospital")
     || pathname.startsWith("/fixed-room/")
-    || pathname.startsWith("/fixed/");
+    || pathname.startsWith("/fixed/")
+    || pathname.startsWith("/admin")
+    || pathname.startsWith("/org/");
 
   useEffect(() => {
     const theme = localStorage.getItem("mono.theme");

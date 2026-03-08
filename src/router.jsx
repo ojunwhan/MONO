@@ -20,6 +20,14 @@ import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
 import FixedRoom from "./pages/FixedRoom";
 import FixedRoomVAD from "./pages/FixedRoomVAD";
+import AdminLogin from "./pages/Admin/AdminLogin";
+import AdminLayout from "./pages/Admin/AdminLayout";
+import AdminOrgs from "./pages/Admin/AdminOrgs";
+import AdminOrgDetail from "./pages/Admin/AdminOrgDetail";
+import PipelineBuilder from "./pages/Admin/PipelineBuilder";
+import OrgKiosk from "./pages/Org/OrgKiosk";
+import OrgStaff from "./pages/Org/OrgStaff";
+import OrgJoin from "./pages/Org/OrgJoin";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -121,6 +129,44 @@ const router = createBrowserRouter([
   {
     path: "/fixed-room/:roomId",
     element: <FixedRoomVAD />,
+  },
+  {
+    path: "/admin",
+    children: [
+      {
+        index: true,
+        element: <AdminLogin />,
+      },
+      {
+        element: <AdminLayout />,
+        children: [
+          {
+            path: "orgs",
+            element: <AdminOrgs />,
+          },
+          {
+            path: "orgs/:orgId",
+            element: <AdminOrgDetail />,
+          },
+          {
+            path: "orgs/:orgId/dept/:deptId/pipeline",
+            element: <PipelineBuilder />,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    path: "/org/:orgCode/:deptCode/kiosk",
+    element: <OrgKiosk />,
+  },
+  {
+    path: "/org/:orgCode/:deptCode/staff",
+    element: <OrgStaff />,
+  },
+  {
+    path: "/org/:orgCode/:deptCode/join",
+    element: <OrgJoin />,
   },
   {
     path: "/kiosk",

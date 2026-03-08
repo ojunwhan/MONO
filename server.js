@@ -4246,6 +4246,130 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       );
     `);
     console.log('[stats] ✅ api_usage_daily table ready');
+
+    // ═══════════════════════════════════════════════════════════════
+    // 004_admin_console — 관리자 콘솔 테이블 자동 마이그레이션
+    // ═══════════════════════════════════════════════════════════════
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_code      TEXT    NOT NULL UNIQUE,
+        name          TEXT    NOT NULL,
+        org_type      TEXT    NOT NULL DEFAULT 'hospital',
+        plan          TEXT    NOT NULL DEFAULT 'trial',
+        trial_ends_at TEXT,
+        logo_url      TEXT,
+        primary_color TEXT    DEFAULT '#2563EB',
+        welcome_msg   TEXT,
+        default_lang  TEXT    DEFAULT 'ko',
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_departments (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        dept_code     TEXT    NOT NULL,
+        dept_name     TEXT    NOT NULL,
+        dept_name_en  TEXT,
+        sort_order    INTEGER NOT NULL DEFAULT 0,
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(org_id, dept_code)
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_pipeline_config (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        dept_id       INTEGER NOT NULL REFERENCES org_departments(id) ON DELETE CASCADE,
+        config_json   TEXT    NOT NULL DEFAULT '{}',
+        updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_by    INTEGER REFERENCES users(id),
+        UNIQUE(dept_id)
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_staff_accounts (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id       INTEGER REFERENCES users(id),
+        email         TEXT    NOT NULL,
+        role          TEXT    NOT NULL DEFAULT 'staff',
+        dept_ids      TEXT    NOT NULL DEFAULT '[]',
+        invite_token  TEXT    UNIQUE,
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        last_login_at TEXT,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_devices (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        dept_id       INTEGER REFERENCES org_departments(id),
+        device_label  TEXT    NOT NULL,
+        device_type   TEXT    NOT NULL DEFAULT 'kiosk',
+        last_seen_at  TEXT,
+        last_ip       TEXT,
+        is_online     INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_session_logs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id          INTEGER NOT NULL REFERENCES organizations(id),
+        dept_id         INTEGER REFERENCES org_departments(id),
+        room_id         TEXT,
+        patient_token   TEXT,
+        started_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        ended_at        TEXT,
+        duration_sec    INTEGER,
+        lang_staff      TEXT,
+        lang_patient    TEXT,
+        stt_chars       INTEGER NOT NULL DEFAULT 0,
+        translate_chars INTEGER NOT NULL DEFAULT 0,
+        stt_cost_krw    REAL    NOT NULL DEFAULT 0,
+        translate_cost_krw REAL NOT NULL DEFAULT 0
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS org_api_cost_logs (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id        INTEGER NOT NULL REFERENCES organizations(id),
+        log_date      TEXT    NOT NULL,
+        api_type      TEXT    NOT NULL,
+        call_count    INTEGER NOT NULL DEFAULT 0,
+        input_units   INTEGER NOT NULL DEFAULT 0,
+        cost_usd      REAL    NOT NULL DEFAULT 0,
+        cost_krw      REAL    NOT NULL DEFAULT 0,
+        UNIQUE(org_id, log_date, api_type)
+      );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    // 슈퍼관리자 초기값 삽입
+    await dbRun(
+      `INSERT OR IGNORE INTO admin_settings (key, value) VALUES ('admin_setup_done', 'false')`
+    );
+    // 인덱스 생성
+    await dbExec(`
+      CREATE INDEX IF NOT EXISTS idx_org_dept_org_id     ON org_departments(org_id);
+      CREATE INDEX IF NOT EXISTS idx_org_staff_org_id    ON org_staff_accounts(org_id);
+      CREATE INDEX IF NOT EXISTS idx_org_devices_org_id  ON org_devices(org_id);
+      CREATE INDEX IF NOT EXISTS idx_org_sessions_org_id ON org_session_logs(org_id);
+      CREATE INDEX IF NOT EXISTS idx_org_sessions_date   ON org_session_logs(started_at);
+      CREATE INDEX IF NOT EXISTS idx_org_cost_org_date   ON org_api_cost_logs(org_id, log_date);
+    `);
+    console.log('[admin] ✅ admin console tables ready (organizations + departments + pipeline + staff + devices + session_logs + cost_logs + settings)');
+
     // ── 서버 시작 시 당일 사용량 복원 ──
     restoreUsageStats();
   } catch (e) {
@@ -5235,6 +5359,14 @@ attachKakaoAuth(app);
 attachLineAuth(app);
 attachAppleAuth(app);
 attachAuthApi(app);
+
+// ── 슈퍼관리자 API ──
+const adminRouter = require('./server/routes/admin');
+app.use('/api/admin', adminRouter);
+
+// ── 기관/부서 공개 API (인증 불필요) ──
+const orgRouter = require('./server/routes/org');
+app.use('/api/org', orgRouter);
 
 app.get("/api/guess-lang", (req,res)=>{
   const code = detectFromAcceptLang(req.headers['accept-language']);
