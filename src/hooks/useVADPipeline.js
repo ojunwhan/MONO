@@ -104,6 +104,14 @@ export function useVADPipeline({ roomId, participantId, lang }) {
       sendAudioToServer(audioFloat32);
     },
 
+    // ─── getUserMedia 오디오 옵션 — 에코/노이즈 제거 강제 활성화 ───
+    additionalAudioConstraints: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 16000,
+    },
+
     // ─── Silero VAD 파라미터 — 조용한 환경(상담실/조사실) 최적화 ───
     positiveSpeechThreshold: 0.5, // 말소리 판정 임계값
     negativeSpeechThreshold: 0.35, // 낮출수록 묵음 감지 예민
