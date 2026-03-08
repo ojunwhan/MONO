@@ -5265,8 +5265,26 @@ app.get("/healthz", async (req, res) => {
 
 // ✅ --- 정적파일 절대경로 기반 서빙 (Cloudflare 대응 버전) ---
 const distPath = path.resolve(__dirname, "dist");
-// 정적파일 서빙
-app.use(express.static(distPath));
+
+// ✅ COOP/COEP 헤더 (SharedArrayBuffer 활성화 — VAD ONNX Runtime 필수)
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
+// ✅ WASM/MJS MIME 타입 올바르게 설정
+app.use(express.static(distPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.wasm')) {
+      res.setHeader('Content-Type', 'application/wasm');
+    } else if (filePath.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (filePath.endsWith('.onnx')) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
+  },
+}));
 
 // ✅ 페이지별 OG 메타태그 (카카오톡 미리보기 대응)
 const OG_ROUTES = [

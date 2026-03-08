@@ -80,6 +80,10 @@ export function useVADPipeline({ roomId, participantId, lang }) {
   const vad = useMicVAD({
     startOnLoad: false,
 
+    // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
+    baseAssetPath: "/",
+    onnxWASMBasePath: "/",
+
     onSpeechStart: () => {
       sessionActiveRef.current = true;
     },
