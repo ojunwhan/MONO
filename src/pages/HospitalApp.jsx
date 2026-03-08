@@ -979,7 +979,7 @@ function StaffModePanel({
     // 로컬 대기 목록에서 즉시 제거
     setWaitingPatients((prev) => prev.filter((p) => p.roomId !== targetRoomId));
 
-    navTo(`/room/${targetRoomId}`, {
+    navTo(`/fixed-room/${targetRoomId}`, {
       state: {
         fromLang: selectedLang,
         localName: "",

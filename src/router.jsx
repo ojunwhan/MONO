@@ -19,6 +19,7 @@ import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
 import FixedRoom from "./pages/FixedRoom";
+import FixedRoomVAD from "./pages/FixedRoomVAD";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -116,6 +117,10 @@ const router = createBrowserRouter([
   {
     path: "/fixed/:location",
     element: <FixedRoom />,
+  },
+  {
+    path: "/fixed-room/:roomId",
+    element: <FixedRoomVAD />,
   },
   {
     path: "/kiosk",
