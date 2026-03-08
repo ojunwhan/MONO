@@ -2013,6 +2013,15 @@ io.on('connection', (socket) => {
     io.to(roomId).emit("fixed-room:end", { roomId });
   });
 
+  // ── vad:gain — 직원이 환자 마이크 감도/게인 원격 조절 ──
+  socket.on("vad:gain", ({ roomId, target, gain, vadThreshold, minSpeechMs } = {}) => {
+    if (!roomId) return;
+    const payload = { roomId, gain, vadThreshold, minSpeechMs };
+    // target에 따라 해당 역할에게만 전달 (broadcast 후 클라이언트에서 필터)
+    io.to(roomId).emit("vad:gain:update", { ...payload, target: target || "guest" });
+    console.log(`[socket] vad:gain → room ${roomId}, target=${target}, gain=${gain}, vad=${vadThreshold}, minMs=${minSpeechMs}`);
+  });
+
   socket.on("delete-room", ({ roomId, participantId } = {}) => {
     const rid = String(roomId || "").trim();
     const pid = String(participantId || socket.data?.participantId || "").trim();

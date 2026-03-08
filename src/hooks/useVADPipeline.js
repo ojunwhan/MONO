@@ -5,9 +5,14 @@
  *       → server.js transcribePcm16 → fastTranslate → hqTranslate → receive-message
  *
  * MicButton.jsx를 수정하지 않고, 동일한 서버 파이프라인을 사용합니다.
+ *
+ * ■ 원격 감도 조절 지원 (vad:gain:update 소켓 이벤트)
+ *   - gain: 소프트웨어 게인 (Float32 오디오에 곱하기)
+ *   - vadThreshold: RMS 저음량 필터 임계값
+ *   - minSpeechMs: 최소 발화 길이 (ms)
  */
 import { useMicVAD } from "@ricky0123/vad-react";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -33,11 +38,46 @@ function int16ToBase64(int16Array) {
 // 24000샘플(1.5초 @16kHz) 단위 청크 분할 — server.js 기존 청크 크기와 동일
 const CHUNK_SIZE = 24000;
 
+// 기본값
+const DEFAULT_GAIN = 1.0;
+const DEFAULT_VAD_THRESHOLD = 0.01;
+const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
+
 /**
- * @param {{ roomId: string, participantId: string, lang: string }} opts
+ * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string }} opts
  */
-export function useVADPipeline({ roomId, participantId, lang }) {
+export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
   const sessionActiveRef = useRef(false);
+
+  // ── 원격 조절 가능한 refs ──
+  const gainRef = useRef(DEFAULT_GAIN);
+  const vadThresholdRef = useRef(DEFAULT_VAD_THRESHOLD);
+  const minSpeechSamplesRef = useRef(Math.round(DEFAULT_MIN_SPEECH_MS * 16)); // ms → samples @16kHz
+
+  // ── vad:gain:update 소켓 리스너 ──
+  useEffect(() => {
+    const handler = ({ target, gain, vadThreshold, minSpeechMs, roomId: evtRoomId }) => {
+      // 이벤트가 현재 방의 것인지 + 나에게 오는 것인지 확인
+      if (evtRoomId && evtRoomId !== roomId) return;
+      const myRole = roleHint || "guest";
+      if (target && target !== myRole) return;
+
+      if (gain !== undefined && gain !== null) {
+        gainRef.current = Math.max(0.1, Math.min(5.0, Number(gain) || DEFAULT_GAIN));
+      }
+      if (vadThreshold !== undefined && vadThreshold !== null) {
+        vadThresholdRef.current = Math.max(0.001, Math.min(0.1, Number(vadThreshold) || DEFAULT_VAD_THRESHOLD));
+      }
+      if (minSpeechMs !== undefined && minSpeechMs !== null) {
+        const ms = Math.max(50, Math.min(2000, Number(minSpeechMs) || DEFAULT_MIN_SPEECH_MS));
+        minSpeechSamplesRef.current = Math.round(ms * 16); // ms → samples @16kHz
+      }
+      console.log(`[VAD] gain update: gain=${gainRef.current}, threshold=${vadThresholdRef.current}, minSamples=${minSpeechSamplesRef.current}`);
+    };
+
+    socket.on("vad:gain:update", handler);
+    return () => socket.off("vad:gain:update", handler);
+  }, [roomId, roleHint]);
 
   const sendAudioToServer = useCallback(
     (audioFloat32) => {
@@ -51,10 +91,20 @@ export function useVADPipeline({ roomId, participantId, lang }) {
         sampleRateHz: 16000,
       });
 
-      // 2. Float32 → Int16 PCM 변환
-      const int16 = float32ToInt16(audioFloat32);
+      // 2. 소프트웨어 게인 적용
+      let processed = audioFloat32;
+      const currentGain = gainRef.current;
+      if (currentGain !== 1.0) {
+        processed = new Float32Array(audioFloat32.length);
+        for (let i = 0; i < audioFloat32.length; i++) {
+          processed[i] = Math.max(-1, Math.min(1, audioFloat32[i] * currentGain));
+        }
+      }
 
-      // 3. CHUNK_SIZE 단위로 분할 전송 (stt:audio)
+      // 3. Float32 → Int16 PCM 변환
+      const int16 = float32ToInt16(processed);
+
+      // 4. CHUNK_SIZE 단위로 분할 전송 (stt:audio)
       for (let offset = 0; offset < int16.length; offset += CHUNK_SIZE) {
         const chunk = int16.slice(offset, offset + CHUNK_SIZE);
         const base64 = int16ToBase64(chunk);
@@ -67,7 +117,7 @@ export function useVADPipeline({ roomId, participantId, lang }) {
         });
       }
 
-      // 4. 전송 완료 신호 → server.js 풀파이프라인 시작
+      // 5. 전송 완료 신호 → server.js 풀파이프라인 시작
       //    transcribePcm16() → fastTranslate → hqTranslate → receive-message
       socket.emit("stt:segment_end", {
         roomId,
@@ -92,14 +142,14 @@ export function useVADPipeline({ roomId, participantId, lang }) {
       if (!sessionActiveRef.current) return;
       sessionActiveRef.current = false;
 
-      // RMS 저음량 필터 (환각 방지 — server.js 기존 정책과 동일)
+      // RMS 저음량 필터 (환각 방지) — 원격 조절 가능
       const rms = Math.sqrt(
         audioFloat32.reduce((sum, v) => sum + v * v, 0) / audioFloat32.length
       );
-      if (rms < 0.01) return;
+      if (rms < vadThresholdRef.current) return;
 
-      // 최소 녹음 길이 필터 (0.5초 미만 폐기 — 16kHz 기준 8000샘플)
-      if (audioFloat32.length < 8000) return;
+      // 최소 녹음 길이 필터 — 원격 조절 가능
+      if (audioFloat32.length < minSpeechSamplesRef.current) return;
 
       sendAudioToServer(audioFloat32);
     },
@@ -129,5 +179,9 @@ export function useVADPipeline({ roomId, participantId, lang }) {
     start: vad.start,
     pause: vad.pause,
     toggle: vad.toggle,
+    // 현재 감도 설정값 읽기 (UI 표시용)
+    gainRef,
+    vadThresholdRef,
+    minSpeechSamplesRef,
   };
 }
