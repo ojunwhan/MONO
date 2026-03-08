@@ -153,11 +153,11 @@ const router = createBrowserRouter([
             path: "orgs/:orgId/dept/:deptId/pipeline",
             element: <PipelineBuilder />,
           },
+          {
+            path: "pipeline",
+            element: <VisualPipelineBuilder />,
+          },
         ],
-      },
-      {
-        path: "pipeline",
-        element: <VisualPipelineBuilder />,
       },
     ],
   },
