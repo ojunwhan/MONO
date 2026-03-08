@@ -2001,7 +2001,13 @@ io.on('connection', (socket) => {
     leaveRoomInternal({ roomId, participantId, reason: "manual-leave" });
   });
 
-  // ── fixed-room:end — 한쪽이 통역 종료 시 양쪽 모두 종료 ──
+  // ── fixed-room:start — 직원이 통역 시작 → 양쪽 모두 VAD 시작 ──
+  socket.on("fixed-room:start", ({ roomId } = {}) => {
+    if (!roomId) return;
+    io.to(roomId).emit("fixed-room:start", { roomId });
+  });
+
+  // ── fixed-room:end — 직원이 통역 종료 → 양쪽 모두 종료 ──
   socket.on("fixed-room:end", ({ roomId } = {}) => {
     if (!roomId) return;
     io.to(roomId).emit("fixed-room:end", { roomId });

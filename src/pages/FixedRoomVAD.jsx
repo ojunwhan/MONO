@@ -1,15 +1,25 @@
 /**
- * FixedRoomVAD — 병원 직원용 VAD 자동감지 통역 화면
+ * FixedRoomVAD — 병원 VAD 자동감지 통역 화면
  *
  * URL: /fixed-room/:roomId
- * 진입: HospitalApp.jsx StaffModePanel → "통역 시작" 클릭
  *
- * 3단계 흐름:
- *   step="waiting"       → 환자 연결 대기
- *   step="ready"         → 환자 연결됨, 통역 시작 버튼
- *   step="interpreting"  → VAD 자동감지 통역 중
+ * ■ 핵심 원칙: 직원(owner)이 모든 걸 제어한다.
+ *   - 환자(guest)는 버튼 없음. 직원 명령에 따라 자동으로 움직인다.
  *
- * 환자 측은 기존 ChatScreen (/room/:roomId) 그대로 유지
+ * ■ 직원(owner) 화면
+ *   step="waiting"       → "환자 연결을 기다리는 중..."
+ *   step="ready"         → "환자 연결됨 ✅" + "통역 시작" 버튼
+ *   step="interpreting"  → VAD 작동 + "통역 종료" 버튼
+ *
+ * ■ 환자(guest) 화면
+ *   step="waiting"       → "의료진 연결 대기 중..."
+ *   step="ready"         → "의료진과 연결됨 ✅" (버튼 없음, 직원 시작 대기)
+ *   step="interpreting"  → VAD 자동 시작됨, 메시지 표시 (버튼 없음)
+ *   step="ended"         → "상담이 종료되었습니다"
+ *
+ * ■ 소켓 이벤트
+ *   fixed-room:start → 양쪽 VAD 시작
+ *   fixed-room:end   → 양쪽 VAD 종료
  */
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
@@ -18,7 +28,7 @@ import MessageBubble from "../components/MessageBubble";
 import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode } from "../constants/languageProfiles";
-import { Mic, MicOff, Loader2, UserCheck, Clock, ArrowLeft, Phone, PhoneOff } from "lucide-react";
+import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle } from "lucide-react";
 
 const STATUS = {
   IDLE: "대기 중",
@@ -43,6 +53,7 @@ export default function FixedRoomVAD() {
   const roleHint = state.roleHint || "owner";
   const isCreator = state.isCreator !== undefined ? state.isCreator : true;
   const isGuest = roleHint === "guest";
+  const isOwner = !isGuest;
 
   // ── participantId: 안정적으로 유지 ──
   const pidKey = `mono.fixedroom.pid.${roomId}`;
@@ -55,12 +66,12 @@ export default function FixedRoomVAD() {
     return id;
   }, [pidKey]);
 
-  // ── 3단계 step ── (게스트는 바로 ready로 시작)
-  const [step, setStep] = useState(isGuest ? "ready" : "waiting"); // "waiting" | "ready" | "interpreting"
+  // ── 단계: waiting | ready | interpreting | ended ──
+  const [step, setStep] = useState(isGuest ? "ready" : "waiting");
   const [status, setStatus] = useState(STATUS.IDLE);
   const [messages, setMessages] = useState([]);
-  const [partnerInfo, setPartnerInfo] = useState(null); // { lang, name, flagUrl }
-  const [patientData, setPatientData] = useState(null); // API에서 가져온 환자 정보
+  const [partnerInfo, setPartnerInfo] = useState(null);
+  const [patientData, setPatientData] = useState(null);
   const messagesEndRef = useRef(null);
   const seenIdsRef = useRef(new Set());
   const processingRef = useRef(false);
@@ -109,6 +120,25 @@ export default function FixedRoomVAD() {
     };
   }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest]);
 
+  // ── 통역 시작 공통 로직 ──
+  const doStartInterpreting = useCallback(async () => {
+    setStep("interpreting");
+    await vad.start();
+    setActive(true);
+    setStatus(STATUS.LISTENING);
+  }, [vad]);
+
+  // ── 통역 종료 공통 로직 ──
+  const doStopInterpreting = useCallback(async () => {
+    await vad.pause();
+    setActive(false);
+    processingRef.current = false;
+    setStatus(STATUS.IDLE);
+    setMessages([]);
+    seenIdsRef.current.clear();
+    setPartnerInfo(null);
+  }, [vad]);
+
   // ── 소켓: 이벤트 수신 ──
   useEffect(() => {
     // 상대방 입장
@@ -116,7 +146,7 @@ export default function FixedRoomVAD() {
       const profile = getLanguageProfileByCode(payload?.peerLang || "");
       setPartnerInfo({
         lang: payload?.peerLang || "",
-        name: payload?.peerDisplayName || "환자",
+        name: payload?.peerDisplayName || (isOwner ? "환자" : "의료진"),
         flagUrl: profile?.flagUrl || "",
         langLabel: profile?.shortLabel || payload?.peerLang || "",
       });
@@ -129,13 +159,12 @@ export default function FixedRoomVAD() {
     const onParticipants = (payload) => {
       const list = payload?.participants || payload;
       if (!Array.isArray(list)) return;
-      // 나 말고 다른 참가자가 있으면 → ready
       const peer = list.find((p) => p.participantId !== participantId);
       if (peer) {
         const profile = getLanguageProfileByCode(peer.lang || "");
         setPartnerInfo({
           lang: peer.lang || "",
-          name: peer.displayName || "환자",
+          name: peer.displayName || (isOwner ? "환자" : "의료진"),
           flagUrl: profile?.flagUrl || "",
           langLabel: profile?.shortLabel || peer.lang || "",
         });
@@ -147,14 +176,18 @@ export default function FixedRoomVAD() {
 
     // 상대방 퇴장
     const onPartnerLeft = () => {
-      setStep("waiting");
       setPartnerInfo(null);
-      // VAD가 돌고 있으면 정지
       if (active) {
         vad.pause();
         setActive(false);
         processingRef.current = false;
         setStatus(STATUS.IDLE);
+      }
+      // guest: 직원이 나가면 종료 화면
+      if (isGuest) {
+        setStep("ended");
+      } else {
+        setStep("waiting");
       }
     };
 
@@ -212,19 +245,39 @@ export default function FixedRoomVAD() {
 
     // 방 만료
     const onRoomExpired = () => {
-      setStep("waiting");
       setPartnerInfo(null);
       if (active) {
         vad.pause();
         setActive(false);
         processingRef.current = false;
       }
+      if (isGuest) {
+        setStep("ended");
+      } else {
+        setStep("waiting");
+      }
     };
 
-    // 상대방이 통역 종료 클릭 → 양쪽 모두 종료
+    // ── fixed-room:start — 직원이 통역 시작 → 양쪽 VAD 시작 ──
+    const onFixedRoomStart = (payload) => {
+      if (payload?.roomId !== roomId) return;
+      doStartInterpreting();
+    };
+
+    // ── fixed-room:end — 직원이 통역 종료 → 양쪽 VAD 종료 ──
     const onFixedRoomEnd = (payload) => {
       if (payload?.roomId !== roomId) return;
-      doStopInterpreting();
+      (async () => {
+        await doStopInterpreting();
+        if (isOwner) {
+          // 직원: staff 화면으로 돌아가기
+          const deptId = hospitalDept?.id || "reception";
+          navigate(`/hospital?mode=staff&dept=${deptId}`, { replace: true });
+        } else {
+          // 환자: 종료 화면 표시
+          setStep("ended");
+        }
+      })();
     };
 
     socket.on("partner-joined", onPartnerJoined);
@@ -234,6 +287,7 @@ export default function FixedRoomVAD() {
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:no-voice", onSttNoVoice);
     socket.on("room-expired", onRoomExpired);
+    socket.on("fixed-room:start", onFixedRoomStart);
     socket.on("fixed-room:end", onFixedRoomEnd);
 
     return () => {
@@ -244,9 +298,10 @@ export default function FixedRoomVAD() {
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:no-voice", onSttNoVoice);
       socket.off("room-expired", onRoomExpired);
+      socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, doStopInterpreting]);
+  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate]);
 
   // ── 자동 스크롤 ──
   useEffect(() => {
@@ -289,31 +344,17 @@ export default function FixedRoomVAD() {
     return () => clearTimeout(timer);
   }, [vad.userSpeaking, active, vad.loading, step]);
 
-  // ── 통역 시작 ──
-  const handleStartInterpreting = useCallback(async () => {
-    setStep("interpreting");
-    await vad.start();
-    setActive(true);
-    setStatus(STATUS.LISTENING);
-  }, [vad]);
+  // ── 직원: 통역 시작 (소켓으로 양쪽에 알림) ──
+  const handleStartInterpreting = useCallback(() => {
+    socket.emit("fixed-room:start", { roomId });
+    // 본인은 onFixedRoomStart 이벤트 수신으로 자동 시작됨
+  }, [roomId]);
 
-  // ── 통역 종료 (공통 로직) ──
-  const doStopInterpreting = useCallback(async () => {
-    await vad.pause();
-    setActive(false);
-    processingRef.current = false;
-    setStatus(STATUS.IDLE);
-    setStep("waiting");
-    setMessages([]);
-    seenIdsRef.current.clear();
-    setPartnerInfo(null);
-  }, [vad]);
-
-  // ── 통역 종료 버튼 클릭 → 상대방에게도 알림 ──
-  const handleStopInterpreting = useCallback(async () => {
+  // ── 직원: 통역 종료 (소켓으로 양쪽에 알림) ──
+  const handleStopInterpreting = useCallback(() => {
     socket.emit("fixed-room:end", { roomId });
-    await doStopInterpreting();
-  }, [roomId, doStopInterpreting]);
+    // 본인은 onFixedRoomEnd 이벤트 수신으로 자동 종료 + navigate 처리됨
+  }, [roomId]);
 
   // ── 뒤로 가기 ──
   const handleBack = useCallback(() => {
@@ -473,8 +514,8 @@ export default function FixedRoomVAD() {
             </p>
           </div>
 
-          {/* 환자 정보 카드 */}
-          {(patientToken || patientData) && (
+          {/* 환자 정보 카드 (직원만 표시) */}
+          {isOwner && (patientToken || patientData) && (
             <div style={{
               background: "rgba(255,255,255,0.05)",
               borderRadius: "12px",
@@ -561,36 +602,58 @@ export default function FixedRoomVAD() {
             )}
           </div>
 
-          <button
-            onClick={handleStartInterpreting}
-            disabled={vad.loading}
-            style={{
-              padding: "16px 48px",
-              borderRadius: "16px",
-              border: "none",
-              background: vad.loading ? "#4b5563" : "#3b82f6",
-              color: "white",
-              fontSize: "18px",
-              fontWeight: 700,
-              cursor: vad.loading ? "wait" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              transition: "background 0.2s",
-            }}
-          >
-            {vad.loading ? (
-              <>
-                <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
-                VAD 로딩 중...
-              </>
-            ) : (
-              <>
-                <Phone size={22} />
-                통역 시작
-              </>
-            )}
-          </button>
+          {/* 직원(owner)만 통역 시작 버튼 표시 */}
+          {isOwner && (
+            <button
+              onClick={handleStartInterpreting}
+              disabled={vad.loading}
+              style={{
+                padding: "16px 48px",
+                borderRadius: "16px",
+                border: "none",
+                background: vad.loading ? "#4b5563" : "#3b82f6",
+                color: "white",
+                fontSize: "18px",
+                fontWeight: 700,
+                cursor: vad.loading ? "wait" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                transition: "background 0.2s",
+              }}
+            >
+              {vad.loading ? (
+                <>
+                  <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
+                  VAD 로딩 중...
+                </>
+              ) : (
+                <>
+                  <Phone size={22} />
+                  통역 시작
+                </>
+              )}
+            </button>
+          )}
+
+          {/* 환자(guest)는 대기 안내 */}
+          {isGuest && (
+            <div style={{
+              textAlign: "center",
+              padding: "16px 32px",
+              background: "rgba(59, 130, 246, 0.1)",
+              borderRadius: "12px",
+              border: "1px solid rgba(59, 130, 246, 0.2)",
+            }}>
+              <Loader2 size={20} style={{ animation: "spin 1s linear infinite", marginBottom: "8px" }} />
+              <p style={{ fontSize: "14px", opacity: 0.8 }}>
+                통역 시작을 기다리는 중...
+              </p>
+              <p style={{ fontSize: "12px", opacity: 0.5, marginTop: "4px" }}>
+                의료진이 통역을 시작하면 자동으로 연결됩니다
+              </p>
+            </div>
+          )}
 
           {vad.errored && (
             <div style={{
@@ -637,7 +700,7 @@ export default function FixedRoomVAD() {
                   말하면 자동으로 감지 → 번역됩니다
                 </p>
                 <p style={{ fontSize: "12px", opacity: 0.7 }}>
-                  환자의 말도 자동 번역되어 표시됩니다
+                  {isOwner ? "환자의 말도 자동 번역되어 표시됩니다" : "의료진의 말도 자동 번역되어 표시됩니다"}
                 </p>
               </div>
             )}
@@ -653,36 +716,97 @@ export default function FixedRoomVAD() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 하단: 통역 종료 버튼 */}
+          {/* 하단: 직원만 통역 종료 버튼 / 환자는 상태만 표시 */}
           <div style={{
             padding: "16px",
             background: "#111827",
             borderTop: "1px solid rgba(255,255,255,0.1)",
           }}>
-            <button
-              onClick={handleStopInterpreting}
-              style={{
-                width: "100%",
-                padding: "16px",
-                borderRadius: "12px",
-                border: "none",
-                background: "#dc2626",
-                color: "white",
-                fontSize: "16px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                transition: "background 0.2s ease",
-              }}
-            >
-              <PhoneOff size={20} />
-              통역 종료
-            </button>
+            {isOwner ? (
+              <button
+                onClick={handleStopInterpreting}
+                style={{
+                  width: "100%",
+                  padding: "16px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: "#dc2626",
+                  color: "white",
+                  fontSize: "16px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  transition: "background 0.2s ease",
+                }}
+              >
+                <PhoneOff size={20} />
+                통역 종료
+              </button>
+            ) : (
+              <div style={{
+                textAlign: "center",
+                padding: "12px",
+                opacity: 0.6,
+                fontSize: "13px",
+              }}>
+                🎤 통역 진행 중 — 말하면 자동 번역됩니다
+              </div>
+            )}
           </div>
         </>
+      )}
+
+      {/* ═══════════════════════════════════════ */}
+      {/* STEP: ENDED (환자만) */}
+      {/* ═══════════════════════════════════════ */}
+      {step === "ended" && (
+        <div style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "24px",
+          padding: "32px",
+        }}>
+          <div style={{
+            width: "80px",
+            height: "80px",
+            borderRadius: "50%",
+            background: "rgba(59, 130, 246, 0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <CheckCircle size={40} color="#3b82f6" />
+          </div>
+
+          <div style={{ textAlign: "center" }}>
+            <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#3b82f6" }}>
+              상담이 종료되었습니다
+            </h2>
+            <p style={{ fontSize: "14px", opacity: 0.6, marginTop: "8px" }}>
+              감사합니다. 이 페이지를 닫아도 됩니다.
+            </p>
+          </div>
+
+          {hospitalDept && (
+            <div style={{
+              textAlign: "center",
+              padding: "12px 24px",
+              background: "rgba(255,255,255,0.05)",
+              borderRadius: "12px",
+            }}>
+              <span style={{ fontSize: "32px" }}>{hospitalDept.icon}</span>
+              <p style={{ fontSize: "14px", marginTop: "4px", opacity: 0.7 }}>
+                {hospitalDept.labelKo}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* CSS animation */}
