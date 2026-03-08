@@ -23,7 +23,7 @@ import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
-import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, SlidersHorizontal, RotateCcw } from "lucide-react";
+import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle } from "lucide-react";
 
 const STATUS = {
   IDLE: "대기 중",
@@ -95,229 +95,6 @@ function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel }) 
   );
 }
 
-// ── 음성 감도 원격 조절 패널 (직원 전용) ──
-const GAIN_DEFAULTS = { gain: 1.0, vadThreshold: 0.01, minSpeechMs: 300 };
-
-function GainControlPanel({ roomId, visible, onClose }) {
-  const [gain, setGain] = useState(GAIN_DEFAULTS.gain);
-  const [vadThreshold, setVadThreshold] = useState(GAIN_DEFAULTS.vadThreshold);
-  const [minSpeechMs, setMinSpeechMs] = useState(GAIN_DEFAULTS.minSpeechMs);
-  const [toast, setToast] = useState("");
-  const toastTimer = useRef(null);
-
-  const emitGain = useCallback((g, v, m) => {
-    socket.emit("vad:gain", {
-      roomId,
-      target: "guest",
-      gain: g,
-      vadThreshold: v,
-      minSpeechMs: m,
-    });
-    setToast("적용됨 ✓");
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 800);
-  }, [roomId]);
-
-  const handleReset = () => {
-    setGain(GAIN_DEFAULTS.gain);
-    setVadThreshold(GAIN_DEFAULTS.vadThreshold);
-    setMinSpeechMs(GAIN_DEFAULTS.minSpeechMs);
-    emitGain(GAIN_DEFAULTS.gain, GAIN_DEFAULTS.vadThreshold, GAIN_DEFAULTS.minSpeechMs);
-  };
-
-  if (!visible) return null;
-
-  const sliderTrack = (pct) => `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${pct}%, #374151 ${pct}%, #374151 100%)`;
-
-  return (
-    <div style={{
-      position: "absolute",
-      bottom: "72px",
-      left: "12px",
-      right: "12px",
-      zIndex: 50,
-      background: "rgba(15, 23, 42, 0.92)",
-      backdropFilter: "blur(16px)",
-      WebkitBackdropFilter: "blur(16px)",
-      border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: "16px",
-      padding: "20px",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-      color: "white",
-    }}>
-      {/* 패널 헤더 */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <SlidersHorizontal size={16} style={{ opacity: 0.7 }} />
-          <span style={{ fontSize: "13px", fontWeight: 600 }}>환자 음성 감도 조절</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {toast && (
-            <span style={{
-              fontSize: "11px",
-              color: "#22c55e",
-              fontWeight: 600,
-              animation: "fadeInOut 0.8s ease",
-            }}>
-              {toast}
-            </span>
-          )}
-          <button onClick={handleReset} style={{
-            background: "none", border: "none", color: "rgba(255,255,255,0.5)",
-            cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px",
-            padding: "4px 8px", borderRadius: "6px",
-            transition: "color 0.2s",
-          }}
-            onMouseEnter={(e) => e.currentTarget.style.color = "white"}
-            onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.5)"}
-          >
-            <RotateCcw size={12} />
-            초기화
-          </button>
-          <button onClick={onClose} style={{
-            background: "none", border: "none", color: "rgba(255,255,255,0.4)",
-            cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "2px 6px",
-          }}>×</button>
-        </div>
-      </div>
-
-      {/* 슬라이더 영역 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
-        {/* 마이크 게인 */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", opacity: 0.7 }}>🎙 마이크 게인</span>
-            <span style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: 600, color: "#93c5fd" }}>
-              {gain.toFixed(1)}x
-            </span>
-          </div>
-          <input
-            type="range"
-            min="0.1" max="3.0" step="0.1"
-            value={gain}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              setGain(v);
-              emitGain(v, vadThreshold, minSpeechMs);
-            }}
-            style={{
-              width: "100%",
-              height: "6px",
-              borderRadius: "3px",
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-              background: sliderTrack(((gain - 0.1) / 2.9) * 100),
-              cursor: "pointer",
-            }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", opacity: 0.35, marginTop: "3px" }}>
-            <span>0.1</span><span>3.0</span>
-          </div>
-        </div>
-
-        {/* VAD 감도 (RMS 임계값) */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", opacity: 0.7 }}>📡 VAD 감도 (RMS 임계값)</span>
-            <span style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: 600, color: "#93c5fd" }}>
-              {vadThreshold.toFixed(3)}
-            </span>
-          </div>
-          <input
-            type="range"
-            min="0.001" max="0.05" step="0.001"
-            value={vadThreshold}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              setVadThreshold(v);
-              emitGain(gain, v, minSpeechMs);
-            }}
-            style={{
-              width: "100%",
-              height: "6px",
-              borderRadius: "3px",
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-              background: sliderTrack(((vadThreshold - 0.001) / 0.049) * 100),
-              cursor: "pointer",
-            }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", opacity: 0.35, marginTop: "3px" }}>
-            <span>0.001 (예민)</span><span>0.05 (둔감)</span>
-          </div>
-        </div>
-
-        {/* 최소 발화 길이 */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", opacity: 0.7 }}>⏱ 최소 발화 길이</span>
-            <span style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: 600, color: "#93c5fd" }}>
-              {minSpeechMs}ms
-            </span>
-          </div>
-          <input
-            type="range"
-            min="100" max="1000" step="50"
-            value={minSpeechMs}
-            onChange={(e) => {
-              const v = parseInt(e.target.value, 10);
-              setMinSpeechMs(v);
-              emitGain(gain, vadThreshold, v);
-            }}
-            style={{
-              width: "100%",
-              height: "6px",
-              borderRadius: "3px",
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-              background: sliderTrack(((minSpeechMs - 100) / 900) * 100),
-              cursor: "pointer",
-            }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", opacity: 0.35, marginTop: "3px" }}>
-            <span>100ms</span><span>1000ms</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 슬라이더 커스텀 CSS */}
-      <style>{`
-        @keyframes fadeInOut {
-          0% { opacity: 0; transform: translateY(4px); }
-          30% { opacity: 1; transform: translateY(0); }
-          70% { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        input[type="range"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: white;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-          cursor: pointer;
-          transition: transform 0.15s ease;
-        }
-        input[type="range"]::-webkit-slider-thumb:hover {
-          transform: scale(1.15);
-        }
-        input[type="range"]::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: white;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-          cursor: pointer;
-          border: none;
-        }
-      `}</style>
-    </div>
-  );
-}
-
 // ── 서버 메시지 저장 헬퍼 ──
 function saveMessageToServer({ roomId, patientToken, senderRole, originalText, translatedText, senderLang, translatedLang }) {
   fetch("/api/hospital/message", {
@@ -380,9 +157,6 @@ export default function FixedRoomVAD() {
     lang: fromLang,
     roleHint,
   });
-
-  // ── 음성 감도 조절 패널 (직원 전용) ──
-  const [showGainPanel, setShowGainPanel] = useState(false);
 
   // ── 환자 정보 로드 (patientToken이 있을 때) ──
   useEffect(() => {
@@ -1004,56 +778,27 @@ export default function FixedRoomVAD() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ── 감도 조절 패널 (직원 전용, 플로팅) ── */}
-          {isOwner && (
-            <GainControlPanel
-              roomId={roomId}
-              visible={showGainPanel}
-              onClose={() => setShowGainPanel(false)}
-            />
-          )}
-
           {/* ── 하단 고정 바 ── */}
           <div style={{
             padding: "12px 16px",
             background: "#111827",
             borderTop: "1px solid rgba(255,255,255,0.1)",
             flexShrink: 0,
-            position: "relative",
           }}>
             {isOwner ? (
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                {/* 감도 조절 토글 버튼 */}
-                <button
-                  onClick={() => setShowGainPanel((v) => !v)}
-                  style={{
-                    width: "48px", height: "48px", borderRadius: "12px",
-                    border: showGainPanel ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.15)",
-                    background: showGainPanel ? "rgba(59, 130, 246, 0.15)" : "rgba(255,255,255,0.05)",
-                    color: showGainPanel ? "#60a5fa" : "rgba(255,255,255,0.6)",
-                    cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "all 0.2s ease",
-                    flexShrink: 0,
-                  }}
-                >
-                  <SlidersHorizontal size={20} />
-                </button>
-                {/* 통역 종료 버튼 */}
-                <button
-                  onClick={handleStopInterpreting}
-                  style={{
-                    flex: 1, padding: "14px", borderRadius: "12px",
-                    border: "none", background: "#dc2626", color: "white",
-                    fontSize: "15px", fontWeight: 700, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                    transition: "background 0.2s ease",
-                  }}
-                >
-                  <PhoneOff size={18} />
-                  통역 종료
-                </button>
-              </div>
+              <button
+                onClick={handleStopInterpreting}
+                style={{
+                  width: "100%", padding: "14px", borderRadius: "12px",
+                  border: "none", background: "#dc2626", color: "white",
+                  fontSize: "15px", fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  transition: "background 0.2s ease",
+                }}
+              >
+                <PhoneOff size={18} />
+                통역 종료
+              </button>
             ) : (
               <div style={{
                 textAlign: "center", padding: "10px", opacity: 0.6, fontSize: "13px",
