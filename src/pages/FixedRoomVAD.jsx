@@ -221,6 +221,12 @@ export default function FixedRoomVAD() {
       }
     };
 
+    // 상대방이 통역 종료 클릭 → 양쪽 모두 종료
+    const onFixedRoomEnd = (payload) => {
+      if (payload?.roomId !== roomId) return;
+      doStopInterpreting();
+    };
+
     socket.on("partner-joined", onPartnerJoined);
     socket.on("participants", onParticipants);
     socket.on("partner-left", onPartnerLeft);
@@ -228,6 +234,7 @@ export default function FixedRoomVAD() {
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:no-voice", onSttNoVoice);
     socket.on("room-expired", onRoomExpired);
+    socket.on("fixed-room:end", onFixedRoomEnd);
 
     return () => {
       socket.off("partner-joined", onPartnerJoined);
@@ -237,8 +244,9 @@ export default function FixedRoomVAD() {
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:no-voice", onSttNoVoice);
       socket.off("room-expired", onRoomExpired);
+      socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad]);
+  }, [roomId, participantId, step, active, vad, doStopInterpreting]);
 
   // ── 자동 스크롤 ──
   useEffect(() => {
@@ -289,8 +297,8 @@ export default function FixedRoomVAD() {
     setStatus(STATUS.LISTENING);
   }, [vad]);
 
-  // ── 통역 종료 ──
-  const handleStopInterpreting = useCallback(async () => {
+  // ── 통역 종료 (공통 로직) ──
+  const doStopInterpreting = useCallback(async () => {
     await vad.pause();
     setActive(false);
     processingRef.current = false;
@@ -300,6 +308,12 @@ export default function FixedRoomVAD() {
     seenIdsRef.current.clear();
     setPartnerInfo(null);
   }, [vad]);
+
+  // ── 통역 종료 버튼 클릭 → 상대방에게도 알림 ──
+  const handleStopInterpreting = useCallback(async () => {
+    socket.emit("fixed-room:end", { roomId });
+    await doStopInterpreting();
+  }, [roomId, doStopInterpreting]);
 
   // ── 뒤로 가기 ──
   const handleBack = useCallback(() => {

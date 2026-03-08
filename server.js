@@ -2001,6 +2001,12 @@ io.on('connection', (socket) => {
     leaveRoomInternal({ roomId, participantId, reason: "manual-leave" });
   });
 
+  // ── fixed-room:end — 한쪽이 통역 종료 시 양쪽 모두 종료 ──
+  socket.on("fixed-room:end", ({ roomId } = {}) => {
+    if (!roomId) return;
+    io.to(roomId).emit("fixed-room:end", { roomId });
+  });
+
   socket.on("delete-room", ({ roomId, participantId } = {}) => {
     const rid = String(roomId || "").trim();
     const pid = String(participantId || socket.data?.participantId || "").trim();
