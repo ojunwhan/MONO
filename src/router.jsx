@@ -18,6 +18,7 @@ import HospitalDashboard from "./pages/HospitalDashboard";
 import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
+import FixedRoom from "./pages/FixedRoom";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
@@ -111,6 +112,10 @@ const router = createBrowserRouter([
   {
     path: "/hospital-dashboard",
     element: <HospitalDashboard />,
+  },
+  {
+    path: "/fixed/:location",
+    element: <FixedRoom />,
   },
   {
     path: "/kiosk",

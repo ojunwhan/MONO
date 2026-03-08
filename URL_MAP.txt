@@ -1,0 +1,55 @@
+============================================================
+  MONO 전체 URL 맵 (lingora.chat)
+  마지막 업데이트: 2026-03-07
+============================================================
+
+[일반 MONO]
+  /                        → 메인 (로그인 여부에 따라 /login 또는 /interpret 리다이렉트)
+  /login                   → 로그인
+  /setup                   → 초기 설정 (이름 + 언어)
+  /interpret               → 통역 시작 (호스트 QR 생성)
+  /home                    → 대화방 목록
+  /contacts                → 연락처
+  /settings                → 설정
+  /join/:roomId            → 게스트 입장 (QR 스캔)
+  /room/:roomId            → 채팅방
+  /cs-chat                 → 고객센터 채팅
+  /terms                   → 이용약관
+  /privacy                 → 개인정보처리방침
+
+[병원 모드 - 키오스크/직원 구조]
+  /hospital?mode=kiosk&dept=reception      → 태블릿 키오스크 (QR만 표시)
+  /hospital?mode=staff&dept=reception      → 직원 PC (환자 대기 목록 + 통역 시작)
+  /hospital/join/reception                 → 환자 QR 스캔 후 입장 (언어 선택 → 채팅방)
+
+[병원 모드 - 1:1 상담 (성형외과)]
+  /hospital?mode=normal&dept=plastic_surgery  → 1:1 통역 (호스트 QR 생성, 환자 스캔)
+
+[병원 모드 - 성형/피부 클리닉 전용 랜딩]
+  /hospital/aesthetic                      → 랜딩 페이지 (키오스크 / 상담실 선택)
+  /hospital/kiosk/plastic_surgery          → 성형외과 키오스크 (QR만 표시)
+
+[병원 관리]
+  /hospital/records                        → 병원 기록 조회
+  /hospital-dashboard                      → 병원 대시보드
+
+[기타]
+  /kiosk                                   → 키오스크 (범용)
+
+============================================================
+  dept 값 목록 (hospitalDepartments.js 기준)
+============================================================
+  reception          접수 / 원무과
+  internal           내과
+  surgery            외과
+  obstetrics         산부인과
+  pediatrics         소아청소년과
+  orthopedics        정형외과
+  neurology          신경과
+  ophthalmology      안과
+  ent                이비인후과
+  dentistry          치과
+  emergency          응급의학과
+  plastic_surgery    성형외과 / 피부과
+
+============================================================
