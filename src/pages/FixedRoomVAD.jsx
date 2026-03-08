@@ -40,6 +40,9 @@ export default function FixedRoomVAD() {
   const hospitalDept = state.hospitalDept || null;
   const patientToken = state.patientToken || null;
   const fromLang = state.fromLang || localStorage.getItem("myLang") || "ko";
+  const roleHint = state.roleHint || "owner";
+  const isCreator = state.isCreator !== undefined ? state.isCreator : true;
+  const isGuest = roleHint === "guest";
 
   // ── participantId: 안정적으로 유지 ──
   const pidKey = `mono.fixedroom.pid.${roomId}`;
@@ -52,8 +55,8 @@ export default function FixedRoomVAD() {
     return id;
   }, [pidKey]);
 
-  // ── 3단계 step ──
-  const [step, setStep] = useState("waiting"); // "waiting" | "ready" | "interpreting"
+  // ── 3단계 step ── (게스트는 바로 ready로 시작)
+  const [step, setStep] = useState(isGuest ? "ready" : "waiting"); // "waiting" | "ready" | "interpreting"
   const [status, setStatus] = useState(STATUS.IDLE);
   const [messages, setMessages] = useState([]);
   const [partnerInfo, setPartnerInfo] = useState(null); // { lang, name, flagUrl }
@@ -81,20 +84,20 @@ export default function FixedRoomVAD() {
       .catch(() => {});
   }, [patientToken]);
 
-  // ── 소켓: 방 입장 (join as owner) ──
+  // ── 소켓: 방 입장 ──
   useEffect(() => {
     if (!roomId || !participantId) return;
 
-    // join as owner
     socket.emit("join", {
       roomId,
       fromLang,
       participantId,
-      role: "Doctor",
-      localName: "",
-      roleHint: "owner",
+      role: isGuest ? "Patient" : "Doctor",
+      localName: isGuest ? (state.localName || "") : "",
+      roleHint,
       siteContext,
-      isCreator: true,
+      isCreator,
+      ...(state.guestId ? { guestId: state.guestId } : {}),
     });
 
     return () => {
@@ -104,7 +107,7 @@ export default function FixedRoomVAD() {
         reason: "fixed-room-vad-cleanup",
       });
     };
-  }, [roomId, participantId, fromLang, siteContext]);
+  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest]);
 
   // ── 소켓: 이벤트 수신 ──
   useEffect(() => {
@@ -452,7 +455,7 @@ export default function FixedRoomVAD() {
               animation: "spin 1s linear infinite",
             }} />
             <p style={{ fontSize: "16px", fontWeight: 500, opacity: 0.8 }}>
-              환자 연결을 기다리는 중...
+              {isGuest ? "의료진 연결을 기다리는 중..." : "환자 연결을 기다리는 중..."}
             </p>
           </div>
 
@@ -521,7 +524,7 @@ export default function FixedRoomVAD() {
 
           <div style={{ textAlign: "center" }}>
             <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#22c55e" }}>
-              환자가 연결되었습니다 ✅
+              {isGuest ? "의료진과 연결되었습니다 ✅" : "환자가 연결되었습니다 ✅"}
             </h2>
             {partnerInfo && (
               <div style={{
@@ -538,7 +541,7 @@ export default function FixedRoomVAD() {
                   {partnerInfo.langLabel || partnerInfo.lang}
                 </span>
                 <span style={{ fontSize: "14px", opacity: 0.6 }}>
-                  ({partnerInfo.name || "환자"})
+                  ({isGuest ? (partnerInfo.name || "의료진") : (partnerInfo.name || "환자")})
                 </span>
               </div>
             )}

@@ -119,8 +119,8 @@ export default function HospitalPatientJoin() {
         })
       );
 
-      // 5. ChatScreen으로 이동 (게스트)
-      navigate(`/room/${roomId}`, {
+      // 5. FixedRoomVAD로 이동 (환자 = 게스트)
+      navigate(`/fixed-room/${roomId}`, {
         replace: true,
         state: {
           fromLang: lang,
@@ -128,8 +128,10 @@ export default function HospitalPatientJoin() {
           guestId,
           isGuest: true,
           isCreator: false,
-          siteContext: `hospital_${dept}`,
+          roleHint: "guest",
+          siteContext: `hospital_${department}`,
           roomType: "oneToOne",
+          hospitalDept: dept,
           patientToken,
         },
       });
