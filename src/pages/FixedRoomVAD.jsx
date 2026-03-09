@@ -35,7 +35,8 @@ const STATUS = {
 };
 
 // ── 채팅 말풍선 컴포넌트 ──
-function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel }) {
+function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, streaming }) {
+  const displayText = (translatedText || originalText) + (streaming ? "▋" : "");
   return (
     <div style={{
       display: "flex",
@@ -76,7 +77,7 @@ function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel }) 
             margin: "0 0 4px 0",
             lineHeight: 1.4,
           }}>
-            {translatedText || originalText}
+            {displayText}
           </p>
           {/* 원문 (번역이 있을 때만, 작게 표시) */}
           {translatedText && originalText && translatedText !== originalText && (
@@ -332,30 +333,79 @@ export default function FixedRoomVAD() {
       }
     };
 
-    // 메시지 수신 + 서버 기록 저장
+    // 스트리밍 청크 수신 (번역 중 실시간 표시)
+    const onReceiveMessageStream = (payload) => {
+      const { roomId: incomingRoomId, messageId, chunk, senderPid, originalText } = payload || {};
+      if (!messageId || !chunk || (incomingRoomId && incomingRoomId !== roomId)) return;
+      const isMine = senderPid === participantId;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx >= 0) {
+          return prev.map((m, i) =>
+            i === idx
+              ? { ...m, translatedText: (m.translatedText || "") + chunk, streaming: true }
+              : m
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: messageId,
+            originalText: originalText || "",
+            translatedText: chunk,
+            mine: isMine,
+            senderId: senderPid,
+            timestamp: Date.now(),
+            streaming: true,
+          },
+        ];
+      });
+    };
+
+    // 스트리밍 종료 (최종 텍스트 반영, 커서 제거)
+    const onReceiveMessageStreamEnd = (payload) => {
+      const { roomId: incomingRoomId, messageId, fullText } = payload || {};
+      if (!messageId || (incomingRoomId && incomingRoomId !== roomId)) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, translatedText: fullText ?? m.translatedText, streaming: false } : m
+        )
+      );
+    };
+
+    // 메시지 수신 + 서버 기록 저장 (HQ 덮어쓰기 또는 신규)
     const onReceiveMessage = (payload) => {
       // [PERF] T8: receive-message 수신 시점 (말풍선 표시)
       console.log(`[PERF] T8 message received on client | ts: ${Date.now()}`);
       const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = payload || {};
       if (!id) return;
       if (incomingRoomId && incomingRoomId !== roomId) return;
-      if (seenIdsRef.current.has(id)) return;
-      seenIdsRef.current.add(id);
-
       const isMine = senderPid === participantId;
       const eventTs = Number(payload?.timestamp || payload?.at || Date.now());
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id,
-          originalText: originalText || "",
-          translatedText: translatedText || "",
-          mine: isMine,
-          senderId: senderPid,
-          timestamp: eventTs,
-        },
-      ]);
+      setMessages((prev) => {
+        const existingIdx = prev.findIndex((m) => m.id === id);
+        if (existingIdx >= 0) {
+          return prev.map((m, i) =>
+            i === existingIdx
+              ? { ...m, translatedText: translatedText ?? m.translatedText, streaming: false }
+              : m
+          );
+        }
+        if (seenIdsRef.current.has(id)) return prev;
+        seenIdsRef.current.add(id);
+        return [
+          ...prev,
+          {
+            id,
+            originalText: originalText || "",
+            translatedText: translatedText || "",
+            mine: isMine,
+            senderId: senderPid,
+            timestamp: eventTs,
+          },
+        ];
+      });
 
       if (saveMessages && sessionIdRef.current) {
         saveMessageToServer({
@@ -382,7 +432,7 @@ export default function FixedRoomVAD() {
       if (!id || !translatedText) return;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === id ? { ...m, translatedText } : m
+          m.id === id ? { ...m, translatedText, streaming: false } : m
         )
       );
     };
@@ -437,6 +487,8 @@ export default function FixedRoomVAD() {
     socket.on("participants", onParticipants);
     socket.on("partner-left", onPartnerLeft);
     socket.on("receive-message", onReceiveMessage);
+    socket.on("receive-message-stream", onReceiveMessageStream);
+    socket.on("receive-message-stream-end", onReceiveMessageStreamEnd);
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:no-voice", onSttNoVoice);
     socket.on("room-expired", onRoomExpired);
@@ -448,6 +500,8 @@ export default function FixedRoomVAD() {
       socket.off("participants", onParticipants);
       socket.off("partner-left", onPartnerLeft);
       socket.off("receive-message", onReceiveMessage);
+      socket.off("receive-message-stream", onReceiveMessageStream);
+      socket.off("receive-message-stream-end", onReceiveMessageStreamEnd);
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:no-voice", onSttNoVoice);
       socket.off("room-expired", onRoomExpired);
@@ -910,6 +964,7 @@ export default function FixedRoomVAD() {
                   mine={msg.mine}
                   flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")}
                   langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")}
+                  streaming={msg.streaming}
                 />
               ))
             )}

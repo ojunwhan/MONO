@@ -28,6 +28,7 @@ function MessageBubble({
     timestamp,
     replySnippet,
     replyAuthor,
+    streaming,
   } = message;
   const [viewMode, setViewMode] = useState("both"); // both | translated | original
 
@@ -61,9 +62,11 @@ function MessageBubble({
   const StatusIcon = queued || status === "sending" ? Clock3 : status === "read" ? CheckCheck : Check;
 
   const renderMain = () => {
-    if (viewMode === "translated") return targetText || sourceText;
-    if (viewMode === "original") return sourceText || targetText;
-    return targetText || sourceText;
+    let out;
+    if (viewMode === "translated") out = targetText || sourceText;
+    else if (viewMode === "original") out = sourceText || targetText;
+    else out = targetText || sourceText;
+    return streaming ? `${out}▋` : out;
   };
   const renderSub = () => {
     if (viewMode !== "both") return "";

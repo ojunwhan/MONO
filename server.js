@@ -1819,7 +1819,30 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
       content: `[${label(msg.lang)}] ${String(msg.text || '').trim()}`,
     }))
     .filter((msg) => msg.content.length > 3);
+  const useStream = opts.stream === true && typeof opts.onChunk === 'function';
   try {
+    if (useStream) {
+      const stream = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature: 0.3,
+        max_tokens: 1024,
+        stream: true,
+        messages: [
+          { role: 'system', content: sys },
+          ...recentContext,
+          { role: 'user', content: `Translate the following from ${label(from)} to ${label(to)}:\n\n${text}` },
+        ],
+      });
+      let full = '';
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          opts.onChunk(delta);
+        }
+      }
+      return full.trim() || text;
+    }
     const r = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.3,
@@ -3187,29 +3210,55 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, {
+                contextInject: meta.contextInject,
+                stream: true,
+                onChunk: (chunk) => {
+                  if (otherP?.socketId) {
+                    io.to(otherP.socketId).emit("receive-message-stream", {
+                      roomId,
+                      messageId: msgId,
+                      chunk,
+                      fromLang,
+                      toLang,
+                      senderPid: participantId,
+                      originalText: finalText,
+                    });
+                  }
+                },
+              });
+              if (otherP?.socketId) {
+                io.to(otherP.socketId).emit("receive-message-stream-end", {
+                  roomId,
+                  messageId: msgId,
+                  fullText: translated || finalText,
+                  fromLang,
+                  toLang,
+                  originalText: finalText,
+                });
+              }
               // [PERF] T5: fastTranslate 완료
               console.log(`[PERF] T5 fastTranslate done | T3→T5: ${Date.now() - tServer}ms`);
               await consumeTranslationUsage(participantId);
-              console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
+              console.log(`[1:1:translate] ✅ "${(translated || '').slice(0, 60)}"`);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
         }
         if (isGarbageText(translated)) return;
 
-        // → Other (sender name adapted to receiver's language)
+        // → Other: 번역 시 스트리밍으로 이미 전송됨. 동일 언어 시 receive-message로 한 번에 전송
         if (otherP?.socketId) {
-          // [PERF] T7: receive-message emit 직전
-          console.log(`[PERF] T7 receive-message emit | T3→T7: ${Date.now() - tServer}ms`);
-          io.to(otherP.socketId).emit("receive-message", {
-            id: msgId, roomId, roomType,
-            senderPid: participantId,
-            senderDisplayName,
-            senderCallSign: senderDisplayName,
-            originalText: finalText, translatedText: translated,
-            text: translated || finalText,
-            isDraft: true, at: Date.now(), timestamp: Date.now(),
-          });
+          if (fromLang === toLang) {
+            io.to(otherP.socketId).emit("receive-message", {
+              id: msgId, roomId, roomType,
+              senderPid: participantId,
+              senderDisplayName,
+              senderCallSign: senderDisplayName,
+              originalText: finalText, translatedText: translated,
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
+            });
+          }
           addToRoomContext(roomId, { text: translated || finalText, lang: toLang, role: 'assistant' });
         socket.emit("message-status", {
           roomId,
@@ -3465,6 +3514,10 @@ io.on('connection', (socket) => {
         emitTranslated(buf.text);
       }, 1200);
       STT_TEXT_BUFFER.set(key, { text: nextText, timer });
+      // 짧은 발화도 즉시 번역·전송 (이전에는 return만 해서 emitTranslated 미호출로 T5/T7 미출력됨)
+      STT_TEXT_BUFFER.delete(key);
+      clearTimeout(timer);
+      await emitTranslated(nextText);
       return;
     }
 

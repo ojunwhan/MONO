@@ -558,7 +558,6 @@ export default function ChatScreen() {
       if (seenIdsRef.current.has(id)) return;
       seenIdsRef.current.add(id);
       const eventTs = Number(payload?.timestamp || payload?.at || Date.now());
-
       const isMine = senderPid && senderPid === participantIdRef.current;
 
       if (isMine) {
@@ -587,7 +586,7 @@ export default function ChatScreen() {
         return;
       }
 
-      // Other's message → show translated text (my language)
+      // Other's message → show translated text (my language); 또는 스트림으로 온 메시지의 HQ 덮어쓰기
       const incoming = dedupeRepeats(translatedText || originalText || "");
       if (!incoming) return;
       if (document.visibilityState === "hidden") {
@@ -603,20 +602,28 @@ export default function ChatScreen() {
       const resolvedSenderName =
         senderDisplayName ||
         (roomTypeRef.current === "oneToOne" ? (partnerNameRef.current || "") : (senderCallSign || ""));
-      setMessages((prev) => [...prev, {
-        id,
-        text: incoming,
-        originalText: originalText || "",
-        translatedText: incoming,
-        mine: false,
-        senderId: senderPid || "",
-        status: "translated",
-        timestamp: eventTs,
-        senderDisplayName: resolvedSenderName,
-        senderCallSign: senderCallSign || "",
-        senderFlagUrl: roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : "",
-        senderLabel: roomTypeRef.current === "oneToOne" ? partnerShortRef.current : "",
-      }]);
+      setMessages((prev) => {
+        const existingIdx = prev.findIndex((m) => m.id === id);
+        if (existingIdx >= 0) {
+          return prev.map((m, i) =>
+            i === existingIdx ? { ...m, text: incoming, translatedText: incoming, streaming: false } : m
+          );
+        }
+        return [...prev, {
+          id,
+          text: incoming,
+          originalText: originalText || "",
+          translatedText: incoming,
+          mine: false,
+          senderId: senderPid || "",
+          status: "translated",
+          timestamp: eventTs,
+          senderDisplayName: resolvedSenderName,
+          senderCallSign: senderCallSign || "",
+          senderFlagUrl: roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : "",
+          senderLabel: roomTypeRef.current === "oneToOne" ? partnerShortRef.current : "",
+        }];
+      });
 
       if (
         voiceEnabledRef.current &&
@@ -645,7 +652,50 @@ export default function ChatScreen() {
       const { id, translatedText, senderPid } = payload || {};
       if (!id || !translatedText) return;
       if (senderPid && senderPid === participantIdRef.current) return;
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: translatedText, translatedText } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: translatedText, translatedText, streaming: false } : m)));
+    };
+
+    const onReceiveMessageStream = (payload) => {
+      const { roomId: incomingRoomId, messageId, chunk, senderPid, originalText } = payload || {};
+      if (!messageId || !chunk || (incomingRoomId && incomingRoomId !== roomIdRef.current)) return;
+      const isMine = senderPid && senderPid === participantIdRef.current;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        const resolvedName = roomTypeRef.current === "oneToOne" ? (partnerNameRef.current || "") : "";
+        const newMsg = {
+          id: messageId,
+          text: chunk,
+          originalText: originalText || "",
+          translatedText: chunk,
+          mine: isMine,
+          senderId: senderPid || "",
+          status: "translated",
+          timestamp: Date.now(),
+          senderDisplayName: resolvedName,
+          senderCallSign: resolvedName,
+          senderFlagUrl: roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : "",
+          senderLabel: roomTypeRef.current === "oneToOne" ? partnerShortRef.current : "",
+          streaming: true,
+        };
+        if (idx >= 0) {
+          return prev.map((m, i) =>
+            i === idx
+              ? { ...m, text: (m.text || "") + chunk, translatedText: (m.translatedText || "") + chunk, streaming: true }
+              : m
+          );
+        }
+        return [...prev, newMsg];
+      });
+    };
+
+    const onReceiveMessageStreamEnd = (payload) => {
+      const { roomId: incomingRoomId, messageId, fullText } = payload || {};
+      if (!messageId || (incomingRoomId && incomingRoomId !== roomIdRef.current)) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, text: fullText ?? m.text, translatedText: fullText ?? m.translatedText, streaming: false } : m
+        )
+      );
     };
 
     const onRecentMessages = (msgs) => {
@@ -793,6 +843,8 @@ export default function ChatScreen() {
     socket.on("room-context", onRoomContext);
     socket.on("participants", onParticipants);
     socket.on("receive-message", onReceiveMessage);
+    socket.on("receive-message-stream", onReceiveMessageStream);
+    socket.on("receive-message-stream-end", onReceiveMessageStreamEnd);
     socket.on("recent-messages", onRecentMessages);
     socket.on("revise-message", onReviseMessage);
     socket.on("guest:joined", onJoined);
@@ -812,6 +864,8 @@ export default function ChatScreen() {
       socket.off("room-context", onRoomContext);
       socket.off("participants", onParticipants);
       socket.off("receive-message", onReceiveMessage);
+      socket.off("receive-message-stream", onReceiveMessageStream);
+      socket.off("receive-message-stream-end", onReceiveMessageStreamEnd);
       socket.off("recent-messages", onRecentMessages);
       socket.off("revise-message", onReviseMessage);
       socket.off("guest:joined", onJoined);
