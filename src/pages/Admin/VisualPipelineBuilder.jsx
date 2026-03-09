@@ -278,21 +278,46 @@ export default function VisualPipelineBuilder() {
     }
   }, [isOrgDeptMode, orgId, deptId, blocks, connections]);
 
-  // ── 블럭 추가 (팔레트 클릭) ──
+  // ── 블럭 추가 (팔레트 클릭 또는 캔버스 드롭) ──
   const addBlock = useCallback(
-    (type) => {
+    (type, dropX, dropY) => {
       const meta = getBlockMeta(type);
       if (!meta) return;
-      // 기존 블럭들과 겹치지 않는 위치 계산
-      const existing = blocks.length;
-      const col = existing % 5;
-      const row = Math.floor(existing / 5);
-      const x = 60 + col * 240;
-      const y = 50 + row * 110;
+      let x, y;
+      if (dropX != null && dropY != null) {
+        x = Math.max(0, Math.min(dropX, canvasSize.w - BLOCK_W));
+        y = Math.max(0, Math.min(dropY, canvasSize.h - BLOCK_H));
+      } else {
+        const existing = blocks.length;
+        const col = existing % 5;
+        const row = Math.floor(existing / 5);
+        x = 60 + col * 240;
+        y = 50 + row * 110;
+      }
       setBlocks((prev) => [...prev, { id: uid("b"), type, x, y }]);
     },
-    [blocks.length]
+    [blocks.length, canvasSize.w, canvasSize.h]
   );
+
+  // ── 캔버스에 팔레트 블럭 드롭 ──
+  const handleCanvasDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData("application/x-pipeline-block-type");
+      if (!type || !getBlockMeta(type)) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = e.clientX - rect.left - BLOCK_W / 2;
+      const y = e.clientY - rect.top - BLOCK_H / 2;
+      addBlock(type, x, y);
+    },
+    [addBlock]
+  );
+
+  const handleCanvasDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
 
   // ── 블럭 삭제 ──
   const deleteBlock = useCallback(
@@ -546,6 +571,8 @@ export default function VisualPipelineBuilder() {
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
         onClick={onCanvasClick}
+        onDragOver={handleCanvasDragOver}
+        onDrop={handleCanvasDrop}
       >
         {/* 점 그리드 배경 */}
         <DotGrid width={canvasSize.w} height={canvasSize.h} />
@@ -733,7 +760,7 @@ export default function VisualPipelineBuilder() {
           >
             <span style={{ fontSize: 48, opacity: 0.4 }}>⬡</span>
             <span style={{ fontSize: 14, fontWeight: 500 }}>
-              아래 팔레트에서 블럭을 클릭하여 추가하세요
+              아래 팔레트에서 블럭을 클릭하거나 캔버스로 드래그하여 추가하세요
             </span>
           </div>
         )}
@@ -1075,6 +1102,11 @@ function DotGrid({ width, height }) {
 
 // ── 팔레트 ──
 function Palette({ categories, onAddBlock }) {
+  const handleDragStart = (e, blockType) => {
+    e.dataTransfer.setData("application/x-pipeline-block-type", blockType);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
   return (
     <div
       style={{
@@ -1136,10 +1168,19 @@ function Palette({ categories, onAddBlock }) {
 
             {/* 블럭 목록 */}
             {cat.blocks.map((block) => (
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 key={block.type}
+                draggable
+                onDragStart={(e) => handleDragStart(e, block.type)}
                 onClick={() => onAddBlock(block.type)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onAddBlock(block.type);
+                  }
+                }}
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -1149,7 +1190,7 @@ function Palette({ categories, onAddBlock }) {
                   border: "1px solid #1e293b",
                   borderLeft: `3px solid ${cat.color}`,
                   background: "#0c1322",
-                  cursor: "pointer",
+                  cursor: "grab",
                   textAlign: "left",
                   fontFamily: "inherit",
                   transition: "all 0.15s",
@@ -1186,7 +1227,7 @@ function Palette({ categories, onAddBlock }) {
                 >
                   {block.desc}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         ))}
