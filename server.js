@@ -2583,12 +2583,13 @@ io.on('connection', (socket) => {
     if (typeof roomId !== 'string' || roomId.length > 200) return;
     if (typeof participantId !== 'string' || participantId.length > 128) return;
 
-    // ended된 병원 방 재접속: ROOMS에 없으면 DB에서 roomId 조회 후 빈 메타 재생성 (소켓 통신만 가능, 메시지 저장 안 함)
+    // ended된 병원 방 재접속: ROOMS에 없으면 DB에서 roomId 조회 후 메타 재생성 (active도 복구 — pm2 reload 대비)
     if (!ROOMS.has(roomId) && String(roomId).startsWith('PT-')) {
       try {
         const row = await dbGet('SELECT id, status, patient_token, dept FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]);
-        if (row && row.status === 'ended') {
+        if (row) {
           const hospitalSiteContext = `hospital_${row.dept || 'general'}`;
+          const isEnded = row.status === 'ended';
           ROOMS.set(roomId, {
             roomType: 'oneToOne',
             ownerLang: 'auto',
@@ -2600,7 +2601,7 @@ io.on('connection', (socket) => {
             callSignCounters: {},
             expiresAt: Date.now() + 24 * 60 * 60 * 1000,
             hospitalMode: true,
-            hospitalEndedSession: true,
+            hospitalEndedSession: isEnded,
             department: row.dept || 'general',
             patientToken: row.patient_token,
             hospitalSessionId: row.id,
@@ -3079,8 +3080,40 @@ io.on('connection', (socket) => {
   });
 
   // --- STT streaming (AudioWorklet + VAD) ---
-  socket.on("stt:open", ({ roomId, lang, participantId, sampleRateHz = 16000 }) => {
+  socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000 }) => {
     if (!roomId || !participantId) return;
+    // ROOMS-DB 동기화: ROOMS에 없고 PT- 방이면 hospital_sessions에서 조회 후 ROOMS 재생성 후 인증 통과
+    if (!ROOMS.has(roomId) && String(roomId).startsWith('PT-')) {
+      try {
+        const row = await dbGet('SELECT id, status, patient_token, dept FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]);
+        if (row) {
+          const hospitalSiteContext = `hospital_${row.dept || 'general'}`;
+          const isEnded = row.status === 'ended';
+          ROOMS.set(roomId, {
+            roomType: 'oneToOne',
+            ownerLang: 'auto',
+            guestLang: 'auto',
+            siteContext: hospitalSiteContext,
+            locked: true,
+            ownerPid: null,
+            participants: {},
+            callSignCounters: {},
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+            hospitalMode: true,
+            hospitalEndedSession: isEnded,
+            department: row.dept || 'general',
+            patientToken: row.patient_token,
+            hospitalSessionId: row.id,
+            restored: true,
+          });
+          const meta = ROOMS.get(roomId);
+          meta.participants[participantId] = { socketId: socket.id };
+          ROOMS.set(roomId, meta);
+        }
+      } catch (e) {
+        console.warn('[stt:open] PT- room restore failed:', e?.message);
+      }
+    }
     if (!isAuthorizedParticipant(socket, roomId, participantId)) {
       console.warn(`[auth] stt:open rejected room=${roomId} pid=${participantId} sid=${socket.id}`);
       return;
@@ -4363,6 +4396,40 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     } catch (_) {}
 
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages + patient_token columns)');
+
+    // ── ROOMS ↔ DB 동기화: 서버 시작 시 active 병원 세션 복원 ──
+    try {
+      const activeRows = await dbAll(
+        'SELECT room_id, dept, id, patient_token FROM hospital_sessions WHERE status = ?',
+        ['active']
+      );
+      for (const row of activeRows || []) {
+        if (!row || !row.room_id) continue;
+        const siteContext = `hospital_${row.dept || 'general'}`;
+        ROOMS.set(row.room_id, {
+          roomType: 'oneToOne',
+          ownerLang: 'auto',
+          guestLang: 'auto',
+          siteContext,
+          locked: true,
+          ownerPid: null,
+          participants: {},
+          callSignCounters: {},
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          hospitalMode: true,
+          hospitalEndedSession: false,
+          department: row.dept || 'general',
+          patientToken: row.patient_token,
+          hospitalSessionId: row.id,
+          restored: true,
+        });
+      }
+      if (activeRows && activeRows.length > 0) {
+        console.log(`[hospital] ✅ ROOMS restored ${activeRows.length} active session(s) from DB`);
+      }
+    } catch (e) {
+      console.warn('[hospital] ROOMS restore from DB failed:', e?.message);
+    }
 
     // ── API 사용량 통계 영속화 테이블 ──
     await dbExec(`
