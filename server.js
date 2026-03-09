@@ -5833,4 +5833,8 @@ cron.schedule('0 0 * * *', async () => {
 // node-cron의 timezone 옵션이 자동 변환해줌
 console.log('[cost-report] 📅 Daily cost report scheduled at 9:00 AM KST');
 
+if (process.env.NODE_TEST === '1') {
+  module.exports = { transcribePcm16, fastTranslate, buildSystemPrompt, app };
+  return;
+}
 startServer(START_PORT);
