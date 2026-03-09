@@ -334,6 +334,8 @@ export default function FixedRoomVAD() {
 
     // 메시지 수신 + 서버 기록 저장
     const onReceiveMessage = (payload) => {
+      // [PERF] T8: receive-message 수신 시점 (말풍선 표시)
+      console.log(`[PERF] T8 message received on client | ts: ${Date.now()}`);
       const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = payload || {};
       if (!id) return;
       if (incomingRoomId && incomingRoomId !== roomId) return;

@@ -48,6 +48,7 @@ const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
  */
 export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
   const sessionActiveRef = useRef(false);
+  const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
 
   // ── 원격 조절 가능한 refs ──
   const gainRef = useRef(DEFAULT_GAIN);
@@ -119,6 +120,9 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
 
       // 5. 전송 완료 신호 → server.js 풀파이프라인 시작
       //    transcribePcm16() → fastTranslate → hqTranslate → receive-message
+      // [PERF] T2: stt:segment_end emit 직전
+      const t1 = perfT1Ref.current;
+      console.log(`[PERF] T2 segment_end sent | VAD→Send: ${Date.now() - t1}ms`);
       socket.emit("stt:segment_end", {
         roomId,
         participantId,
@@ -139,8 +143,11 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
     },
 
     onSpeechEnd: (audioFloat32) => {
+      const t1 = Date.now(); // [PERF] T1: VAD 발화종료 감지
+      console.log("[PERF] T1 VAD speech end detected");
       if (!sessionActiveRef.current) return;
       sessionActiveRef.current = false;
+      perfT1Ref.current = t1;
 
       // RMS 저음량 필터 (환각 방지) — 원격 조절 가능
       const rms = Math.sqrt(

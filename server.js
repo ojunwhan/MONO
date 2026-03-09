@@ -3088,6 +3088,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on("stt:segment_end", async ({ roomId, participantId }) => {
+    const tServer = Date.now(); // [PERF] T3: segment_end 수신 시점
+    console.log("[PERF] T3 segment_end received on server");
     if (!consumeRate(socket.id, 'stt:segment_end', LIMITS.STT_SEGMENT_END_PER_30S, 30000)) {
       return;
     }
@@ -3126,6 +3128,8 @@ io.on('connection', (socket) => {
     let text = "";
     try {
       text = await transcribePcm16(pcm, session.lang, session.sampleRateHz, { hospitalMode: sttHospitalMode });
+      // [PERF] T4: STT 완료
+      console.log(`[PERF] T4 STT done | T3→T4: ${Date.now() - tServer}ms | text: ${(text || '').slice(0, 30)}`);
       text = normalizeRepeats(text);
       console.log(`[stt:segment] 🎙 STT result: "${text}"${sttHospitalMode ? ' [hospital]' : ''}`);
     } catch (e) {
@@ -3184,6 +3188,8 @@ io.on('connection', (socket) => {
           try {
             if (await canTranslateForUser(socket, participantId)) {
               translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+              // [PERF] T5: fastTranslate 완료
+              console.log(`[PERF] T5 fastTranslate done | T3→T5: ${Date.now() - tServer}ms`);
               await consumeTranslationUsage(participantId);
               console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
             }
@@ -3193,6 +3199,8 @@ io.on('connection', (socket) => {
 
         // → Other (sender name adapted to receiver's language)
         if (otherP?.socketId) {
+          // [PERF] T7: receive-message emit 직전
+          console.log(`[PERF] T7 receive-message emit | T3→T7: ${Date.now() - tServer}ms`);
           io.to(otherP.socketId).emit("receive-message", {
             id: msgId, roomId, roomType,
             senderPid: participantId,
@@ -3237,6 +3245,8 @@ io.on('connection', (socket) => {
         let finalizedForTts = translated;
         try {
           const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+          // [PERF] T6: hqTranslate 완료
+          console.log(`[PERF] T6 hqTranslate done | T3→T6: ${Date.now() - tServer}ms`);
           if (!isGarbageText(hq) && otherP?.socketId) {
             finalizedForTts = hq;
             io.to(otherP.socketId).emit("revise-message", {
