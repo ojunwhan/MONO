@@ -118,10 +118,8 @@ const LANE_BLOCK_ID_TO_VISUAL_TYPE = {
 
 const LANE_ORDER = ["input", "stt", "translate", "session", "output", "storage"];
 
-// 동일 타입 1개 제한 + 카테고리 내 상호 배타 (예: VAD/PTT 둘 중 하나만)
-const MUTUAL_EXCLUSION_GROUPS = [
-  ["vad", "ptt"], // 입력 방식
-];
+// 동일 타입 1개 제한 + 배타 그룹 (VAD/PTT 둘 중 하나만). text_input은 배타 그룹 제외·중복만 방지.
+const MUTUAL_EXCLUSION_GROUPS = [["vad", "ptt"]];
 
 function canAddBlock(type, blocks) {
   const typesOnCanvas = blocks.map((b) => b.type);
@@ -295,25 +293,28 @@ export default function VisualPipelineBuilder() {
   }, [isOrgDeptMode, orgId, deptId, blocks, connections]);
 
   // ── 블럭 추가 (팔레트 클릭 또는 캔버스 드롭) ──
+  // 검사는 setBlocks(prev => ...) 안에서 prev(최신 상태)로 수행해 stale closure 방지.
   const addBlock = useCallback(
     (type, dropX, dropY) => {
       const meta = getBlockMeta(type);
       if (!meta) return;
-      if (!canAddBlock(type, blocks)) return;
-      let x, y;
-      if (dropX != null && dropY != null) {
-        x = Math.max(0, Math.min(dropX, canvasSize.w - BLOCK_W));
-        y = Math.max(0, Math.min(dropY, canvasSize.h - BLOCK_H));
-      } else {
-        const existing = blocks.length;
-        const col = existing % 5;
-        const row = Math.floor(existing / 5);
-        x = 60 + col * 240;
-        y = 50 + row * 110;
-      }
-      setBlocks((prev) => [...prev, { id: uid("b"), type, x, y }]);
+      setBlocks((prev) => {
+        if (!canAddBlock(type, prev)) return prev;
+        let x, y;
+        if (dropX != null && dropY != null) {
+          x = Math.max(0, Math.min(dropX, canvasSize.w - BLOCK_W));
+          y = Math.max(0, Math.min(dropY, canvasSize.h - BLOCK_H));
+        } else {
+          const existing = prev.length;
+          const col = existing % 5;
+          const row = Math.floor(existing / 5);
+          x = 60 + col * 240;
+          y = 50 + row * 110;
+        }
+        return [...prev, { id: uid("b"), type, x, y }];
+      });
     },
-    [blocks, canvasSize.w, canvasSize.h]
+    [canvasSize.w, canvasSize.h]
   );
 
   // ── 캔버스에 팔레트 블럭 드롭 ──
