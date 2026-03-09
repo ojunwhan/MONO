@@ -1,10 +1,11 @@
 /**
  * VisualPipelineBuilder — 마우스 블럭 연결 기반 파이프라인 빌더
- * Route: /admin/pipeline
+ * Route: /admin/pipeline (standalone) 또는 /admin/orgs/:orgId/dept/:deptId/pipeline (기관·부서 연동)
  *
  * 순수 React + SVG (외부 라이브러리 없음)
  */
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
 // ═══════════════════════════════════════
 // 블럭 정의 (15개, 5 카테고리)
@@ -94,6 +95,29 @@ const HOSPITAL_PRESET = {
   ],
 };
 
+// 레인 형식 블럭 ID → Visual 타입 매핑 (기존 DB 데이터 로드 시 사용)
+const LANE_BLOCK_ID_TO_VISUAL_TYPE = {
+  kiosk_qr: "qr_scan",
+  staff_ptt: "ptt",
+  text_input: "text_input",
+  groq_whisper: "stt_whisper",
+  vad_auto: "vad",
+  gpt4o_hospital: "translate_gpt4o",
+  gpt4o_general: "translate_gpt4o",
+  gpt4o_legal: "translate_gpt4o",
+  gpt4o_industrial: "translate_gpt4o",
+  qr_scan: "qr_scan",
+  fixed_url: "fixed_url",
+  auto_reset: "auto_reset",
+  subtitle: "subtitle",
+  chat_bubble: "chat_bubble",
+  no_record: "no_record",
+  db_save: "db_save",
+  summary: "summary_only",
+};
+
+const LANE_ORDER = ["input", "stt", "translate", "session", "output", "storage"];
+
 // ═══════════════════════════════════════
 // 블럭 사이즈 상수
 // ═══════════════════════════════════════
@@ -110,10 +134,22 @@ function uid(prefix = "n") {
 // 메인 컴포넌트
 // ═══════════════════════════════════════
 export default function VisualPipelineBuilder() {
+  const { orgId, deptId } = useParams();
+  const navigate = useNavigate();
+  const isOrgDeptMode = Boolean(orgId && deptId);
+
   // ── State ──
   const [blocks, setBlocks] = useState([]);
   const [connections, setConnections] = useState([]);
   const [selectedBlockId, setSelectedBlockId] = useState(null);
+
+  // org/dept 모드: 헤더용 + 로드/저장
+  const [orgName, setOrgName] = useState("");
+  const [deptName, setDeptName] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const [loading, setLoading] = useState(isOrgDeptMode);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState("");
 
   // 드래그
   const [dragging, setDragging] = useState(null); // { blockId, offsetX, offsetY }
@@ -138,6 +174,109 @@ export default function VisualPipelineBuilder() {
     window.addEventListener("resize", updateSize);
     return () => window.removeEventListener("resize", updateSize);
   }, []);
+
+  // ── org/dept 모드: 기관 정보 + 파이프라인 로드 ──
+  const fetchOrgAndPipeline = useCallback(async () => {
+    if (!isOrgDeptMode || !orgId || !deptId) return;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const orgRes = await fetch(`/api/admin/orgs/${orgId}`, { credentials: "include" });
+      const orgData = await orgRes.json();
+      if (!orgData.ok) {
+        setLoadError(orgData.error || "기관 정보를 불러올 수 없습니다.");
+        return;
+      }
+      setOrgName(orgData.org?.name || "");
+      const dept = (orgData.departments || []).find((d) => String(d.id) === String(deptId));
+      setDeptName(dept?.dept_name || "");
+
+      const pipeRes = await fetch(
+        `/api/admin/orgs/${orgId}/departments/${deptId}/pipeline`,
+        { credentials: "include" }
+      );
+      const pipeData = await pipeRes.json();
+      if (pipeData.ok && pipeData.config) {
+        const config = pipeData.config;
+        if (config.visual?.blocks?.length) {
+          setBlocks(config.visual.blocks.map((b) => ({ ...b })));
+          setConnections((config.visual.connections || []).map((c) => ({ ...c })));
+        } else {
+          // 레인 형식 → 시각형으로 변환
+          const laneBlocks = LANE_ORDER.map((lane) => config[lane]).filter(Boolean);
+          const visualType = (id) => LANE_BLOCK_ID_TO_VISUAL_TYPE[id] || null;
+          const newBlocks = [];
+          const newConns = [];
+          let bid = 0;
+          const blockIds = [];
+          for (let i = 0; i < laneBlocks.length; i++) {
+            const vt = visualType(laneBlocks[i]);
+            if (!vt || !getBlockMeta(vt)) continue;
+            const id = `b${++bid}_${Date.now()}`;
+            blockIds.push(id);
+            newBlocks.push({
+              id,
+              type: vt,
+              x: 80 + i * 240,
+              y: 120,
+            });
+            if (i > 0) newConns.push({ id: `c${i}_${Date.now()}`, from: blockIds[i - 1], to: id });
+          }
+          setBlocks(newBlocks);
+          setConnections(newConns);
+        }
+      }
+    } catch (e) {
+      setLoadError(e?.message || "로드 실패");
+    } finally {
+      setLoading(false);
+    }
+  }, [isOrgDeptMode, orgId, deptId]);
+
+  useEffect(() => {
+    if (isOrgDeptMode) fetchOrgAndPipeline();
+  }, [isOrgDeptMode, fetchOrgAndPipeline]);
+
+  // ── 저장 (org/dept 모드): visual + translate, output 유도 ──
+  const savePipeline = useCallback(async () => {
+    if (!isOrgDeptMode || !orgId || !deptId) return;
+    setSaving(true);
+    setToast("");
+    try {
+      let translate = "gpt4o_general";
+      let output = "subtitle";
+      for (const b of blocks) {
+        if (b.type === "translate_gpt4o") translate = "gpt4o_general";
+        if (b.type === "subtitle") output = "subtitle";
+        if (b.type === "chat_bubble") output = "chat_bubble";
+      }
+      const config = {
+        visual: { blocks, connections },
+        translate,
+        output,
+      };
+      const res = await fetch(
+        `/api/admin/orgs/${orgId}/departments/${deptId}/pipeline`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ config }),
+        }
+      );
+      const data = await res.json();
+      if (data.ok) {
+        setToast("저장되었습니다 ✓");
+        setTimeout(() => setToast(""), 2000);
+      } else {
+        setToast(data.error || "저장 실패");
+      }
+    } catch {
+      setToast("서버 연결 오류");
+    } finally {
+      setSaving(false);
+    }
+  }, [isOrgDeptMode, orgId, deptId, blocks, connections]);
 
   // ── 블럭 추가 (팔레트 클릭) ──
   const addBlock = useCallback(
@@ -342,6 +481,28 @@ export default function VisualPipelineBuilder() {
   // ═══════════════════════════════════════
   // Render
   // ═══════════════════════════════════════
+  if (isOrgDeptMode && loading) {
+    return (
+      <div style={{ width: "100vw", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#060c18", color: "#64748b" }}>
+        불러오는 중...
+      </div>
+    );
+  }
+  if (isOrgDeptMode && loadError) {
+    return (
+      <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#060c18", color: "#f87171", gap: 16 }}>
+        <span>{loadError}</span>
+        <button
+          type="button"
+          onClick={() => navigate(`/admin/orgs/${orgId}`)}
+          style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #1e293b", background: "#0f172a", color: "#e2e8f0", cursor: "pointer" }}
+        >
+          기관으로 돌아가기
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -364,6 +525,13 @@ export default function VisualPipelineBuilder() {
         connectionCount={connections.length}
         onLoadPreset={loadHospitalPreset}
         onClear={clearAll}
+        isOrgDeptMode={isOrgDeptMode}
+        onBack={isOrgDeptMode ? () => navigate(`/admin/orgs/${orgId}`) : null}
+        orgName={orgName}
+        deptName={deptName}
+        onSave={isOrgDeptMode ? savePipeline : null}
+        saving={saving}
+        toast={toast}
       />
 
       {/* ── Canvas (58%) ── */}
@@ -581,7 +749,7 @@ export default function VisualPipelineBuilder() {
 // Sub-components
 // ═══════════════════════════════════════
 
-function Header({ blockCount, connectionCount, onLoadPreset, onClear }) {
+function Header({ blockCount, connectionCount, onLoadPreset, onClear, isOrgDeptMode, onBack, orgName, deptName, onSave, saving, toast }) {
   return (
     <div
       style={{
@@ -596,29 +764,90 @@ function Header({ blockCount, connectionCount, onLoadPreset, onClear }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", letterSpacing: 1.2 }}>
-          MONO<span style={{ color: "#38bdf8" }}>·</span>Pipeline Builder
-        </span>
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            marginLeft: 12,
-            fontSize: 11,
-            color: "#64748b",
-          }}
-        >
-          <span>
-            <b style={{ color: "#94a3b8" }}>{blockCount}</b> 블럭
-          </span>
-          <span>·</span>
-          <span>
-            <b style={{ color: "#94a3b8" }}>{connectionCount}</b> 연결
-          </span>
-        </div>
+        {isOrgDeptMode && onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              padding: 6,
+              borderRadius: 8,
+              border: "none",
+              background: "transparent",
+              color: "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title="기관으로"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+        )}
+        {isOrgDeptMode ? (
+          <div>
+            <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{orgName}</span>
+              <span>/</span>
+              <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{deptName}</span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>파이프라인 설정</div>
+          </div>
+        ) : (
+          <>
+            <span style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", letterSpacing: 1.2 }}>
+              MONO<span style={{ color: "#38bdf8" }}>·</span>Pipeline Builder
+            </span>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginLeft: 12,
+                fontSize: 11,
+                color: "#64748b",
+              }}
+            >
+              <span>
+                <b style={{ color: "#94a3b8" }}>{blockCount}</b> 블럭
+              </span>
+              <span>·</span>
+              <span>
+                <b style={{ color: "#94a3b8" }}>{connectionCount}</b> 연결
+              </span>
+            </div>
+          </>
+        )}
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {isOrgDeptMode && onSave && (
+          <>
+            {toast && (
+              <span style={{ fontSize: 12, color: toast.includes("✓") ? "#34d399" : "#f87171" }}>{toast}</span>
+            )}
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                border: "1px solid #3730a3",
+                background: "#4f46e5",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: saving ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+                opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+          </>
+        )}
+        {!isOrgDeptMode && (
+          <>
+            <button
           type="button"
           onClick={onLoadPreset}
           style={{
@@ -666,6 +895,8 @@ function Header({ blockCount, connectionCount, onLoadPreset, onClear }) {
         >
           ↺ 초기화
         </button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -24,7 +24,6 @@ import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminLayout from "./pages/Admin/AdminLayout";
 import AdminOrgs from "./pages/Admin/AdminOrgs";
 import AdminOrgDetail from "./pages/Admin/AdminOrgDetail";
-import PipelineBuilder from "./pages/Admin/PipelineBuilder";
 import VisualPipelineBuilder from "./pages/Admin/VisualPipelineBuilder";
 import OrgKiosk from "./pages/Org/OrgKiosk";
 import OrgStaff from "./pages/Org/OrgStaff";
@@ -151,7 +150,7 @@ const router = createBrowserRouter([
           },
           {
             path: "orgs/:orgId/dept/:deptId/pipeline",
-            element: <PipelineBuilder />,
+            element: <VisualPipelineBuilder />,
           },
           {
             path: "pipeline",
