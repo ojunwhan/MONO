@@ -1643,6 +1643,31 @@ function buildSystemPrompt(from, to, ctx, siteContext, opts = {}) {
     const medicalTerms = (isHospital || contextInject) ? getMedicalTermContext(dept, to) : "";
     const isMedical = isHospital || (contextInject && medicalTerms);
     if (isMedical) {
+      const hospitalRegister = isHospital
+        ? `
+CRITICAL — Hospital Mode Language Register:
+Always translate using the highest level of formal, respectful language
+regardless of the target language.
+This applies to ALL 99 supported languages without exception.
+
+The output must always sound like:
+- A professional medical staff speaking to a patient with full respect
+- Or a patient speaking to a doctor with full politeness
+- NEVER casual, informal, or blunt expressions
+- NEVER slang or colloquial language
+
+Examples of register:
+- Korean: ~하십니까, ~드리겠습니다, ~하시겠습니까 (최고 존칭)
+- English: 'Would you please~', 'May I ask~', 'I would like to inform you~'
+- Japanese: 最敬語・丁寧語 (keigo, sonkeigo)
+- Chinese: 您 instead of 你, 请问, 非常抱歉
+- Vietnamese: kính thưa, xin phép
+- All other languages: equivalent highest formal/honorific register
+
+If the source text is casual or informal,
+ALWAYS elevate the register in the translation to formal/respectful.
+Do not mirror the informality of the source.`
+        : "";
       return [
         siteDomain,
         medicalTerms,
@@ -1650,6 +1675,7 @@ function buildSystemPrompt(from, to, ctx, siteContext, opts = {}) {
         `Maintain a professional medical tone. Use standard medical terminology in the target language.`,
         `When medical terms from the glossary above appear, you MUST use the provided translations.`,
         `Preserve proper nouns, medication names, dosages, numbers, units, and medical terms accurately.`,
+        hospitalRegister,
         `If message is ambiguous, use conversation context to resolve. Always output best-effort translation.`,
         ctx ? `Recent conversation context:\n${ctx}` : '',
         `Output ONLY translated text. No explanation, no notes, no quotation marks, no brackets.`,
