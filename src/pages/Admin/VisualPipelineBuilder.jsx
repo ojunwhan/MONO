@@ -8,7 +8,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
 // ═══════════════════════════════════════
-// 블럭 정의 (15개, 5 카테고리)
+// 블럭 정의 (15개, 5 카테고리). singleton: true → 캔버스에 1개만, false → 여러 개 가능
 // ═══════════════════════════════════════
 const CATEGORIES = [
   {
@@ -16,9 +16,9 @@ const CATEGORIES = [
     label: "입력",
     color: "#00c9a7",
     blocks: [
-      { type: "vad", label: "VAD 음성감지", desc: "Silero VAD 자동 감지" },
-      { type: "ptt", label: "PTT 버튼", desc: "Push-to-Talk 수동" },
-      { type: "text_input", label: "텍스트 입력", desc: "키보드 직접 입력" },
+      { type: "vad", label: "VAD 음성감지", desc: "Silero VAD 자동 감지", singleton: true },
+      { type: "ptt", label: "PTT 버튼", desc: "Push-to-Talk 수동", singleton: true },
+      { type: "text_input", label: "텍스트 입력", desc: "키보드 직접 입력", singleton: true },
     ],
   },
   {
@@ -26,9 +26,9 @@ const CATEGORIES = [
     label: "처리",
     color: "#a78bfa",
     blocks: [
-      { type: "stt_whisper", label: "STT·Whisper", desc: "whisper-large-v3 / Groq" },
-      { type: "translate_gpt4o", label: "번역·GPT-4o", desc: "OpenAI GPT-4o 번역" },
-      { type: "context_inject", label: "컨텍스트 주입", desc: "의료용어 보정" },
+      { type: "stt_whisper", label: "STT·Whisper", desc: "whisper-large-v3 / Groq", singleton: true },
+      { type: "translate_gpt4o", label: "번역·GPT-4o", desc: "OpenAI GPT-4o 번역", singleton: false },
+      { type: "context_inject", label: "컨텍스트 주입", desc: "의료용어 보정", singleton: false },
     ],
   },
   {
@@ -36,10 +36,10 @@ const CATEGORIES = [
     label: "세션",
     color: "#38bdf8",
     blocks: [
-      { type: "qr_scan", label: "QR 스캔", desc: "환자QR→채널생성" },
-      { type: "kiosk_fixed", label: "키오스크 고정", desc: "태블릿 고정 화면" },
-      { type: "fixed_url", label: "고정 URL", desc: "고정 주소 접속" },
-      { type: "auto_reset", label: "자동 리셋", desc: "세션 종료 후 리셋" },
+      { type: "qr_scan", label: "QR 스캔", desc: "환자QR→채널생성", singleton: true },
+      { type: "kiosk_fixed", label: "키오스크 고정", desc: "태블릿 고정 화면", singleton: true },
+      { type: "fixed_url", label: "고정 URL", desc: "고정 주소 접속", singleton: true },
+      { type: "auto_reset", label: "자동 리셋", desc: "세션 종료 후 리셋", singleton: true },
     ],
   },
   {
@@ -47,8 +47,8 @@ const CATEGORIES = [
     label: "출력",
     color: "#fbbf24",
     blocks: [
-      { type: "subtitle", label: "자막형", desc: "실시간 자막 표시" },
-      { type: "chat_bubble", label: "채팅형", desc: "채팅 버블 UI" },
+      { type: "subtitle", label: "자막형", desc: "실시간 자막 표시", singleton: true },
+      { type: "chat_bubble", label: "채팅형", desc: "채팅 버블 UI", singleton: true },
     ],
   },
   {
@@ -56,9 +56,9 @@ const CATEGORIES = [
     label: "저장",
     color: "#f87171",
     blocks: [
-      { type: "no_record", label: "무기록", desc: "보안최강 · 저장 없음" },
-      { type: "db_save", label: "DB 저장", desc: "병원내부 DB 저장" },
-      { type: "summary_only", label: "요약만 저장", desc: "AI 요약 후 저장" },
+      { type: "no_record", label: "무기록", desc: "보안최강 · 저장 없음", singleton: true },
+      { type: "db_save", label: "DB 저장", desc: "병원내부 DB 저장", singleton: true },
+      { type: "summary_only", label: "요약만 저장", desc: "AI 요약 후 저장", singleton: true },
     ],
   },
 ];
@@ -118,17 +118,21 @@ const LANE_BLOCK_ID_TO_VISUAL_TYPE = {
 
 const LANE_ORDER = ["input", "stt", "translate", "session", "output", "storage"];
 
-// 동일 타입 1개 제한 + 배타 그룹 (VAD/PTT 둘 중 하나만). text_input은 배타 그룹 제외·중복만 방지.
+// 동일 타입 1개 제한은 singleton 플래그로. 배타 그룹 (VAD/PTT 둘 중 하나만) 유지.
 const MUTUAL_EXCLUSION_GROUPS = [["vad", "ptt"]];
 
 function canAddBlock(type, blocks) {
+  const meta = getBlockMeta(type);
+  if (!meta) return false;
   const typesOnCanvas = blocks.map((b) => b.type);
-  if (typesOnCanvas.includes(type)) return false;
+  // 배타 그룹: 그룹 내 다른 멤버가 이미 있으면 불가
   for (const group of MUTUAL_EXCLUSION_GROUPS) {
     if (!group.includes(type)) continue;
     const hasOther = group.some((t) => t !== type && typesOnCanvas.includes(t));
     if (hasOther) return false;
   }
+  // singleton이면 같은 타입이 이미 캔버스에 있으면 불가
+  if (meta.singleton && typesOnCanvas.includes(type)) return false;
   return true;
 }
 
