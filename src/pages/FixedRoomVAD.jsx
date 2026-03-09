@@ -127,6 +127,12 @@ export default function FixedRoomVAD() {
   const isCreator = state.isCreator !== undefined ? state.isCreator : true;
   const isGuest = roleHint === "guest";
   const isOwner = !isGuest;
+  const saveMessages = state.saveMessages === true;
+  const summaryOnly = state.summaryOnly === true;
+  const inputMode = state.inputMode || "ptt";
+  const autoReset = state.autoReset === true;
+  const orgCode = state.orgCode || "";
+  const deptCode = state.deptCode || "";
 
   // ── participantId: 안정적으로 유지 ──
   const pidKey = `mono.fixedroom.pid.${roomId}`;
@@ -183,6 +189,9 @@ export default function FixedRoomVAD() {
       siteContext,
       isCreator,
       ...(state.guestId ? { guestId: state.guestId } : {}),
+      saveMessages,
+      summaryOnly,
+      inputMode,
     });
 
     return () => {
@@ -192,7 +201,7 @@ export default function FixedRoomVAD() {
         reason: "fixed-room-vad-cleanup",
       });
     };
-  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest]);
+  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly, inputMode]);
 
   // ── 통역 시작 공통 로직 ──
   const doStartInterpreting = useCallback(async () => {
@@ -259,6 +268,9 @@ export default function FixedRoomVAD() {
       }
       if (isGuest) {
         setStep("ended");
+        if (autoReset && orgCode && deptCode) {
+          navigate(`/org/${encodeURIComponent(orgCode)}/${encodeURIComponent(deptCode)}/join`, { replace: true });
+        }
       } else {
         setStep("waiting");
       }
@@ -287,16 +299,17 @@ export default function FixedRoomVAD() {
         },
       ]);
 
-      // ── 서버 기록 저장 ──
-      saveMessageToServer({
-        roomId,
-        patientToken,
-        senderRole: isMine ? roleHint : (isOwner ? "guest" : "owner"),
-        originalText: originalText || "",
-        translatedText: translatedText || "",
-        senderLang: isMine ? fromLang : (partnerInfo?.lang || ""),
-        translatedLang: isMine ? (partnerInfo?.lang || "") : fromLang,
-      });
+      if (saveMessages) {
+        saveMessageToServer({
+          roomId,
+          patientToken,
+          senderRole: isMine ? roleHint : (isOwner ? "guest" : "owner"),
+          originalText: originalText || "",
+          translatedText: translatedText || "",
+          senderLang: isMine ? fromLang : (partnerInfo?.lang || ""),
+          translatedLang: isMine ? (partnerInfo?.lang || "") : fromLang,
+        });
+      }
 
       if (processingRef.current) {
         processingRef.current = false;
@@ -333,6 +346,9 @@ export default function FixedRoomVAD() {
       }
       if (isGuest) {
         setStep("ended");
+        if (autoReset && orgCode && deptCode) {
+          navigate(`/org/${encodeURIComponent(orgCode)}/${encodeURIComponent(deptCode)}/join`, { replace: true });
+        }
       } else {
         setStep("waiting");
       }
@@ -379,7 +395,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate, roleHint, fromLang, patientToken, partnerInfo]);
+  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode]);
 
   // ── VAD 상태 → UI 상태 동기화 ──
   useEffect(() => {

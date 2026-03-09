@@ -155,6 +155,10 @@ export default function OrgStaff() {
 
     // output 타입에 따라 다른 화면으로 진입
     const outputType = config?.pipeline?.output;
+    const runtime = config?.pipeline?.runtime || {};
+    const saveMessages = runtime.storageMode === "db";
+    const summaryOnly = runtime.storageMode === "summary";
+
     const targetPath = outputType === "subtitle" || outputType === "chat_bubble"
       ? `/fixed-room/${targetRoomId}`
       : `/room/${targetRoomId}`;
@@ -171,6 +175,9 @@ export default function OrgStaff() {
         patientToken: patient.patientToken || null,
         orgCode,
         deptCode,
+        contextInject: runtime.contextInject === true,
+        saveMessages,
+        summaryOnly,
       },
     });
   }, [config, deptCode, navigate, orgCode, selectedLang]);

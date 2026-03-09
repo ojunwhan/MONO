@@ -257,6 +257,7 @@ export default function ChatScreen() {
   const typingStopTimerRef = useRef(null);
   const readSentRef = useRef(new Set());
   const messagesRef = useRef([]);
+  const joinStateRef = useRef({});
 
   useEffect(() => {
     roomTypeRef.current = roomType;
@@ -392,20 +393,29 @@ export default function ChatScreen() {
   // ─── Join room and leave on cleanup (room switch-safe) ───
   useEffect(() => {
     if (!roomId) return;
-    // Defer join one tick so socket listeners are attached first.
+    const state = location.state || {};
+    const joinPayload = {
+      roomId,
+      fromLang,
+      participantId,
+      role: selectedRole,
+      localName: localName || "",
+      roleHint,
+    };
+    if (state.saveMessages !== undefined) joinPayload.saveMessages = state.saveMessages;
+    if (state.summaryOnly !== undefined) joinPayload.summaryOnly = state.summaryOnly;
+    if (state.contextInject !== undefined) joinPayload.contextInject = state.contextInject;
+
+    joinStateRef.current = {
+      saveMessages: state.saveMessages,
+      summaryOnly: state.summaryOnly,
+      contextInject: state.contextInject,
+    };
+
     const timer = setTimeout(() => {
       console.log("[MONO] join →", roomId, participantId, selectedRole, roleHint);
-      socket.emit("join", {
-        roomId,
-        fromLang,
-        participantId,
-        role: selectedRole,
-        localName: localName || "",
-        roleHint,
-      });
-      // Touch IndexedDB
+      socket.emit("join", joinPayload);
       touchRoom(roomId).catch(() => {});
-      // Subscribe to push notifications (bind to this participantId)
       subscribeToPush(participantId).catch(() => {});
     }, 0);
     return () => {
@@ -929,6 +939,9 @@ export default function ChatScreen() {
         role: selectedRoleRef.current,
         localName: localNameRef.current || "",
         roleHint: roleHintRef.current,
+        ...(joinStateRef.current?.saveMessages !== undefined && { saveMessages: joinStateRef.current.saveMessages }),
+        ...(joinStateRef.current?.summaryOnly !== undefined && { summaryOnly: joinStateRef.current.summaryOnly }),
+        ...(joinStateRef.current?.contextInject !== undefined && { contextInject: joinStateRef.current.contextInject }),
       });
       socket.emit("set-lang", { roomId: rid, lang: fromLangRef.current });
     };
@@ -1027,6 +1040,9 @@ export default function ChatScreen() {
         role: selectedRoleRef.current,
         localName: localNameRef.current || "",
         roleHint: roleHintRef.current,
+        ...(joinStateRef.current?.saveMessages !== undefined && { saveMessages: joinStateRef.current.saveMessages }),
+        ...(joinStateRef.current?.summaryOnly !== undefined && { summaryOnly: joinStateRef.current.summaryOnly }),
+        ...(joinStateRef.current?.contextInject !== undefined && { contextInject: joinStateRef.current.contextInject }),
       });
       socket.emit("check-room", { roomId: rid, userId: pid });
     };

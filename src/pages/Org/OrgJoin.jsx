@@ -155,6 +155,13 @@ export default function OrgJoin() {
         ? `/fixed-room/${roomId}`
         : `/room/${roomId}`;
 
+      const runtime = config?.pipeline?.runtime || {};
+      const storageMode = runtime.storageMode || "none";
+      const saveMessages = storageMode === "db";
+      const summaryOnly = storageMode === "summary";
+      const inputMode = runtime.inputMode || "ptt";
+      const autoReset = runtime.autoReset === true;
+
       navigate(targetPath, {
         replace: true,
         state: {
@@ -170,6 +177,10 @@ export default function OrgJoin() {
           patientToken,
           orgCode,
           deptCode,
+          inputMode,
+          saveMessages,
+          summaryOnly,
+          autoReset,
         },
       });
     } catch (e) {

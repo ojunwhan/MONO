@@ -1633,26 +1633,28 @@ function isHospitalContext(siteContext) {
   return String(siteContext || '').startsWith('hospital_');
 }
 
-function buildSystemPrompt(from, to, ctx, siteContext) {
+function buildSystemPrompt(from, to, ctx, siteContext, opts = {}) {
   const siteDomain = SITE_CONTEXT_PROMPTS[siteContext] || SITE_CONTEXT_PROMPTS.general;
   const isHospital = isHospitalContext(siteContext);
+  const contextInject = opts.contextInject === true;
 
-  if (isHospital) {
-    // Hospital mode: medical-specific system prompt (no slang instructions)
-    // siteContext "hospital_plastic_surgery" → dept "plastic_surgery"
-    const dept = String(siteContext).replace(/^hospital_/, '');
-    const medicalTerms = getMedicalTermContext(dept, to);
-    return [
-      siteDomain,
-      medicalTerms,
-      `Translate from ${label(from)} to ${label(to)} with conversation context awareness.`,
-      `Maintain a professional medical tone. Use standard medical terminology in the target language.`,
-      `When medical terms from the glossary above appear, you MUST use the provided translations.`,
-      `Preserve proper nouns, medication names, dosages, numbers, units, and medical terms accurately.`,
-      `If message is ambiguous, use conversation context to resolve. Always output best-effort translation.`,
-      ctx ? `Recent conversation context:\n${ctx}` : '',
-      `Output ONLY translated text. No explanation, no notes, no quotation marks, no brackets.`,
-    ].filter(Boolean).join('\n');
+  if (isHospital || contextInject) {
+    const dept = String(siteContext || "").replace(/^hospital_|^org_/, "");
+    const medicalTerms = (isHospital || contextInject) ? getMedicalTermContext(dept, to) : "";
+    const isMedical = isHospital || (contextInject && medicalTerms);
+    if (isMedical) {
+      return [
+        siteDomain,
+        medicalTerms,
+        `Translate from ${label(from)} to ${label(to)} with conversation context awareness.`,
+        `Maintain a professional medical tone. Use standard medical terminology in the target language.`,
+        `When medical terms from the glossary above appear, you MUST use the provided translations.`,
+        `Preserve proper nouns, medication names, dosages, numbers, units, and medical terms accurately.`,
+        `If message is ambiguous, use conversation context to resolve. Always output best-effort translation.`,
+        ctx ? `Recent conversation context:\n${ctx}` : '',
+        `Output ONLY translated text. No explanation, no notes, no quotation marks, no brackets.`,
+      ].filter(Boolean).join('\n');
+    }
   }
 
   // General mode: original prompt
@@ -1803,13 +1805,13 @@ async function generateNameAdaptations(roomId) {
 
 // ─────────────────────────────────────────────────────────────────────
 
-async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
+async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   resetDailyStats();
   usageStats.translationRequests += 1;
   usageStats.openaiTranslations += 1;
   sendConnectionAlert('translation');
-  const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general');
+  const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general', opts);
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
     .slice(-MAX_CONTEXT_MESSAGES)
     .map((msg) => ({
@@ -1835,12 +1837,12 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
   }
 }
 
-async function hqTranslate(text, from, to, ctx, siteContext, conversationHistory = []) {
+async function hqTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   resetDailyStats();
   usageStats.translationRequests += 1;
   usageStats.openaiTranslations += 1;
-  const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general')
+  const sys = buildSystemPrompt(from, to, ctx, siteContext || 'general', opts)
     + `\nRefine to fluent native chat style without changing meaning or emotional tone.`;
   const recentContext = (Array.isArray(conversationHistory) ? conversationHistory : [])
     .slice(-MAX_CONTEXT_MESSAGES)
@@ -2527,7 +2529,7 @@ io.on('connection', (socket) => {
   });
 
   // --- join 핸들러 (call sign system, idempotent) ---
-  socket.on("join", ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint }) => {
+  socket.on("join", ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode }) => {
     if (!roomId || !participantId) return;
     if (typeof roomId !== 'string' || roomId.length > 200) return;
     if (typeof participantId !== 'string' || participantId.length > 128) return;
@@ -2603,6 +2605,10 @@ io.on('connection', (socket) => {
       socket.emit("room-status", { status: "room-expired", roomId });
       return;
     }
+    if (saveMessages !== undefined) meta.saveMessages = saveMessages;
+    if (summaryOnly !== undefined) meta.summaryOnly = summaryOnly;
+    if (contextInject !== undefined) meta.contextInject = contextInject;
+    if (inputMode !== undefined) meta.inputMode = inputMode;
 
     // ── 1:1 방에서 게스트 교체 및 3번째 입장 시 그룹(브로드캐스트)으로 자동 전환 ──
     if (meta.roomType === "oneToOne") {
@@ -3151,7 +3157,7 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext);
+              translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
               await consumeTranslationUsage(participantId);
               console.log(`[1:1:translate] ✅ "${translated.slice(0,60)}"`);
             }
@@ -3204,7 +3210,7 @@ io.on('connection', (socket) => {
         // Make TTS follow the same finalized sentence shown in UI.
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext);
+          const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
           if (!isGarbageText(hq) && otherP?.socketId) {
             finalizedForTts = hq;
             io.to(otherP.socketId).emit("revise-message", {
@@ -3222,8 +3228,10 @@ io.on('connection', (socket) => {
           }
         } catch (e) { console.warn("[tts]:", e?.message); }
 
-        // ── Hospital mode: auto-save message to DB ──
-        if (isHospitalMsg && roomId) {
+        // ── Save to DB: when saveMessages is true, or when hospital mode and saveMessages not explicitly false ──
+        const isOrgContext = String(meta.siteContext || "").startsWith("org_");
+        const shouldSaveMessages = meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg);
+        if (shouldSaveMessages && roomId) {
           try {
             const pToken = meta?.patientToken || null;
             // Find active session for this room (try new patient_token-based first)
@@ -3275,7 +3283,7 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext);
+              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
@@ -3309,7 +3317,7 @@ io.on('connection', (socket) => {
 
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext);
+          const hq = await hqTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
           if (!isGarbageText(hq) && targetP.socketId) {
             finalizedForTts = hq;
             io.to(targetP.socketId).emit("revise-message", { id: msgId, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -3339,7 +3347,7 @@ io.on('connection', (socket) => {
         if (fromLang !== lang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx, roomContext);
+              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
@@ -3372,7 +3380,7 @@ io.on('connection', (socket) => {
         }
         let finalizedForTts = translated;
         try {
-          const hq = await hqTranslate(finalText, fromLang, lang, "", siteCtx, roomContext);
+          const hq = await hqTranslate(finalText, fromLang, lang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
           if (!isGarbageText(hq)) {
             finalizedForTts = hq;
             for (const listener of listeners) {
@@ -3607,7 +3615,7 @@ io.on('connection', (socket) => {
       if (fromLang !== toLang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext);
+            draft = await fastTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
             await consumeTranslationUsage(participantId);
           }
         }
@@ -3653,7 +3661,7 @@ io.on('connection', (socket) => {
 
       let finalizedForTts = draft;
       try {
-        const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext);
+        const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
         if (!isGarbageText(hq) && otherP?.socketId) {
           finalizedForTts = hq;
           io.to(otherP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -3726,7 +3734,7 @@ io.on('connection', (socket) => {
       if (fromLang !== toLang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext);
+            draft = await fastTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
             await consumeTranslationUsage(participantId);
           }
         }
@@ -3755,7 +3763,7 @@ io.on('connection', (socket) => {
       }, { roomId });
       let finalizedForTts = draft;
       try {
-        const hq = await hqTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext);
+        const hq = await hqTranslate(cleanText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
         if (!isGarbageText(hq) && targetP.socketId) {
           finalizedForTts = hq;
           io.to(targetP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
@@ -3787,7 +3795,7 @@ io.on('connection', (socket) => {
       if (fromLang !== lang) {
         try {
           if (await canTranslateForUser(socket, participantId)) {
-            draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext);
+            draft = await fastTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
             await consumeTranslationUsage(participantId);
           }
         }
@@ -3828,7 +3836,7 @@ io.on('connection', (socket) => {
       let finalizedForTts = draft;
       // HQ revision per language group
       try {
-        const hq = await hqTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext);
+        const hq = await hqTranslate(trimmedText, fromLang, lang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
         if (!isGarbageText(hq)) {
           finalizedForTts = hq;
           for (const listener of listeners) {
@@ -4385,19 +4393,16 @@ const KIOSK_STATIONS = new Map();
 // Each watching staff member's socket joins room `hospital:watch:${department}`
 const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, createdAt }]
 
-// POST /api/hospital/join — 환자가 QR 스캔 후 새 room 자동 생성
-// 매 스캔마다 새 roomId 생성 (고정 roomId 없음)
+// POST /api/hospital/join — 환자가 QR 스캔 후 채널 연결 (환자 1명 = 채널 1개, 재방문 시 기존 채널 재사용)
 app.post('/api/hospital/join', async (req, res) => {
   try {
     const { department, patientToken, patientId, language } = req.body || {};
     const dept = String(department || 'general').trim();
     const pToken = patientToken ? String(patientToken).trim() : (patientId ? String(patientId).trim() : null);
     const lang = language ? String(language).trim() : null;
-    const newRoomId = `patient_${dept}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const createdAt = new Date().toISOString();
     const hospitalSiteContext = `hospital_${dept}`;
 
-    // patientToken이 있으면 hospital_patients upsert
+    // 1) patientToken으로 hospital_patients upsert
     if (pToken) {
       try {
         const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [pToken]);
@@ -4418,49 +4423,97 @@ app.post('/api/hospital/join', async (req, res) => {
       }
     }
 
-    // hospital_sessions에 세션 기록
-    const sessionId = uuidv4();
-    try {
-      await dbRun(
-        `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-        [sessionId, pToken || null, newRoomId, dept, createdAt, pToken || 'auto', 'hospital']
+    // 2) 해당 환자의 기존 활성 세션 조회
+    let existingSession = null;
+    if (pToken) {
+      existingSession = await dbGet(
+        `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND status = 'active' ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
+        [pToken]
       );
-    } catch (dbErr) {
-      console.warn('[hospital:join] session insert warning:', dbErr?.message);
-      trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
     }
 
-    // ★ Pre-create room meta in ROOMS map so guest can immediately join
-    const guestLangCode = lang ? mapLang(lang) : 'auto';
-    ROOMS.set(newRoomId, {
-      roomType: 'oneToOne',
-      ownerLang: 'auto',
-      guestLang: guestLangCode,
-      siteContext: hospitalSiteContext,
-      locked: true,
-      ownerPid: null, // will be set when staff joins
-      participants: {},
-      callSignCounters: {},
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      hospitalMode: true,
-      department: dept,
-      patientToken: pToken,
-      hospitalSessionId: sessionId,
+    let roomId;
+    let sessionId;
+    let isExistingSession = false;
+
+    if (existingSession && existingSession.room_id) {
+      // 3) 기존 활성 세션 있으면 → 그 roomId 반환
+      roomId = existingSession.room_id;
+      sessionId = existingSession.id;
+      isExistingSession = true;
+      if (!ROOMS.has(roomId)) {
+        ROOMS.set(roomId, {
+          roomType: 'oneToOne',
+          ownerLang: 'auto',
+          guestLang: lang ? mapLang(lang) : 'auto',
+          siteContext: hospitalSiteContext,
+          locked: true,
+          ownerPid: null,
+          participants: {},
+          callSignCounters: {},
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          hospitalMode: true,
+          department: dept,
+          patientToken: pToken,
+          hospitalSessionId: sessionId,
+        });
+      }
+      console.log(`[hospital:join] 🏥 Patient reconnected to existing channel dept=${dept} room=${roomId} token=${pToken}`);
+    } else {
+      // 4) 없으면 → 새 roomId PT-XXXXXX 생성, 중복 체크
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let candidate;
+      let exists;
+      do {
+        candidate = 'PT-';
+        for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
+        exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
+      } while (exists);
+      roomId = candidate;
+      const createdAt = new Date().toISOString();
+      sessionId = uuidv4();
+      try {
+        await dbRun(
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital']
+        );
+      } catch (dbErr) {
+        console.warn('[hospital:join] session insert warning:', dbErr?.message);
+        trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
+      }
+
+      ROOMS.set(roomId, {
+        roomType: 'oneToOne',
+        ownerLang: 'auto',
+        guestLang: lang ? mapLang(lang) : 'auto',
+        siteContext: hospitalSiteContext,
+        locked: true,
+        ownerPid: null,
+        participants: {},
+        callSignCounters: {},
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+        hospitalMode: true,
+        department: dept,
+        patientToken: pToken,
+        hospitalSessionId: sessionId,
+      });
+
+      if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
+      HOSPITAL_WAITING.get(dept).push({ roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId });
+      const waitingData = { roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId };
+      io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
+      io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
+      console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${roomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'}`);
+    }
+
+    res.json({
+      success: true,
+      roomId,
+      patientToken: pToken || undefined,
+      isExistingSession,
+      sessionId,
     });
-
-    // Add to waiting list for this department
-    if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
-    HOSPITAL_WAITING.get(dept).push({ roomId: newRoomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId });
-
-    // Notify all staff watching this department via socket
-    const waitingData = { roomId: newRoomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId };
-    io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
-    // Also notify staff watching ALL departments
-    io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
-
-    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${newRoomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'}`);
-    res.json({ success: true, roomId: newRoomId, department: dept, createdAt, sessionId });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
     trackUsageError(e, { source: 'hospital:join' });

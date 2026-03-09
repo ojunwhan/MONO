@@ -255,7 +255,7 @@ export default function VisualPipelineBuilder() {
     if (isOrgDeptMode) fetchOrgAndPipeline();
   }, [isOrgDeptMode, fetchOrgAndPipeline]);
 
-  // ── 저장 (org/dept 모드): visual + translate, output 유도 ──
+  // ── 저장 (org/dept 모드): visual + translate, output + runtime 추출 ──
   const savePipeline = useCallback(async () => {
     if (!isOrgDeptMode || !orgId || !deptId) return;
     setSaving(true);
@@ -268,10 +268,19 @@ export default function VisualPipelineBuilder() {
         if (b.type === "subtitle") output = "subtitle";
         if (b.type === "chat_bubble") output = "chat_bubble";
       }
+      const types = blocks.map((b) => b.type);
+      const runtime = {
+        inputMode: types.includes("vad") ? "vad" : types.includes("ptt") ? "ptt" : types.includes("text_input") ? "text" : "ptt",
+        contextInject: types.includes("context_inject"),
+        sessionType: types.includes("qr_scan") ? "qr" : types.includes("kiosk_fixed") ? "kiosk" : types.includes("fixed_url") ? "fixed" : "qr",
+        autoReset: types.includes("auto_reset"),
+        storageMode: types.includes("db_save") ? "db" : types.includes("no_record") ? "none" : types.includes("summary_only") ? "summary" : "none",
+      };
       const config = {
         visual: { blocks, connections },
         translate,
         output,
+        runtime,
       };
       const res = await fetch(
         `/api/admin/orgs/${orgId}/departments/${deptId}/pipeline`,

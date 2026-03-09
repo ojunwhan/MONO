@@ -56,6 +56,7 @@ export default function HospitalPatientJoin() {
   const [showLangGrid, setShowLangGrid] = useState(true);
   const [step, setStep] = useState("language"); // 'language' | 'connecting' | 'error'
   const [error, setError] = useState("");
+  const [isExistingSession, setIsExistingSession] = useState(false);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -97,6 +98,7 @@ export default function HospitalPatientJoin() {
         throw new Error(data.error || "연결에 실패했습니다");
       }
 
+      setIsExistingSession(data.isExistingSession === true);
       const roomId = data.roomId;
       const guestId = `guest_${uuidv4().slice(0, 8)}`;
       const cleanName = getPatientLabel(lang);
@@ -260,7 +262,7 @@ export default function HospitalPatientJoin() {
           }}
         />
         <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-          연결 중... / Connecting...
+          {isExistingSession ? "이전 상담 채널에 다시 연결합니다" : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
