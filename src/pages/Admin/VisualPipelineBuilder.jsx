@@ -118,6 +118,22 @@ const LANE_BLOCK_ID_TO_VISUAL_TYPE = {
 
 const LANE_ORDER = ["input", "stt", "translate", "session", "output", "storage"];
 
+// 동일 타입 1개 제한 + 카테고리 내 상호 배타 (예: VAD/PTT 둘 중 하나만)
+const MUTUAL_EXCLUSION_GROUPS = [
+  ["vad", "ptt"], // 입력 방식
+];
+
+function canAddBlock(type, blocks) {
+  const typesOnCanvas = blocks.map((b) => b.type);
+  if (typesOnCanvas.includes(type)) return false;
+  for (const group of MUTUAL_EXCLUSION_GROUPS) {
+    if (!group.includes(type)) continue;
+    const hasOther = group.some((t) => t !== type && typesOnCanvas.includes(t));
+    if (hasOther) return false;
+  }
+  return true;
+}
+
 // ═══════════════════════════════════════
 // 블럭 사이즈 상수
 // ═══════════════════════════════════════
@@ -283,6 +299,7 @@ export default function VisualPipelineBuilder() {
     (type, dropX, dropY) => {
       const meta = getBlockMeta(type);
       if (!meta) return;
+      if (!canAddBlock(type, blocks)) return;
       let x, y;
       if (dropX != null && dropY != null) {
         x = Math.max(0, Math.min(dropX, canvasSize.w - BLOCK_W));
@@ -296,7 +313,7 @@ export default function VisualPipelineBuilder() {
       }
       setBlocks((prev) => [...prev, { id: uid("b"), type, x, y }]);
     },
-    [blocks.length, canvasSize.w, canvasSize.h]
+    [blocks, canvasSize.w, canvasSize.h]
   );
 
   // ── 캔버스에 팔레트 블럭 드롭 ──
@@ -767,7 +784,7 @@ export default function VisualPipelineBuilder() {
       </div>
 
       {/* ── Palette (42%) ── */}
-      <Palette categories={CATEGORIES} onAddBlock={addBlock} />
+      <Palette categories={CATEGORIES} onAddBlock={addBlock} blocks={blocks} />
     </div>
   );
 }
@@ -1101,8 +1118,12 @@ function DotGrid({ width, height }) {
 }
 
 // ── 팔레트 ──
-function Palette({ categories, onAddBlock }) {
+function Palette({ categories, onAddBlock, blocks }) {
   const handleDragStart = (e, blockType) => {
+    if (!canAddBlock(blockType, blocks)) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData("application/x-pipeline-block-type", blockType);
     e.dataTransfer.effectAllowed = "copy";
   };
@@ -1167,15 +1188,18 @@ function Palette({ categories, onAddBlock }) {
             </div>
 
             {/* 블럭 목록 */}
-            {cat.blocks.map((block) => (
+            {cat.blocks.map((block) => {
+              const disabled = !canAddBlock(block.type, blocks);
+              return (
               <div
                 role="button"
-                tabIndex={0}
+                tabIndex={disabled ? -1 : 0}
                 key={block.type}
-                draggable
+                draggable={!disabled}
                 onDragStart={(e) => handleDragStart(e, block.type)}
-                onClick={() => onAddBlock(block.type)}
+                onClick={() => !disabled && onAddBlock(block.type)}
                 onKeyDown={(e) => {
+                  if (disabled) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     onAddBlock(block.type);
@@ -1190,12 +1214,15 @@ function Palette({ categories, onAddBlock }) {
                   border: "1px solid #1e293b",
                   borderLeft: `3px solid ${cat.color}`,
                   background: "#0c1322",
-                  cursor: "grab",
+                  cursor: disabled ? "not-allowed" : "grab",
                   textAlign: "left",
                   fontFamily: "inherit",
                   transition: "all 0.15s",
+                  opacity: disabled ? 0.45 : 1,
+                  pointerEvents: disabled ? "none" : "auto",
                 }}
                 onMouseEnter={(e) => {
+                  if (disabled) return;
                   e.currentTarget.style.background = "#141c2e";
                   e.currentTarget.style.borderColor = cat.color;
                   e.currentTarget.style.transform = "translateY(-1px)";
@@ -1228,7 +1255,8 @@ function Palette({ categories, onAddBlock }) {
                   {block.desc}
                 </span>
               </div>
-            ))}
+            );
+            })}
           </div>
         ))}
       </div>
