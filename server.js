@@ -2529,10 +2529,36 @@ io.on('connection', (socket) => {
   });
 
   // --- join 핸들러 (call sign system, idempotent) ---
-  socket.on("join", ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode }) => {
+  socket.on("join", async ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode }) => {
     if (!roomId || !participantId) return;
     if (typeof roomId !== 'string' || roomId.length > 200) return;
     if (typeof participantId !== 'string' || participantId.length > 128) return;
+
+    // ended된 병원 방 재접속: ROOMS에 없으면 DB에서 roomId 조회 후 빈 메타 재생성 (소켓 통신만 가능, 메시지 저장 안 함)
+    if (!ROOMS.has(roomId) && String(roomId).startsWith('PT-')) {
+      try {
+        const row = await dbGet('SELECT id, status, patient_token, dept FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]);
+        if (row && row.status === 'ended') {
+          const hospitalSiteContext = `hospital_${row.dept || 'general'}`;
+          ROOMS.set(roomId, {
+            roomType: 'oneToOne',
+            ownerLang: 'auto',
+            guestLang: 'auto',
+            siteContext: hospitalSiteContext,
+            locked: true,
+            ownerPid: null,
+            participants: {},
+            callSignCounters: {},
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+            hospitalMode: true,
+            hospitalEndedSession: true,
+            department: row.dept || 'general',
+            patientToken: row.patient_token,
+            hospitalSessionId: row.id,
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
 
     // ✅ 이미 같은 방에 같은 pid로 join된 소켓이면 skip (중복 방지)
     if (socket.roomId === roomId && socket.data.participantId === participantId) {
@@ -3230,7 +3256,7 @@ io.on('connection', (socket) => {
 
         // ── Save to DB: when saveMessages is true, or when hospital mode and saveMessages not explicitly false ──
         const isOrgContext = String(meta.siteContext || "").startsWith("org_");
-        const shouldSaveMessages = meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg);
+        const shouldSaveMessages = !meta.hospitalEndedSession && (meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg));
         if (shouldSaveMessages && roomId) {
           try {
             const pToken = meta?.patientToken || null;
@@ -4235,6 +4261,17 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       }
     } catch (_) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hm_patient_token ON hospital_messages(patient_token);`); } catch (_) {}
+    try {
+      const msgCols2 = await dbAll("PRAGMA table_info(hospital_messages)");
+      if (!msgCols2.some(c => c.name === 'offline')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN offline INTEGER DEFAULT 0");
+        console.log('[hospital] ✅ added offline column to hospital_messages');
+      }
+      if (!msgCols2.some(c => c.name === 'delivered')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN delivered INTEGER DEFAULT 0");
+        console.log('[hospital] ✅ added delivered column to hospital_messages');
+      }
+    } catch (_) {}
 
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages + patient_token columns)');
 
@@ -4611,20 +4648,20 @@ app.get('/api/hospital/waiting', (req, res) => {
   res.json({ success: true, department: dept, waiting: list });
 });
 
-// DELETE /api/hospital/waiting/:roomId — 대기 목록에서 제거 (통역 시작 시)
+// DELETE /api/hospital/waiting/:roomId — 대기 목록에서 제거 (통역 시작 시). 응답에 sessionId 포함.
 app.delete('/api/hospital/waiting/:roomId', (req, res) => {
   const { roomId } = req.params;
   for (const [dept, list] of HOSPITAL_WAITING.entries()) {
     const idx = list.findIndex(w => w.roomId === roomId);
     if (idx !== -1) {
+      const removed = list[idx];
       list.splice(idx, 1);
-      // Notify watchers that patient was picked up
       io.to(`hospital:watch:${dept}`).emit('hospital:patient-picked', { roomId, department: dept });
       io.to('hospital:watch:__all__').emit('hospital:patient-picked', { roomId, department: dept });
-      return res.json({ success: true });
+      return res.json({ success: true, sessionId: removed.sessionId || null });
     }
   }
-  res.json({ success: true }); // already removed or not found
+  res.json({ success: true, sessionId: null });
 });
 
 // GET /api/hospital/patient/:patientToken/history — 환자 이전 방문 기록 + 대화 요약
@@ -4655,6 +4692,52 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
     console.error('[hospital:patient:history] error:', e?.message);
     trackUsageError(e, { source: 'hospital:patient:history' });
     res.status(500).json({ error: 'history_lookup_failed' });
+  }
+});
+
+// POST /api/hospital/patient/:patientToken/message — 직원이 퇴원 환자에게 오프라인 메시지 저장
+app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
+  try {
+    const token = String(req.params.patientToken).trim();
+    const { text } = req.body || {};
+    const originalText = String(text || '').trim();
+    if (!originalText) return res.status(400).json({ error: 'text_required' });
+
+    const session = await dbGet(
+      `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
+      [token]
+    );
+    if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
+
+    const msgId = uuidv4();
+    await dbRun(
+      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
+       VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
+      [msgId, session.id, session.room_id, originalText, originalText, token]
+    );
+    res.json({ ok: true, roomId: session.room_id, delivered: false });
+  } catch (e) {
+    console.error('[hospital:patient:message]', e?.message);
+    res.status(500).json({ error: 'message_save_failed' });
+  }
+});
+
+// GET /api/hospital/patient/:patientToken/pending-messages — 미전달 오프라인 메시지 조회 후 delivered 처리
+app.get('/api/hospital/patient/:patientToken/pending-messages', async (req, res) => {
+  try {
+    const token = String(req.params.patientToken).trim();
+    const rows = await dbAll(
+      `SELECT id, session_id, room_id, sender_role, original_text, translated_text, created_at
+       FROM hospital_messages WHERE patient_token = ? AND offline = 1 AND delivered = 0 ORDER BY created_at ASC`,
+      [token]
+    );
+    if (rows.length > 0) {
+      await dbRun(`UPDATE hospital_messages SET delivered = 1 WHERE patient_token = ? AND offline = 1 AND delivered = 0`, [token]);
+    }
+    res.json({ ok: true, messages: rows });
+  } catch (e) {
+    console.error('[hospital:pending-messages]', e?.message);
+    res.status(500).json({ error: 'pending_messages_failed' });
   }
 });
 
@@ -4882,8 +4965,20 @@ app.get('/api/hospital/dashboard/sessions', async (req, res) => {
   }
 });
 
-// GET /api/hospital/sessions — 차트번호로 세션 목록 조회
+// GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회
 app.get('/api/hospital/sessions', async (req, res) => {
+  const roomId = req.query.roomId ? String(req.query.roomId).trim() : null;
+  if (roomId) {
+    try {
+      const row = await dbGet(
+        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1",
+        [roomId]
+      );
+      return res.json({ success: true, sessionId: row ? row.id : null });
+    } catch (e) {
+      return res.status(500).json({ error: 'sessions_lookup_failed' });
+    }
+  }
   try {
     const { chartNumber, stationId, date, limit: lim } = req.query;
     let sql = 'SELECT * FROM hospital_sessions WHERE 1=1';
@@ -5079,16 +5174,29 @@ app.get('/api/hospital/patients', async (req, res) => {
   }
 });
 
-// GET /api/hospital/records/:chartNumber — 차트번호 기반 전체 기록 조회 (직원용)
-app.get('/api/hospital/records/:chartNumber', async (req, res) => {
+// GET /api/hospital/records/:identifier — 차트번호 또는 PT-XXXXXX(room_id) 기준 기록 조회
+app.get('/api/hospital/records/:identifier', async (req, res) => {
   try {
-    const chart = String(req.params.chartNumber).trim();
-    const patient = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [chart]);
-    const sessions = await dbAll(
-      `SELECT * FROM hospital_sessions WHERE chart_number = ? ORDER BY created_at DESC`,
-      [chart]
-    );
-    // Attach messages to each session
+    const identifier = String(req.params.identifier).trim();
+    let patient = null;
+    let sessions = [];
+
+    if (identifier.startsWith('PT-')) {
+      sessions = await dbAll(
+        `SELECT * FROM hospital_sessions WHERE room_id = ? ORDER BY created_at DESC`,
+        [identifier]
+      );
+      if (sessions.length > 0 && sessions[0].patient_token) {
+        patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [sessions[0].patient_token]);
+      }
+    } else {
+      patient = await dbGet('SELECT * FROM hospital_patients WHERE chart_number = ?', [identifier]);
+      sessions = await dbAll(
+        `SELECT * FROM hospital_sessions WHERE chart_number = ? ORDER BY created_at DESC`,
+        [identifier]
+      );
+    }
+
     const sessionsWithMessages = await Promise.all(sessions.map(async (s) => {
       const messages = await dbAll(
         'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',

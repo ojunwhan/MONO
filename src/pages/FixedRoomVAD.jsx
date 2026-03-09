@@ -23,7 +23,7 @@ import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
-import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle } from "lucide-react";
+import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp } from "lucide-react";
 
 const STATUS = {
   IDLE: "대기 중",
@@ -95,13 +95,14 @@ function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel }) 
   );
 }
 
-// ── 서버 메시지 저장 헬퍼 ──
-function saveMessageToServer({ roomId, patientToken, senderRole, originalText, translatedText, senderLang, translatedLang }) {
+// ── 서버 메시지 저장 헬퍼 (sessionId = hospital_sessions.id UUID, roomId = PT-XXXXXX) ──
+function saveMessageToServer({ sessionId, roomId, patientToken, senderRole, originalText, translatedText, senderLang, translatedLang }) {
+  if (!sessionId || !roomId) return;
   fetch("/api/hospital/message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      sessionId: roomId,
+      sessionId,
       roomId,
       senderRole: senderRole || "guest",
       senderLang: senderLang || "",
@@ -133,6 +134,30 @@ export default function FixedRoomVAD() {
   const autoReset = state.autoReset === true;
   const orgCode = state.orgCode || "";
   const deptCode = state.deptCode || "";
+  const stateSessionId = state.sessionId || null;
+  const sessionIdRef = useRef(stateSessionId);
+  const pendingMessages = state.pendingMessages || [];
+  useEffect(() => {
+    sessionIdRef.current = stateSessionId;
+  }, [stateSessionId]);
+
+  // ── 환자 이력 (직원 + patientToken 있을 때) ──
+  const [patientHistory, setPatientHistory] = useState(null);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [historyShowAll, setHistoryShowAll] = useState(false);
+  const fetchHistoryRef = useRef(false);
+  useEffect(() => {
+    if (!isOwner || !patientToken) return;
+    if (fetchHistoryRef.current) return;
+    fetchHistoryRef.current = true;
+    fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/history`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.success && data?.sessions) setPatientHistory(data);
+      })
+      .catch(() => {})
+      .finally(() => { fetchHistoryRef.current = false; });
+  }, [isOwner, patientToken]);
 
   // ── participantId: 안정적으로 유지 ──
   const pidKey = `mono.fixedroom.pid.${roomId}`;
@@ -155,6 +180,24 @@ export default function FixedRoomVAD() {
   const processingRef = useRef(false);
   const [active, setActive] = useState(false);
   const messagesEndRef = useRef(null);
+  const pendingMergedRef = useRef(false);
+
+  // ── 입장 시 pending 메시지(직원이 보낸 오프라인 메시지)를 목록에 반영 ──
+  useEffect(() => {
+    if (pendingMergedRef.current || !Array.isArray(pendingMessages) || pendingMessages.length === 0) return;
+    pendingMergedRef.current = true;
+    setMessages((prev) => [
+      ...pendingMessages.map((m) => ({
+        id: m.id || `pending-${m.created_at}`,
+        originalText: m.original_text || "",
+        translatedText: m.translated_text || m.original_text || "",
+        mine: false,
+        senderId: "staff",
+        timestamp: new Date(m.created_at || 0).getTime(),
+      })),
+      ...prev,
+    ]);
+  }, [pendingMessages]);
 
   // ── VAD Pipeline ──
   const vad = useVADPipeline({
@@ -174,6 +217,18 @@ export default function FixedRoomVAD() {
       })
       .catch(() => {});
   }, [patientToken]);
+
+  // ── partner-joined 시 환자 이력 재조회 ──
+  const fetchVisitHistory = useCallback(() => {
+    if (!patientToken || !isOwner) return;
+    fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/history`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.success && data?.sessions) setPatientHistory(data);
+        else setPatientHistory(null);
+      })
+      .catch(() => setPatientHistory(null));
+  }, [patientToken, isOwner]);
 
   // ── 소켓: 방 입장 ──
   useEffect(() => {
@@ -236,6 +291,7 @@ export default function FixedRoomVAD() {
       if (step === "waiting") {
         setStep("ready");
       }
+      if (isOwner && patientToken) fetchVisitHistory();
     };
 
     // 참가자 목록 업데이트
@@ -299,8 +355,9 @@ export default function FixedRoomVAD() {
         },
       ]);
 
-      if (saveMessages) {
+      if (saveMessages && sessionIdRef.current) {
         saveMessageToServer({
+          sessionId: sessionIdRef.current,
           roomId,
           patientToken,
           senderRole: isMine ? roleHint : (isOwner ? "guest" : "owner"),
@@ -395,7 +452,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode]);
+  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory]);
 
   // ── VAD 상태 → UI 상태 동기화 ──
   useEffect(() => {
@@ -613,10 +670,43 @@ export default function FixedRoomVAD() {
             <button onClick={handleBack} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
               <ArrowLeft size={18} />
             </button>
-            <span style={{ fontSize: "13px", fontWeight: 600 }}>
+            <span style={{ fontSize: "13px", fontWeight: 600, flex: 1 }}>
               {hospitalDept?.labelKo || "병원 통역"}
             </span>
+            {isOwner && patientHistory?.sessions?.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHistoryPanelOpen((p) => !p)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "4px",
+                  padding: "6px 10px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
+                  background: historyPanelOpen ? "rgba(59,130,246,0.2)" : "transparent", color: "white", fontSize: "12px", cursor: "pointer",
+                }}
+              >
+                <History size={14} />
+                이력 ({patientHistory.sessions.length})
+                {historyPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            )}
           </div>
+          {isOwner && historyPanelOpen && patientHistory?.sessions && (
+            <div style={{
+              background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.1)",
+              maxHeight: "220px", overflowY: "auto", padding: "12px 16px",
+            }}>
+              <p style={{ fontSize: "11px", opacity: 0.7, marginBottom: "8px" }}>이전 방문 (최근 {historyShowAll ? patientHistory.sessions.length : Math.min(3, patientHistory.sessions.length)}건)</p>
+              {(historyShowAll ? patientHistory.sessions : patientHistory.sessions.slice(0, 3)).map((sess, idx) => (
+                <div key={sess.id} style={{ fontSize: "12px", marginBottom: "8px", padding: "8px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
+                  <span style={{ fontWeight: 600 }}>{sess.started_at ? new Date(sess.started_at).toLocaleDateString("ko-KR") : "-"}</span>
+                  {" · "}{sess.dept || "-"}
+                  {" · "}메시지 {Array.isArray(sess.messages) ? sess.messages.length : 0}건
+                </div>
+              ))}
+              {patientHistory.sessions.length > 3 && !historyShowAll && (
+                <button type="button" onClick={() => setHistoryShowAll(true)} style={{ marginTop: "4px", padding: "4px 8px", fontSize: "11px", background: "rgba(59,130,246,0.3)", border: "none", borderRadius: "6px", color: "white", cursor: "pointer" }}>더 보기</button>
+              )}
+            </div>
+          )}
 
           <div style={{
             flex: 1,
@@ -728,7 +818,7 @@ export default function FixedRoomVAD() {
             flexShrink: 0,
             transition: "background 0.3s ease",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
               <button onClick={handleBack} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
                 <ArrowLeft size={18} />
               </button>
@@ -739,6 +829,20 @@ export default function FixedRoomVAD() {
                 <span style={{ fontSize: "11px", opacity: 0.5 }}>
                   {myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}
                 </span>
+              )}
+              {isOwner && patientHistory?.sessions?.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setHistoryPanelOpen((p) => !p)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "4px",
+                    padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)",
+                    background: historyPanelOpen ? "rgba(59,130,246,0.2)" : "transparent", color: "white", fontSize: "11px", cursor: "pointer", marginLeft: "4px",
+                  }}
+                >
+                  <History size={12} />
+                  {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
               )}
             </div>
             <div style={{
@@ -760,6 +864,22 @@ export default function FixedRoomVAD() {
               </span>
             </div>
           </div>
+          {isOwner && historyPanelOpen && patientHistory?.sessions && (
+            <div style={{
+              background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.1)",
+              maxHeight: "180px", overflowY: "auto", padding: "10px 16px", flexShrink: 0,
+            }}>
+              <p style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>이전 방문 (최근 {historyShowAll ? patientHistory.sessions.length : Math.min(3, patientHistory.sessions.length)}건)</p>
+              {(historyShowAll ? patientHistory.sessions : patientHistory.sessions.slice(0, 3)).map((sess) => (
+                <div key={sess.id} style={{ fontSize: "11px", marginBottom: "6px", padding: "6px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
+                  {sess.started_at ? new Date(sess.started_at).toLocaleDateString("ko-KR") : "-"} · {sess.dept || "-"} · 메시지 {Array.isArray(sess.messages) ? sess.messages.length : 0}건
+                </div>
+              ))}
+              {patientHistory.sessions.length > 3 && !historyShowAll && (
+                <button type="button" onClick={() => setHistoryShowAll(true)} style={{ marginTop: "2px", padding: "2px 6px", fontSize: "10px", background: "rgba(59,130,246,0.3)", border: "none", borderRadius: "4px", color: "white", cursor: "pointer" }}>더 보기</button>
+              )}
+            </div>
+          )}
 
           {/* ── 중앙: 메시지 말풍선 영역 ── */}
           <div style={{

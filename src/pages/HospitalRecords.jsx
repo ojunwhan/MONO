@@ -2,7 +2,7 @@
 import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
-import { ChevronLeft, Search, FileText, Clock, Globe, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, Search, FileText, Clock, Globe, ChevronDown, ChevronUp, MessageSquare, Link2 } from "lucide-react";
 
 export default function HospitalRecords() {
   const navigate = useNavigate();
@@ -11,6 +11,10 @@ export default function HospitalRecords() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [expandedSession, setExpandedSession] = useState(null);
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [messageSending, setMessageSending] = useState(false);
+  const [toast, setToast] = useState("");
 
   const handleSearch = useCallback(async () => {
     if (!chartQuery.trim()) return;
@@ -49,6 +53,43 @@ export default function HospitalRecords() {
     } catch { return ""; }
   };
 
+  const patientToken = result?.patient?.patient_token || result?.sessions?.[0]?.patient_token;
+  const deptForLink = result?.sessions?.[0]?.dept || result?.patient?.dept || "reception";
+
+  const handleSendMessage = useCallback(async () => {
+    if (!patientToken || !messageText.trim()) return;
+    setMessageSending(true);
+    try {
+      const r = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: messageText.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (data.ok) {
+        setToast("메시지가 저장되었습니다. 환자 재방문 시 표시됩니다.");
+        setMessageModalOpen(false);
+        setMessageText("");
+      } else {
+        setToast(data.message || "저장 실패");
+      }
+    } catch {
+      setToast("전송 실패");
+    } finally {
+      setMessageSending(false);
+      setTimeout(() => setToast(""), 3000);
+    }
+  }, [patientToken, messageText]);
+
+  const handleCopyRevisitLink = useCallback(() => {
+    if (!patientToken) return;
+    const url = `${window.location.origin}/hospital/join/${encodeURIComponent(deptForLink)}?token=${encodeURIComponent(patientToken)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setToast("링크가 복사되었습니다.");
+      setTimeout(() => setToast(""), 2500);
+    }).catch(() => setToast("복사 실패"));
+  }, [patientToken, deptForLink]);
+
   return (
     <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
       <div className="mx-auto w-full max-w-[640px] px-4 py-6">
@@ -76,12 +117,10 @@ export default function HospitalRecords() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]" />
             <input
               type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
               value={chartQuery}
-              onChange={(e) => setChartQuery(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => setChartQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="차트번호 입력"
+              placeholder="차트번호 또는 PT-XXXXXX 입력"
               className="w-full h-[44px] pl-10 pr-3 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[14px] focus:outline-none focus:border-[#3B82F6]"
               autoFocus
             />
@@ -107,22 +146,50 @@ export default function HospitalRecords() {
         {result && (
           <div className="space-y-4">
             {/* Patient Info */}
-            {result.patient ? (
+            {result.patient || (result.sessions?.length > 0) ? (
               <div className="p-4 rounded-[16px] border border-[var(--color-border)] bg-[var(--color-bg)]">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[16px]">👤</span>
-                  <h3 className="text-[14px] font-semibold">환자 정보</h3>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[16px]">👤</span>
+                    <h3 className="text-[14px] font-semibold">환자 정보</h3>
+                  </div>
+                  {patientToken && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMessageModalOpen(true)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-[#3B82F6] text-white"
+                      >
+                        <MessageSquare size={12} /> 메시지 보내기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyRevisitLink}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border border-[var(--color-border)]"
+                      >
+                        <Link2 size={12} /> 재방문 링크
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[12px]">
-                  <div>
-                    <span className="text-[var(--color-text-secondary)]">차트번호: </span>
-                    <span className="font-medium">{result.patient.chart_number}</span>
-                  </div>
+                  {result.patient?.chart_number && (
+                    <div>
+                      <span className="text-[var(--color-text-secondary)]">차트번호: </span>
+                      <span className="font-medium">{result.patient.chart_number}</span>
+                    </div>
+                  )}
+                  {patientToken && (
+                    <div>
+                      <span className="text-[var(--color-text-secondary)]">환자토큰: </span>
+                      <span className="font-medium font-mono text-[10px]">{String(patientToken).slice(0, 16)}…</span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-[var(--color-text-secondary)]">언어: </span>
-                    <span className="font-medium">{result.patient.language?.toUpperCase() || "-"}</span>
+                    <span className="font-medium">{(result.patient?.language || result.sessions?.[0]?.guest_lang)?.toUpperCase() || "-"}</span>
                   </div>
-                  {result.patient.name && (
+                  {result.patient?.name && (
                     <div>
                       <span className="text-[var(--color-text-secondary)]">이름: </span>
                       <span className="font-medium">{result.patient.name}</span>
@@ -130,7 +197,7 @@ export default function HospitalRecords() {
                   )}
                   <div>
                     <span className="text-[var(--color-text-secondary)]">등록일: </span>
-                    <span className="font-medium">{formatDate(result.patient.created_at)}</span>
+                    <span className="font-medium">{formatDate(result.patient?.created_at || result.patient?.first_visit_at)}</span>
                   </div>
                 </div>
               </div>
@@ -242,6 +309,34 @@ export default function HospitalRecords() {
           </p>
         </div>
       </div>
+
+      {/* 메시지 보내기 모달 */}
+      {messageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-[16px] bg-[var(--color-bg)] p-4 shadow-xl">
+            <h3 className="text-[16px] font-semibold mb-2">환자에게 메시지 보내기</h3>
+            <p className="text-[12px] text-[var(--color-text-secondary)] mb-3">재방문 시 채널에서 확인할 수 있습니다.</p>
+            <textarea
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="메시지 입력..."
+              className="w-full min-h-[100px] p-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[14px] resize-y mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => { setMessageModalOpen(false); setMessageText(""); }} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[13px]">취소</button>
+              <button type="button" onClick={handleSendMessage} disabled={messageSending || !messageText.trim()} className="px-4 py-2 rounded-lg bg-[#3B82F6] text-white text-[13px] disabled:opacity-50">{messageSending ? "저장 중..." : "저장"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 토스트 */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-[10px] bg-[#1e293b] text-white text-[13px] shadow-lg">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

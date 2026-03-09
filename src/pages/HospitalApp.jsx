@@ -971,12 +971,21 @@ function StaffModePanel({
     localStorage.setItem("myLang", selectedLang);
     const targetRoomId = patient.roomId;
 
-    // 대기 목록에서 제거 (서버에도 알림)
+    let sessionId = null;
     try {
-      await fetch(`/api/hospital/waiting/${encodeURIComponent(targetRoomId)}`, { method: "DELETE" });
+      const delRes = await fetch(`/api/hospital/waiting/${encodeURIComponent(targetRoomId)}`, { method: "DELETE" });
+      const delData = await delRes.json().catch(() => ({}));
+      sessionId = delData.sessionId || null;
     } catch {}
 
-    // 로컬 대기 목록에서 즉시 제거
+    if (sessionId == null) {
+      try {
+        const sessRes = await fetch(`/api/hospital/sessions?roomId=${encodeURIComponent(targetRoomId)}`);
+        const sessData = await sessRes.json().catch(() => ({}));
+        sessionId = sessData.sessionId || null;
+      } catch {}
+    }
+
     setWaitingPatients((prev) => prev.filter((p) => p.roomId !== targetRoomId));
 
     navTo(`/fixed-room/${targetRoomId}`, {
@@ -984,12 +993,13 @@ function StaffModePanel({
         fromLang: selectedLang,
         localName: "",
         role: "Doctor",
-        isCreator: true,      // 직원 = 호스트 (마이크/채팅 입력 활성화)
+        isCreator: true,
         siteContext: `hospital_${selectedDept.id}`,
         roomType: "oneToOne",
         hospitalDept: selectedDept,
         saveMode,
         patientToken: patient.patientToken || null,
+        ...(sessionId ? { sessionId } : {}),
       },
     });
   };

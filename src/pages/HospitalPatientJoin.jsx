@@ -2,7 +2,7 @@
 // 환자가 QR 스캔 → 언어 선택 → "통역 시작" 클릭 → 새 roomId 생성 → ChatScreen 진입
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import MonoLogo from "../components/MonoLogo";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
@@ -36,8 +36,10 @@ function getOrCreatePatientToken() {
 
 export default function HospitalPatientJoin() {
   const { department } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const joinCalledRef = useRef(false);
+  const urlToken = searchParams.get("token") || null;
 
   const dept = useMemo(
     () => HOSPITAL_DEPARTMENTS.find((d) => d.id === department) || null,
@@ -72,7 +74,8 @@ export default function HospitalPatientJoin() {
     setError("");
 
     try {
-      const patientToken = getOrCreatePatientToken();
+      const patientToken = urlToken ? String(urlToken).trim() : getOrCreatePatientToken();
+      if (urlToken) localStorage.setItem(PATIENT_TOKEN_KEY, patientToken);
       const lang = selectedLang;
       const dept = department || "general";
 
@@ -106,7 +109,15 @@ export default function HospitalPatientJoin() {
       // 3. localStorage에 언어 저장
       localStorage.setItem("myLang", lang);
 
-      // 4. guest session 저장
+      // 4. pending 메시지 조회 (직원이 보낸 오프라인 메시지)
+      let pendingMessages = [];
+      try {
+        const pendingRes = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/pending-messages`);
+        const pendingData = await pendingRes.json().catch(() => ({}));
+        if (pendingData.ok && Array.isArray(pendingData.messages)) pendingMessages = pendingData.messages;
+      } catch (_) {}
+
+      // 5. guest session 저장
       sessionStorage.setItem(
         "mono_guest",
         JSON.stringify({
@@ -121,7 +132,7 @@ export default function HospitalPatientJoin() {
         })
       );
 
-      // 5. FixedRoomVAD로 이동 (환자 = 게스트)
+      // 6. FixedRoomVAD로 이동 (환자 = 게스트). sessionId, pendingMessages 전달
       navigate(`/fixed-room/${roomId}`, {
         replace: true,
         state: {
@@ -135,6 +146,8 @@ export default function HospitalPatientJoin() {
           roomType: "oneToOne",
           hospitalDept: dept,
           patientToken,
+          sessionId: data.sessionId,
+          pendingMessages,
         },
       });
     } catch (e) {
@@ -143,7 +156,7 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate, selectedLang]);
+  }, [department, navigate, selectedLang, urlToken]);
 
   // ── Render: Language Selection ──
   if (step === "language") {
