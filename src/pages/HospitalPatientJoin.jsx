@@ -168,7 +168,7 @@ export default function HospitalPatientJoin() {
         return;
       }
 
-      // 접수처: 환자 폰 → /room/:roomId (ChatScreen, PTT)
+      // 접수처(reception): 환자 폰 → /room/:roomId (ChatScreen, PTT) — 반드시 여기서 이동 후 종료
       sessionStorage.setItem(
         "mono_guest",
         JSON.stringify({
@@ -194,6 +194,7 @@ export default function HospitalPatientJoin() {
           pendingMessages,
         },
       });
+      return;
     } catch (e) {
       console.error("[hospital:patient-join] error:", e);
       setError(e?.message || "연결에 실패했습니다. 다시 시도해주세요.");
