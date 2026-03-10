@@ -267,6 +267,25 @@ function RoomsPanel({ authUser }) {
     [authUser, origin]
   );
 
+  // 환자가 스캔할 QR용 URL: /hospital/join/reception 또는 /hospital/join/consultation?room=roomId
+  const buildPatientJoinUrl = useCallback(
+    (room) => {
+      if (!origin) return "";
+      const template = room.template || "reception";
+      const joinPath = `/hospital/join/${template}`;
+      const orgSuffix =
+        authUser?.accountType === "organization" && authUser?.id
+          ? `&org=${encodeURIComponent(authUser.id)}`
+          : "";
+      const query =
+        template === "consultation"
+          ? `?room=${encodeURIComponent(room.id)}${orgSuffix}`
+          : orgSuffix ? `?${orgSuffix.slice(1)}` : "";
+      return `${origin}${joinPath}${query}`;
+    },
+    [authUser, origin]
+  );
+
   const handleAddRoom = async (e) => {
     e.preventDefault();
     const name = addName.trim();
@@ -293,8 +312,8 @@ function RoomsPanel({ authUser }) {
   };
 
   const handlePrintQR = (room) => {
-    const kioskUrl = buildRoomUrl(room, true);
-    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(kioskUrl)}`;
+    const qrUrl = buildPatientJoinUrl(room);
+    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrUrl)}`;
     const win = window.open("", "_blank", "width=400,height=500");
     if (!win) return;
     win.document.write(`
@@ -370,6 +389,7 @@ function RoomsPanel({ authUser }) {
             room={room}
             staffUrl={buildRoomUrl(room, false)}
             kioskUrl={buildRoomUrl(room, true)}
+            qrUrl={buildPatientJoinUrl(room)}
             onPrintQR={handlePrintQR}
             onDelete={fetchRooms}
           />
@@ -384,7 +404,7 @@ function RoomsPanel({ authUser }) {
   );
 }
 
-function RoomCard({ room, staffUrl, kioskUrl, onPrintQR, onDelete }) {
+function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -433,7 +453,7 @@ function RoomCard({ room, staffUrl, kioskUrl, onPrintQR, onDelete }) {
         {templateLabel}
       </span>
       <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
-        <QRCode value={kioskUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+        <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
       </div>
       <div className="flex flex-wrap gap-2 w-full justify-center">
         <button
