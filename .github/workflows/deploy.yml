@@ -1,0 +1,28 @@
+# Push 시 서버 자동 배포: pull + build + pm2 restart
+#
+# GitHub Secrets 설정 (Settings → Secrets and variables → Actions):
+#   SSH_PRIVATE_KEY: 서버(ubuntu@15.164.59.178) 접속용 private key 전체 내용
+#                    (-----BEGIN ... PRIVATE KEY----- ~ -----END ... ----- 포함)
+#
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - feature/hospital-plastic-surgery
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 15.164.59.178 >> ~/.ssh/known_hosts
+
+      - name: Run deploy on server
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@15.164.59.178 "cd /home/ubuntu/mono && git pull origin ${{ github.ref_name }} && chmod +x deploy.sh && ./deploy.sh ${{ github.ref_name }}"
