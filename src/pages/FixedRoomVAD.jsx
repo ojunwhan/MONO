@@ -3,19 +3,8 @@
  *
  * URL: /fixed-room/:roomId
  *
- * ■ 핵심 원칙: 직원(owner)이 모든 걸 제어한다.
- *   - 환자(guest)는 버튼 없음. 직원 명령에 따라 자동으로 움직인다.
- *
- * ■ 채팅형 UI (interpreting 단계)
- *   - 상단: 진료과명 + VAD 상태
- *   - 중앙: 메시지 말풍선 (내 발화 오른쪽, 상대 발화 왼쪽)
- *   - 말풍선에 원문 + 번역 같이 표시
- *   - 스크롤 자동 하단 고정
- *   - 하단: 직원(owner)은 "통역 종료" 버튼, 환자(guest)는 상태 표시만
- *
- * ■ 소켓 이벤트
- *   fixed-room:start → 양쪽 VAD 시작
- *   fixed-room:end   → 양쪽 VAD 종료
+ * ■ PTT 모드: VAD/SharedArrayBuffer 미사용. MediaRecorder로 녹음 후 PCM16 전송.
+ * ■ VAD 모드: useVADPipeline만 사용 (PTT 모드일 때는 해당 훅 미호출).
  */
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
@@ -24,6 +13,47 @@ import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp } from "lucide-react";
+
+// ── PTT 전용: PCM16 전송 (VAD 미사용) ──
+const PTT_CHUNK_SIZE = 24000; // 1.5초 @16kHz, server와 동일
+function float32ToInt16PTT(float32Array) {
+  const int16 = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, float32Array[i]));
+    int16[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
+  }
+  return int16;
+}
+function int16ToBase64PTT(int16Array) {
+  const bytes = new Uint8Array(int16Array.buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+function resampleTo16k(float32, fromSampleRate) {
+  if (fromSampleRate === 16000) return float32;
+  const ratio = fromSampleRate / 16000;
+  const outLength = Math.floor(float32.length / ratio);
+  const out = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const srcIdx = i * ratio;
+    const j = Math.floor(srcIdx);
+    const frac = srcIdx - j;
+    out[i] = j + 1 < float32.length ? float32[j] * (1 - frac) + float32[j + 1] * frac : float32[j];
+  }
+  return out;
+}
+function sendPTTAudioToServer({ roomId, participantId, lang, audioFloat32, sampleRate }) {
+  if (!roomId || !participantId || !lang || !audioFloat32?.length) return;
+  const at16k = sampleRate === 16000 ? audioFloat32 : resampleTo16k(audioFloat32, sampleRate);
+  const int16 = float32ToInt16PTT(at16k);
+  socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000 });
+  for (let offset = 0; offset < int16.length; offset += PTT_CHUNK_SIZE) {
+    const chunk = int16.slice(offset, offset + PTT_CHUNK_SIZE);
+    socket.emit("stt:audio", { roomId, participantId, lang, audio: int16ToBase64PTT(chunk), sampleRateHz: 16000 });
+  }
+  socket.emit("stt:segment_end", { roomId, participantId });
+}
 
 const STATUS = {
   IDLE: "대기 중",
@@ -112,6 +142,275 @@ function saveMessageToServer({ sessionId, roomId, patientToken, senderRole, orig
       translatedLang: translatedLang || "",
     }),
   }).catch(() => { /* 저장 실패 무시 — 통역에 영향 없음 */ });
+}
+
+// ── VAD 전용: ready 단계 "통역 시작" 버튼 (useVADPipeline은 이 컴포넌트에서만 호출) ──
+function VADReadyButton({ roomId, participantId, fromLang, roleHint, onStart, pauseVadRef }) {
+  const vad = useVADPipeline({ roomId, participantId, lang: fromLang, roleHint });
+  useEffect(() => {
+    pauseVadRef.current = vad.pause;
+    return () => { pauseVadRef.current = null; };
+  }, [vad.pause, pauseVadRef]);
+  return (
+    <>
+      <button
+        onClick={onStart}
+        disabled={vad.loading}
+        style={{
+          padding: "16px 48px", borderRadius: "16px", border: "none",
+          background: vad.loading ? "#4b5563" : "#3b82f6",
+          color: "white", fontSize: "18px", fontWeight: 700,
+          cursor: vad.loading ? "wait" : "pointer",
+          display: "flex", alignItems: "center", gap: "10px",
+          transition: "background 0.2s",
+        }}
+      >
+        {vad.loading ? (
+          <>
+            <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
+            VAD 로딩 중...
+          </>
+        ) : (
+          <>
+            <Phone size={22} />
+            통역 시작
+          </>
+        )}
+      </button>
+      {vad.errored && (
+        <div style={{
+          padding: "10px 16px", background: "#7f1d1d", borderRadius: "8px",
+          fontSize: "12px", color: "#fca5a5", maxWidth: "360px", textAlign: "center", marginTop: "12px",
+        }}>
+          VAD 오류: {String(vad.errored)}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── VAD 전용: interpreting 단계 (useVADPipeline만 사용, PTT 모드일 때는 미마운트) ──
+function InterpretingVAD({
+  roomId, participantId, fromLang, roleHint, pauseVadRef, setStatus, processingRef, active,
+  messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
+  isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
+  textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
+  setInputMode, STATUS,
+}) {
+  const vad = useVADPipeline({ roomId, participantId, lang: fromLang, roleHint });
+
+  useEffect(() => {
+    pauseVadRef.current = vad.pause;
+    return () => { pauseVadRef.current = null; };
+  }, [vad.pause, pauseVadRef]);
+
+  useEffect(() => {
+    vad.start().catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (vad.loading) { setStatus(STATUS.LOADING); return; }
+    if (vad.errored) { setStatus(`${STATUS.ERROR}: ${vad.errored}`); return; }
+    if (!active) { setStatus(STATUS.IDLE); return; }
+    if (vad.userSpeaking) setStatus(STATUS.SPEAKING);
+    else if (processingRef.current) setStatus(STATUS.PROCESSING);
+    else setStatus(STATUS.LISTENING);
+  }, [vad.userSpeaking, vad.loading, vad.errored, active, setStatus, STATUS, processingRef]);
+
+  useEffect(() => {
+    if (!active || vad.userSpeaking || vad.loading) return;
+    const t = setTimeout(() => {
+      if (!vad.userSpeaking && active) {
+        processingRef.current = true;
+        setStatus(STATUS.PROCESSING);
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [vad.userSpeaking, active, vad.loading, setStatus, processingRef]);
+
+  return (
+    <>
+      <div style={{
+        padding: "10px 16px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: vad.userSpeaking ? "#7f1d1d" : "#1e293b",
+        borderBottom: "1px solid rgba(255,255,255,0.1)", flexShrink: 0, transition: "background 0.3s ease",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
+          <button onClick={handleBack} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
+            <ArrowLeft size={18} />
+          </button>
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>{hospitalDept?.labelKo || "병원 통역"}</span>
+          {partnerInfo && (
+            <span style={{ fontSize: "11px", opacity: 0.5 }}>{myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}</span>
+          )}
+          {isOwner && patientHistory?.sessions?.length > 0 && (
+            <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)", background: historyPanelOpen ? "rgba(59,130,246,0.2)" : "transparent", color: "white", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
+              <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: statusColor, boxShadow: status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none", transition: "all 0.3s ease", animation: status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none" }} />
+          <span style={{ fontSize: "11px", opacity: 0.7 }}>{status}</span>
+        </div>
+      </div>
+      {isOwner && historyPanelOpen && patientHistory?.sessions && (
+        <div style={{ background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.1)", maxHeight: "180px", overflowY: "auto", padding: "10px 16px", flexShrink: 0 }}>
+          <p style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>이전 방문 (최근 {historyShowAll ? patientHistory.sessions.length : Math.min(3, patientHistory.sessions.length)}건)</p>
+          {(historyShowAll ? patientHistory.sessions : patientHistory.sessions.slice(0, 3)).map((sess) => (
+            <div key={sess.id} style={{ fontSize: "11px", marginBottom: "6px", padding: "6px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
+              {sess.started_at ? new Date(sess.started_at).toLocaleDateString("ko-KR") : "-"} · {sess.dept || "-"} · 메시지 {Array.isArray(sess.messages) ? sess.messages.length : 0}건
+            </div>
+          ))}
+          {patientHistory.sessions.length > 3 && !historyShowAll && (
+            <button type="button" onClick={() => setHistoryShowAll(true)} style={{ marginTop: "2px", padding: "2px 6px", fontSize: "10px", background: "rgba(59,130,246,0.3)", border: "none", borderRadius: "4px", color: "white", cursor: "pointer" }}>더 보기</button>
+          )}
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 0", background: "#0f172a" }}>
+        {messages.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", opacity: 0.2, fontSize: "0.95rem" }}>말하면 자동으로 감지됩니다</div>
+        ) : (
+          messages.map((msg) => (
+            <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} />
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      <div style={{ padding: "12px 16px", background: "#111827", borderTop: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+          <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
+          <button type="button" onClick={() => setInputMode("vad")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #22c55e", background: "rgba(34,197,94,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>자동 감지 (VAD)</button>
+          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: "12px", cursor: "pointer" }}>버튼으로 말하기 (PTT)</button>
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.2)", background: "#1e293b", color: "white", fontSize: "14px", outline: "none" }} />
+          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "10px 16px", borderRadius: "10px", border: "none", background: textInputValue?.trim() ? "#3b82f6" : "#4b5563", color: "white", fontSize: "13px", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
+        </div>
+        {isOwner ? (
+          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "#dc2626", color: "white", fontSize: "15px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+            <PhoneOff size={18} /> 통역 종료
+          </button>
+        ) : (
+          <div style={{ textAlign: "center", padding: "10px", opacity: 0.6, fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}><Mic size={14} /> 통역 진행 중 — 말하면 자동 번역됩니다</div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── PTT 전용: interpreting 단계 (VAD 미사용, MediaRecorder로 녹음 → PCM16 전송) ──
+function InterpretingPTT({
+  roomId, participantId, fromLang, pauseVadRef,
+  messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
+  isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
+  textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
+  setInputMode, STATUS,
+}) {
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const handlePTTClick = useCallback(async () => {
+    if (recording) {
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        recorderRef.current.stop();
+      }
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 16000 });
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        chunksRef.current = [];
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const buffer = await ctx.decodeAudioData(arrayBuffer);
+          const float32 = buffer.getChannelData(0);
+          const sr = buffer.sampleRate;
+          sendPTTAudioToServer({ roomId, participantId, lang: fromLang, audioFloat32: float32, sampleRate: sr });
+        } catch (err) {
+          console.warn("[PTT] decode/send failed", err);
+        }
+        setRecording(false);
+      };
+      recorder.start(100);
+      setRecording(true);
+    } catch (err) {
+      console.warn("[PTT] getUserMedia failed", err);
+    }
+  }, [recording, roomId, participantId, fromLang]);
+
+  const displayStatus = recording ? "🎤 녹음 중" : status;
+  const headerBg = recording ? "#7f1d1d" : "#1e293b";
+
+  return (
+    <>
+      <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: headerBg, borderBottom: "1px solid rgba(255,255,255,0.1)", flexShrink: 0, transition: "background 0.3s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
+          <button onClick={handleBack} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}><ArrowLeft size={18} /></button>
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>{hospitalDept?.labelKo || "병원 통역"}</span>
+          {partnerInfo && <span style={{ fontSize: "11px", opacity: 0.5 }}>{myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}</span>}
+          {isOwner && patientHistory?.sessions?.length > 0 && (
+            <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)", background: historyPanelOpen ? "rgba(59,130,246,0.2)" : "transparent", color: "white", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
+              <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: recording ? "#ef4444" : statusColor, boxShadow: recording ? "0 0 8px #ef4444" : (status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none"), transition: "all 0.3s ease", animation: recording ? "pulse 1s ease-in-out infinite" : (status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none") }} />
+          <span style={{ fontSize: "11px", opacity: 0.7 }}>{displayStatus}</span>
+        </div>
+      </div>
+      {isOwner && historyPanelOpen && patientHistory?.sessions && (
+        <div style={{ background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.1)", maxHeight: "180px", overflowY: "auto", padding: "10px 16px", flexShrink: 0 }}>
+          <p style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>이전 방문 (최근 {historyShowAll ? patientHistory.sessions.length : Math.min(3, patientHistory.sessions.length)}건)</p>
+          {(historyShowAll ? patientHistory.sessions : patientHistory.sessions.slice(0, 3)).map((sess) => (
+            <div key={sess.id} style={{ fontSize: "11px", marginBottom: "6px", padding: "6px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>{sess.started_at ? new Date(sess.started_at).toLocaleDateString("ko-KR") : "-"} · {sess.dept || "-"} · 메시지 {Array.isArray(sess.messages) ? sess.messages.length : 0}건</div>
+          ))}
+          {patientHistory.sessions.length > 3 && !historyShowAll && <button type="button" onClick={() => setHistoryShowAll(true)} style={{ marginTop: "2px", padding: "2px 6px", fontSize: "10px", background: "rgba(59,130,246,0.3)", border: "none", borderRadius: "4px", color: "white", cursor: "pointer" }}>더 보기</button>}
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 0", background: "#0f172a" }}>
+        {messages.length === 0 ? <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", opacity: 0.2, fontSize: "0.95rem" }}>말하기 버튼을 누르고 말한 뒤 다시 클릭하면 전송됩니다</div> : messages.map((msg) => (
+          <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} />
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+      <div style={{ padding: "12px 16px", background: "#111827", borderTop: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+          <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
+          <button type="button" onClick={() => setInputMode("vad")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: "12px", cursor: "pointer" }}>자동 감지 (VAD)</button>
+          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #3b82f6", background: "rgba(59,130,246,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>버튼으로 말하기 (PTT)</button>
+        </div>
+        <div style={{ marginBottom: "10px" }}>
+          <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: recording ? "#dc2626" : "#3b82f6", color: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", animation: recording ? "pulse 1s ease-in-out infinite" : "none" }}>
+            <Mic size={18} /> {recording ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.2)", background: "#1e293b", color: "white", fontSize: "14px", outline: "none" }} />
+          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "10px 16px", borderRadius: "10px", border: "none", background: textInputValue?.trim() ? "#3b82f6" : "#4b5563", color: "white", fontSize: "13px", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
+        </div>
+        {isOwner ? (
+          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "#dc2626", color: "white", fontSize: "15px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}><PhoneOff size={18} /> 통역 종료</button>
+        ) : (
+          <div style={{ textAlign: "center", padding: "10px", opacity: 0.6, fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}><Mic size={14} /> 통역 진행 중 — 말하기 버튼으로 녹음 후 전송</div>
+        )}
+      </div>
+    </>
+  );
 }
 
 export default function FixedRoomVAD() {
@@ -206,13 +505,8 @@ export default function FixedRoomVAD() {
     ]);
   }, [pendingMessages]);
 
-  // ── VAD Pipeline ──
-  const vad = useVADPipeline({
-    roomId,
-    participantId,
-    lang: fromLang,
-    roleHint,
-  });
+  // PTT 모드일 때는 useVADPipeline을 호출하지 않음. VAD는 VADReadyButton / InterpretingVAD에서만 사용.
+  const pauseVadRef = useRef(null);
 
   // ── 환자 정보 로드 (patientToken이 있을 때) ──
   useEffect(() => {
@@ -265,33 +559,23 @@ export default function FixedRoomVAD() {
     };
   }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly, inputMode]);
 
-  // ── 통역 시작 공통 로직 ──
+  // ── 통역 시작 공통 로직 (VAD 시작은 InterpretingVAD에서 수행) ──
   const doStartInterpreting = useCallback(async () => {
     setStep("interpreting");
     setActive(true);
     setStatus(STATUS.LISTENING);
-    if (inputMode !== "ptt") {
-      await vad.start();
-    }
-  }, [vad, inputMode]);
+  }, []);
 
-  // ── 통역 종료 공통 로직 ──
+  // ── 통역 종료 공통 로직 (VAD pause는 InterpretingVAD에서 호출) ──
   const doStopInterpreting = useCallback(async () => {
-    await vad.pause();
+    pauseVadRef.current?.();
     setActive(false);
     processingRef.current = false;
     setStatus(STATUS.IDLE);
     setMessages([]);
     seenIdsRef.current.clear();
     setPartnerInfo(null);
-  }, [vad]);
-
-  // PTT 모드로 전환 시 자동 감지(VAD) 즉시 중지
-  useEffect(() => {
-    if (inputMode === "ptt" && step === "interpreting") {
-      vad.pause();
-    }
-  }, [inputMode, step, vad]);
+  }, []);
 
   // ── 소켓: 이벤트 수신 ──
   useEffect(() => {
@@ -333,7 +617,7 @@ export default function FixedRoomVAD() {
     const onPartnerLeft = () => {
       setPartnerInfo(null);
       if (active) {
-        vad.pause();
+        pauseVadRef.current?.();
         setActive(false);
         processingRef.current = false;
         setStatus(STATUS.IDLE);
@@ -464,7 +748,7 @@ export default function FixedRoomVAD() {
     const onRoomExpired = () => {
       setPartnerInfo(null);
       if (active) {
-        vad.pause();
+        pauseVadRef.current?.();
         setActive(false);
         processingRef.current = false;
       }
@@ -528,7 +812,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId]);
+  }, [roomId, participantId, step, active, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId]);
 
   // ── 환자 전용: 접수→진료실 배정 알림, 진료실 입장 요청 수락 ──
   useEffect(() => {
@@ -551,42 +835,6 @@ export default function FixedRoomVAD() {
       socket.off("hospital:enter-consultation-request", onEnterRequest);
     };
   }, [isGuest, roomId]);
-
-  // ── VAD 상태 → UI 상태 동기화 ──
-  useEffect(() => {
-    if (step !== "interpreting") return;
-    if (vad.loading) {
-      setStatus(STATUS.LOADING);
-      return;
-    }
-    if (vad.errored) {
-      setStatus(`${STATUS.ERROR}: ${vad.errored}`);
-      return;
-    }
-    if (!active) {
-      setStatus(STATUS.IDLE);
-      return;
-    }
-    if (vad.userSpeaking) {
-      setStatus(STATUS.SPEAKING);
-    } else if (processingRef.current) {
-      setStatus(STATUS.PROCESSING);
-    } else {
-      setStatus(STATUS.LISTENING);
-    }
-  }, [vad.userSpeaking, vad.loading, vad.errored, active, step]);
-
-  // ── 말 끝나면 processing 표시 ──
-  useEffect(() => {
-    if (step !== "interpreting" || !active || vad.userSpeaking || vad.loading) return;
-    const timer = setTimeout(() => {
-      if (!vad.userSpeaking && active) {
-        processingRef.current = true;
-        setStatus(STATUS.PROCESSING);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [vad.userSpeaking, active, vad.loading, step]);
 
   // ── 직원: 통역 시작 (소켓으로 양쪽에 알림) ──
   const handleStartInterpreting = useCallback(() => {
@@ -623,11 +871,9 @@ export default function FixedRoomVAD() {
 
   // ── 뒤로 가기 ──
   const handleBack = useCallback(() => {
-    if (active) {
-      vad.pause();
-    }
+    if (active) pauseVadRef.current?.();
     navigate(-1);
-  }, [active, vad, navigate]);
+  }, [active, navigate]);
 
   // ── Keepalive ──
   useEffect(() => {
@@ -949,30 +1195,29 @@ export default function FixedRoomVAD() {
             </div>
 
             {isOwner && (
-              <button
-                onClick={handleStartInterpreting}
-                disabled={vad.loading}
-                style={{
-                  padding: "16px 48px", borderRadius: "16px", border: "none",
-                  background: vad.loading ? "#4b5563" : "#3b82f6",
-                  color: "white", fontSize: "18px", fontWeight: 700,
-                  cursor: vad.loading ? "wait" : "pointer",
-                  display: "flex", alignItems: "center", gap: "10px",
-                  transition: "background 0.2s",
-                }}
-              >
-                {vad.loading ? (
-                  <>
-                    <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
-                    VAD 로딩 중...
-                  </>
-                ) : (
-                  <>
-                    <Phone size={22} />
-                    통역 시작
-                  </>
-                )}
-              </button>
+              inputMode === "vad" ? (
+                <VADReadyButton
+                  roomId={roomId}
+                  participantId={participantId}
+                  fromLang={fromLang}
+                  roleHint={roleHint}
+                  onStart={handleStartInterpreting}
+                  pauseVadRef={pauseVadRef}
+                />
+              ) : (
+                <button
+                  onClick={handleStartInterpreting}
+                  style={{
+                    padding: "16px 48px", borderRadius: "16px", border: "none",
+                    background: "#3b82f6", color: "white", fontSize: "18px", fontWeight: 700,
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: "10px",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  <Phone size={22} />
+                  통역 시작
+                </button>
+              )
             )}
 
             {isGuest && (
@@ -991,275 +1236,76 @@ export default function FixedRoomVAD() {
               </div>
             )}
 
-            {vad.errored && (
-              <div style={{
-                padding: "10px 16px", background: "#7f1d1d", borderRadius: "8px",
-                fontSize: "12px", color: "#fca5a5", maxWidth: "360px", textAlign: "center",
-              }}>
-                VAD 오류: {String(vad.errored)}
-              </div>
-            )}
           </div>
         </>
       )}
 
       {/* ═══════════════════════════════════════ */}
-      {/* STEP: INTERPRETING — 채팅형 UI */}
+      {/* STEP: INTERPRETING — VAD 또는 PTT (VAD는 해당 시에만 useVADPipeline 사용) */}
       {/* ═══════════════════════════════════════ */}
-      {step === "interpreting" && (
-        <>
-          {/* ── 상단: 진료과명 + VAD 상태 ── */}
-          <div style={{
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            background: vad.userSpeaking ? "#7f1d1d" : "#1e293b",
-            borderBottom: "1px solid rgba(255,255,255,0.1)",
-            flexShrink: 0,
-            transition: "background 0.3s ease",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-              <button onClick={handleBack} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
-                <ArrowLeft size={18} />
-              </button>
-              <span style={{ fontSize: "13px", fontWeight: 600 }}>
-                {hospitalDept?.labelKo || "병원 통역"}
-              </span>
-              {partnerInfo && (
-                <span style={{ fontSize: "11px", opacity: 0.5 }}>
-                  {myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}
-                </span>
-              )}
-              {isOwner && patientHistory?.sessions?.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setHistoryPanelOpen((p) => !p)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "4px",
-                    padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)",
-                    background: historyPanelOpen ? "rgba(59,130,246,0.2)" : "transparent", color: "white", fontSize: "11px", cursor: "pointer", marginLeft: "4px",
-                  }}
-                >
-                  <History size={12} />
-                  {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
-            </div>
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}>
-              <div style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: statusColor,
-                boxShadow: status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none",
-                transition: "all 0.3s ease",
-                animation: status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none",
-              }} />
-              <span style={{ fontSize: "11px", opacity: 0.7 }}>
-                {status}
-              </span>
-            </div>
-          </div>
-          {isOwner && historyPanelOpen && patientHistory?.sessions && (
-            <div style={{
-              background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.1)",
-              maxHeight: "180px", overflowY: "auto", padding: "10px 16px", flexShrink: 0,
-            }}>
-              <p style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>이전 방문 (최근 {historyShowAll ? patientHistory.sessions.length : Math.min(3, patientHistory.sessions.length)}건)</p>
-              {(historyShowAll ? patientHistory.sessions : patientHistory.sessions.slice(0, 3)).map((sess) => (
-                <div key={sess.id} style={{ fontSize: "11px", marginBottom: "6px", padding: "6px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
-                  {sess.started_at ? new Date(sess.started_at).toLocaleDateString("ko-KR") : "-"} · {sess.dept || "-"} · 메시지 {Array.isArray(sess.messages) ? sess.messages.length : 0}건
-                </div>
-              ))}
-              {patientHistory.sessions.length > 3 && !historyShowAll && (
-                <button type="button" onClick={() => setHistoryShowAll(true)} style={{ marginTop: "2px", padding: "2px 6px", fontSize: "10px", background: "rgba(59,130,246,0.3)", border: "none", borderRadius: "4px", color: "white", cursor: "pointer" }}>더 보기</button>
-              )}
-            </div>
-          )}
-
-          {/* ── 중앙: 메시지 말풍선 영역 ── */}
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "12px 0",
-            background: "#0f172a",
-          }}>
-            {messages.length === 0 ? (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                opacity: 0.2,
-                fontSize: "0.95rem",
-              }}>
-                말하면 자동으로 감지됩니다
-              </div>
-            ) : (
-              messages.map((msg) => (
-                <ChatBubble
-                  key={msg.id}
-                  originalText={msg.originalText}
-                  translatedText={msg.translatedText}
-                  mine={msg.mine}
-                  flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")}
-                  langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")}
-                  streaming={msg.streaming}
-                />
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* ── 하단 고정 바 ── */}
-          <div style={{
-            padding: "12px 16px",
-            background: "#111827",
-            borderTop: "1px solid rgba(255,255,255,0.1)",
-            flexShrink: 0,
-          }}>
-            {/* VAD / PTT 전환 토글 */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
-              <button
-                type="button"
-                onClick={() => setInputMode("vad")}
-                style={{
-                  flex: 1,
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: inputMode === "vad" ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.2)",
-                  background: inputMode === "vad" ? "rgba(34,197,94,0.2)" : "transparent",
-                  color: "white",
-                  fontSize: "12px",
-                  fontWeight: inputMode === "vad" ? 600 : 400,
-                  cursor: "pointer",
-                }}
-              >
-                자동 감지 (VAD)
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode("ptt")}
-                style={{
-                  flex: 1,
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: inputMode === "ptt" ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.2)",
-                  background: inputMode === "ptt" ? "rgba(59,130,246,0.2)" : "transparent",
-                  color: "white",
-                  fontSize: "12px",
-                  fontWeight: inputMode === "ptt" ? 600 : 400,
-                  cursor: "pointer",
-                }}
-              >
-                버튼으로 말하기 (PTT)
-              </button>
-            </div>
-            {/* PTT 모드: 클릭 → 녹음 시작, 다시 클릭 → 전송 (MONO 기본 동작) */}
-            {inputMode === "ptt" && (
-              <div style={{ marginBottom: "10px" }}>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (vad.listening) {
-                      vad.pause();
-                    } else {
-                      try {
-                        await vad.start();
-                      } catch (e) {
-                        console.warn("[PTT] vad.start failed", e);
-                      }
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "14px",
-                    borderRadius: "12px",
-                    border: "none",
-                    background: vad.listening ? "#dc2626" : "#3b82f6",
-                    color: "white",
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                  }}
-                >
-                  <Mic size={18} />
-                  {vad.listening ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
-                </button>
-              </div>
-            )}
-            {/* 텍스트 입력창 (항상 표시) */}
-            <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
-              <input
-                type="text"
-                value={textInputValue}
-                onChange={(e) => setTextInputValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
-                placeholder="텍스트 입력 후 Enter 또는 전송"
-                style={{
-                  flex: 1,
-                  padding: "10px 14px",
-                  borderRadius: "10px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "#1e293b",
-                  color: "white",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                onClick={sendTextMessage}
-                disabled={!textInputValue?.trim()}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: textInputValue?.trim() ? "#3b82f6" : "#4b5563",
-                  color: "white",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: textInputValue?.trim() ? "pointer" : "not-allowed",
-                }}
-              >
-                전송
-              </button>
-            </div>
-            {isOwner ? (
-              <button
-                onClick={handleStopInterpreting}
-                style={{
-                  width: "100%", padding: "14px", borderRadius: "12px",
-                  border: "none", background: "#dc2626", color: "white",
-                  fontSize: "15px", fontWeight: 700, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                  transition: "background 0.2s ease",
-                }}
-              >
-                <PhoneOff size={18} />
-                통역 종료
-              </button>
-            ) : (
-              <div style={{
-                textAlign: "center", padding: "10px", opacity: 0.6, fontSize: "13px",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-              }}>
-                <Mic size={14} />
-                통역 진행 중 — 말하면 자동 번역됩니다
-              </div>
-            )}
-          </div>
-        </>
+      {step === "interpreting" && inputMode === "vad" && (
+        <InterpretingVAD
+          roomId={roomId}
+          participantId={participantId}
+          fromLang={fromLang}
+          roleHint={roleHint}
+          pauseVadRef={pauseVadRef}
+          setStatus={setStatus}
+          processingRef={processingRef}
+          active={active}
+          messages={messages}
+          messagesEndRef={messagesEndRef}
+          status={status}
+          statusColor={statusColor}
+          hospitalDept={hospitalDept}
+          myProfile={myProfile}
+          partnerLangDisplay={partnerLangDisplay}
+          partnerFlagUrl={partnerFlagUrl}
+          partnerInfo={partnerInfo}
+          isOwner={isOwner}
+          historyPanelOpen={historyPanelOpen}
+          setHistoryPanelOpen={setHistoryPanelOpen}
+          patientHistory={patientHistory}
+          historyShowAll={historyShowAll}
+          setHistoryShowAll={setHistoryShowAll}
+          textInputValue={textInputValue}
+          setTextInputValue={setTextInputValue}
+          sendTextMessage={sendTextMessage}
+          handleStopInterpreting={handleStopInterpreting}
+          handleBack={handleBack}
+          setInputMode={setInputMode}
+          STATUS={STATUS}
+        />
+      )}
+      {step === "interpreting" && inputMode === "ptt" && (
+        <InterpretingPTT
+          roomId={roomId}
+          participantId={participantId}
+          fromLang={fromLang}
+          pauseVadRef={pauseVadRef}
+          messages={messages}
+          messagesEndRef={messagesEndRef}
+          status={status}
+          statusColor={statusColor}
+          hospitalDept={hospitalDept}
+          myProfile={myProfile}
+          partnerLangDisplay={partnerLangDisplay}
+          partnerFlagUrl={partnerFlagUrl}
+          partnerInfo={partnerInfo}
+          isOwner={isOwner}
+          historyPanelOpen={historyPanelOpen}
+          setHistoryPanelOpen={setHistoryPanelOpen}
+          patientHistory={patientHistory}
+          historyShowAll={historyShowAll}
+          setHistoryShowAll={setHistoryShowAll}
+          textInputValue={textInputValue}
+          setTextInputValue={setTextInputValue}
+          sendTextMessage={sendTextMessage}
+          handleStopInterpreting={handleStopInterpreting}
+          handleBack={handleBack}
+          setInputMode={setInputMode}
+          STATUS={STATUS}
+        />
       )}
 
       {/* ═══════════════════════════════════════ */}
