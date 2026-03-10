@@ -72,17 +72,6 @@ export default function HospitalPatientJoin() {
     setShowLangGrid(false);
   }, []);
 
-  // 진료실 QR 스캔 시 (consultation + room): 자동 join → /fixed-room/PT-XXX(VAD)로 이동
-  const didAutoJoinRef = useRef(false);
-  useEffect(() => {
-    if (department !== "consultation" || !urlRoom || didAutoJoinRef.current || joinCalledRef.current) return;
-    didAutoJoinRef.current = true;
-    setStep("connecting");
-    handleJoin();
-  }, [department, urlRoom, handleJoin]);
-
-  const isConsultationAutoJoin = department === "consultation" && urlRoom;
-
   // ── 통역 시작: 새 roomId 생성 → 서버에 등록 → ChatScreen 입장 ──
   const handleJoin = useCallback(async () => {
     if (joinCalledRef.current) return;
@@ -182,6 +171,17 @@ export default function HospitalPatientJoin() {
       joinCalledRef.current = false;
     }
   }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt]);
+
+  // 진료실 QR 스캔 시 (consultation + room): 자동 join → /fixed-room/PT-XXX(VAD)로 이동
+  const didAutoJoinRef = useRef(false);
+  useEffect(() => {
+    if (department !== "consultation" || !urlRoom || didAutoJoinRef.current || joinCalledRef.current) return;
+    didAutoJoinRef.current = true;
+    setStep("connecting");
+    handleJoin();
+  }, [department, urlRoom, handleJoin]);
+
+  const isConsultationAutoJoin = department === "consultation" && urlRoom;
 
   // ── Render: Language Selection (진료실 자동 입장이면 건너뛰고 connecting 표시) ──
   if (step === "language") {
