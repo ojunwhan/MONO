@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { startKakaoLogin } from "../auth/kakaoLogin";
 import { Building2, User } from "lucide-react";
 
+// auto deploy test
+
 function MonoLogo() {
   return (
     <div className="text-[40px] font-bold tracking-[0.2em] leading-none">
