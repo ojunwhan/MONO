@@ -134,6 +134,7 @@ export default function HospitalApp() {
   const template = searchParams.get("template") || "";
   const kiosk = searchParams.get("kiosk") === "true";
   const urlDept = searchParams.get("dept") || "";
+  const urlRoom = searchParams.get("room") || "";
 
   const selectedDeptFromUrl = useMemo(
     () => (urlDept ? HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept) : null),
@@ -215,10 +216,11 @@ export default function HospitalApp() {
       .then(setAutoSaveResult).catch(() => setAutoSaveResult("none"));
   }, [step, summaryMessages, summaryDept, selectedDept, selectedLang]);
 
-  const isStaffView = template && urlDept && !kiosk;
+  const isStaffView = template && (urlDept || urlRoom) && !kiosk;
   const isKioskView = template && urlDept && kiosk;
   const isKioskDeptPicker = kiosk && template && !urlDept;
   const isAdminMode = !isStaffView && !isKioskView && !isKioskDeptPicker;
+  const staffDept = selectedDeptFromUrl || (template === "consultation" && urlRoom ? { id: "consultation", labelKo: "진료실", label: "Consultation", icon: "🩺" } : null);
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); setSelectedDept(null); setSearchParams({}); };
@@ -415,11 +417,12 @@ export default function HospitalApp() {
     );
   }
 
-  if (isStaffView && selectedDeptFromUrl) {
+  if (isStaffView && staffDept) {
     return (
       <StaffModePanel
         template={template}
-        selectedDept={selectedDeptFromUrl}
+        selectedDept={staffDept}
+        consultationRoomId={urlRoom || null}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
         showLangGrid={showLangGrid}
@@ -435,27 +438,66 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
+function StaffModePanel({ template, selectedDept, consultationRoomId, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
   const [waitingPatients, setWaitingPatients] = useState([]);
+  const [consultationRooms, setConsultationRooms] = useState([]);
+  const [assignDropdownRoomId, setAssignDropdownRoomId] = useState(null);
+  const [acceptedRoomIds, setAcceptedRoomIds] = useState(new Set());
   const [staffJoined, setStaffJoined] = useState(false);
   const joinedRef = useRef(false);
+  const isReception = template === "reception";
+  const isConsultationRoom = template === "consultation" && consultationRoomId;
 
   useEffect(() => {
-    if (!selectedDept || joinedRef.current) return;
+    if (joinedRef.current) return;
     joinedRef.current = true;
-    const doWatch = () => { socket.emit("hospital:watch", { department: selectedDept.id }); setStaffJoined(true); };
-    if (socket.connected) doWatch();
-    else socket.connect();
-    const onConnect = () => doWatch();
-    socket.on("connect", onConnect);
-    return () => {
-      socket.off("connect", onConnect);
-      if (socket.connected && selectedDept) socket.emit("hospital:unwatch", { department: selectedDept.id });
-      joinedRef.current = false;
-    };
-  }, [selectedDept]);
+    if (isConsultationRoom) {
+      const doWatch = () => {
+        socket.emit("hospital:consultation:watch", { consultationRoomId });
+        setStaffJoined(true);
+      };
+      if (socket.connected) doWatch();
+      else socket.connect();
+      const onConnect = () => doWatch();
+      socket.on("connect", onConnect);
+      return () => {
+        socket.off("connect", onConnect);
+        if (socket.connected) socket.emit("hospital:consultation:unwatch", { consultationRoomId });
+        joinedRef.current = false;
+      };
+    } else {
+      if (!selectedDept) return;
+      const doWatch = () => {
+        socket.emit("hospital:watch", { department: selectedDept.id });
+        setStaffJoined(true);
+      };
+      if (socket.connected) doWatch();
+      else socket.connect();
+      const onConnect = () => doWatch();
+      socket.on("connect", onConnect);
+      return () => {
+        socket.off("connect", onConnect);
+        if (socket.connected && selectedDept) socket.emit("hospital:unwatch", { department: selectedDept.id });
+        joinedRef.current = false;
+      };
+    }
+  }, [selectedDept, isConsultationRoom, consultationRoomId]);
 
   useEffect(() => {
+    if (!isConsultationRoom) return;
+    const fetchConsultationWaiting = () => {
+      fetch(`/api/hospital/waiting?consultationRoom=${encodeURIComponent(consultationRoomId)}`, { credentials: "include" })
+        .then((r) => r.json())
+        .then((data) => { if (data.success && data.waiting) setWaitingPatients(data.waiting); })
+        .catch(() => {});
+    };
+    fetchConsultationWaiting();
+    const t = setInterval(fetchConsultationWaiting, 4000);
+    return () => clearInterval(t);
+  }, [isConsultationRoom, consultationRoomId]);
+
+  useEffect(() => {
+    if (isConsultationRoom) return;
     if (!selectedDept) return;
     const onPatientWaiting = (data) => {
       playNotificationSound();
@@ -474,6 +516,7 @@ function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang,
               language: data?.language || "unknown",
               patientToken: data?.patientToken != null ? data.patientToken : null,
               createdAt: data?.createdAt || new Date().toISOString(),
+              sessionId: data?.sessionId ?? null,
             }]
       );
     };
@@ -482,7 +525,70 @@ function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang,
     socket.on("hospital:patient-waiting", onPatientWaiting);
     socket.on("hospital:patient-picked", onPatientPicked);
     return () => { socket.off("hospital:patient-waiting", onPatientWaiting); socket.off("hospital:patient-picked", onPatientPicked); };
-  }, [selectedDept]);
+  }, [selectedDept, isConsultationRoom]);
+
+  useEffect(() => {
+    if (!isConsultationRoom) return;
+    const onPatientAssigned = (data) => {
+      playNotificationSound();
+      setWaitingPatients((prev) =>
+        prev.some((p) => p.roomId === data?.roomId)
+          ? prev
+          : [...prev, {
+              roomId: data?.roomId,
+              sessionId: data?.sessionId,
+              patientToken: data?.patientToken,
+              createdAt: data?.createdAt || new Date().toISOString(),
+              consultationRoomName: data?.consultationRoomName,
+            }]
+      );
+    };
+    const onEnterConsultation = (data) => {
+      if (data?.roomId) setAcceptedRoomIds((prev) => new Set(prev).add(data.roomId));
+    };
+    socket.on("hospital:patient-assigned", onPatientAssigned);
+    socket.on("hospital:enter-consultation", onEnterConsultation);
+    return () => {
+      socket.off("hospital:patient-assigned", onPatientAssigned);
+      socket.off("hospital:enter-consultation", onEnterConsultation);
+    };
+  }, [isConsultationRoom]);
+
+  useEffect(() => {
+    if (!isReception) return;
+    fetch("/api/hospital/rooms", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.rooms) {
+          setConsultationRooms((data.rooms || []).filter((r) => r.template === "consultation"));
+        }
+      })
+      .catch(() => {});
+  }, [isReception]);
+
+  const handleAssignRoom = async (patient, room) => {
+    try {
+      const r = await fetch("/api/hospital/assign-room", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: patient.roomId, consultationRoomId: room.id }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId));
+        setAssignDropdownRoomId(null);
+      }
+    } catch {}
+  };
+
+  const handleRequestEntry = (patient, consultationRoomName) => {
+    socket.emit("hospital:request-consultation-entry", {
+      roomId: patient.roomId,
+      consultationRoomId,
+      consultationRoomName: consultationRoomName || null,
+    });
+  };
 
   const handleStartInterpretation = async (patient) => {
     localStorage.setItem("myLang", selectedLang);
@@ -501,6 +607,7 @@ function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang,
       } catch {}
     }
     setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId));
+    setAcceptedRoomIds((prev) => { const s = new Set(prev); s.delete(patient.roomId); return s; });
     navTo(`/fixed-room/${patient.roomId}`, {
       state: {
         fromLang: selectedLang,
@@ -557,25 +664,73 @@ function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang,
               <div className="w-full max-w-[400px] mb-4 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Bell size={16} className="text-[#F59E0B] animate-bounce" />
-                  <span className="text-[14px] font-semibold">대기 중인 환자 ({waitingPatients.length}명)</span>
+                  <span className="text-[14px] font-semibold">
+                    {isConsultationRoom ? "대기 환자 (진료실 배정됨)" : "대기 중인 환자"} ({waitingPatients.length}명)
+                  </span>
                 </div>
                 {waitingPatients.map((patient, idx) => {
                   const waitSec = Math.floor((Date.now() - new Date(patient.createdAt).getTime()) / 1000);
                   const langInfo = getLanguageByCode(patient.language);
+                  const accepted = isConsultationRoom && acceptedRoomIds.has(patient.roomId);
+                  const showAssignDropdown = isReception && assignDropdownRoomId === patient.roomId;
                   return (
-                    <div key={patient.roomId || idx} className="flex items-center justify-between p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[28px]">🧑‍⚕️</span>
-                        <div>
-                          <p className="text-[14px] font-semibold">환자 #{idx + 1}</p>
-                          <p className="text-[11px] text-[var(--color-text-secondary)]">언어: {langInfo?.name || patient.language} · 대기 {waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}</p>
-                          {patient.patientToken && <p className="text-[10px] font-mono text-[var(--color-text-secondary)]">{patient.patientToken}</p>}
+                    <div key={patient.roomId || idx} className="flex flex-col p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-[28px]">🧑‍⚕️</span>
+                          <div className="min-w-0">
+                            <p className="text-[14px] font-semibold font-mono">{patient.roomId}</p>
+                            <p className="text-[11px] text-[var(--color-text-secondary)]">
+                              입장 {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                              {!isConsultationRoom && langInfo && ` · ${langInfo.name}`}
+                              {!isConsultationRoom && waitSec > 0 && ` · 대기 ${waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}`}
+                            </p>
+                            {accepted && <p className="text-[11px] text-green-600 dark:text-green-400 font-medium mt-0.5">✓ 진료실 입장 수락됨</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {isReception && (
+                            <>
+                              <button type="button" onClick={() => setAssignDropdownRoomId(showAssignDropdown ? null : patient.roomId)}
+                                className="px-3 py-2 rounded-[10px] bg-amber-500 text-white text-[12px] font-medium hover:bg-amber-600">
+                                진료실 배정
+                              </button>
+                              <button type="button" onClick={() => handleStartInterpretation(patient)}
+                                className="px-4 py-2 rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
+                                <Monitor size={14} /> 통역 시작
+                              </button>
+                            </>
+                          )}
+                          {isConsultationRoom && (
+                            <>
+                              <button type="button" onClick={() => handleRequestEntry(patient, patient.consultationRoomName)}
+                                className="px-3 py-2 rounded-[10px] border border-[var(--color-border)] text-[12px] font-medium hover:bg-[var(--color-bg-secondary)]">
+                                입장 요청
+                              </button>
+                              <button type="button" onClick={() => handleStartInterpretation(patient)}
+                                className="px-4 py-2 rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
+                                <Monitor size={14} /> 통역 시작
+                              </button>
+                            </>
+                          )}
+                          {template === "consultation" && !isConsultationRoom && (
+                            <button type="button" onClick={() => handleStartInterpretation(patient)}
+                              className="px-4 py-2 rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
+                              <Monitor size={14} /> 통역 시작
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <button type="button" onClick={() => handleStartInterpretation(patient)}
-                        className="px-5 py-2.5 rounded-[12px] bg-[#3B82F6] text-white text-[14px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
-                        <Monitor size={16} /> 통역 시작
-                      </button>
+                      {showAssignDropdown && consultationRooms.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800 flex flex-wrap gap-2">
+                          {consultationRooms.map((room) => (
+                            <button key={room.id} type="button" onClick={() => handleAssignRoom(patient, room)}
+                              className="px-3 py-1.5 rounded-[8px] bg-white dark:bg-[var(--color-bg)] border border-[var(--color-border)] text-[12px] font-medium hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]">
+                              {room.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -140,6 +140,8 @@ export default function FixedRoomVAD() {
   const stateSessionId = state.sessionId || null;
   const sessionIdRef = useRef(stateSessionId);
   const pendingMessages = state.pendingMessages || [];
+  const [roomAssignedBanner, setRoomAssignedBanner] = useState(null);
+  const [enterConsultationRequest, setEnterConsultationRequest] = useState(null);
   useEffect(() => {
     sessionIdRef.current = stateSessionId;
   }, [stateSessionId]);
@@ -514,6 +516,28 @@ export default function FixedRoomVAD() {
     };
   }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory]);
 
+  // ── 환자 전용: 접수→진료실 배정 알림, 진료실 입장 요청 수락 ──
+  useEffect(() => {
+    if (!isGuest || !roomId) return;
+    const onRoomAssigned = (payload) => {
+      const name = payload?.consultationRoomName || "진료실";
+      setRoomAssignedBanner(name);
+      setTimeout(() => setRoomAssignedBanner(null), 8000);
+    };
+    const onEnterRequest = (payload) => {
+      setEnterConsultationRequest({
+        roomId: payload?.roomId || roomId,
+        consultationRoomName: payload?.consultationRoomName || "진료실",
+      });
+    };
+    socket.on("hospital:room-assigned", onRoomAssigned);
+    socket.on("hospital:enter-consultation-request", onEnterRequest);
+    return () => {
+      socket.off("hospital:room-assigned", onRoomAssigned);
+      socket.off("hospital:enter-consultation-request", onEnterRequest);
+    };
+  }, [isGuest, roomId]);
+
   // ── VAD 상태 → UI 상태 동기화 ──
   useEffect(() => {
     if (step !== "interpreting") return;
@@ -651,6 +675,86 @@ export default function FixedRoomVAD() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: "hidden",
     }}>
+
+      {/* 환자: 진료실 배정 알림 배너 */}
+      {isGuest && roomAssignedBanner && (
+        <div style={{
+          padding: "10px 16px",
+          background: "#1e40af",
+          color: "white",
+          textAlign: "center",
+          fontSize: "14px",
+          fontWeight: 600,
+        }}>
+          {roomAssignedBanner}(으)로 배정되었습니다.
+        </div>
+      )}
+
+      {/* 환자: 진료실 입장 요청 모달 */}
+      {isGuest && enterConsultationRequest && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.7)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 24,
+        }}>
+          <div style={{
+            background: "#1e293b",
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 320,
+            width: "100%",
+            textAlign: "center",
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              진료실 입장 요청
+            </p>
+            <p style={{ fontSize: 13, opacity: 0.9, marginBottom: 20 }}>
+              {enterConsultationRequest.consultationRoomName}(으)로 입장하시겠습니까?
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  socket.emit("hospital:enter-consultation", { roomId: enterConsultationRequest.roomId });
+                  setEnterConsultationRequest(null);
+                }}
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#22c55e",
+                  color: "white",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                수락
+              </button>
+              <button
+                type="button"
+                onClick={() => setEnterConsultationRequest(null)}
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  background: "transparent",
+                  color: "white",
+                  fontSize: 14,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════ */}
       {/* STEP: WAITING */}

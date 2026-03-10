@@ -4374,6 +4374,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE hospital_sessions ADD COLUMN org_id TEXT");
         console.log('[hospital] ✅ added org_id column to hospital_sessions');
       }
+      if (!sesCols.some(c => c.name === 'assigned_room')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN assigned_room TEXT");
+        console.log('[hospital] ✅ added assigned_room column to hospital_sessions');
+      }
     } catch (_) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hs_patient_token ON hospital_sessions(patient_token);`); } catch (_) {}
 
@@ -4811,16 +4815,37 @@ app.get('/api/hospital/patient/:patientToken', async (req, res) => {
   }
 });
 
-// GET /api/hospital/waiting — 대기 환자 목록 조회 (department 없으면 전체)
-app.get('/api/hospital/waiting', (req, res) => {
+// GET /api/hospital/waiting — 대기 환자 목록 조회 (department= 접수 대기, consultationRoom= 진료실 배정 대기)
+app.get('/api/hospital/waiting', async (req, res) => {
   const dept = req.query.department ? String(req.query.department).trim() : null;
+  const consultationRoomId = req.query.consultationRoom ? String(req.query.consultationRoom).trim() : null;
+
+  if (consultationRoomId) {
+    try {
+      const sessions = await dbAll(
+        `SELECT id, room_id, patient_token, dept, started_at, assigned_room, created_at
+         FROM hospital_sessions WHERE assigned_room = ? AND status = 'active' ORDER BY created_at ASC`,
+        [consultationRoomId]
+      );
+      const waiting = (sessions || []).map(s => ({
+        roomId: s.room_id,
+        sessionId: s.id,
+        patientToken: s.patient_token,
+        department: s.dept,
+        createdAt: s.created_at || s.started_at,
+        assignedRoom: s.assigned_room,
+      }));
+      return res.json({ success: true, consultationRoom: consultationRoomId, waiting });
+    } catch (e) {
+      return res.status(500).json({ error: 'waiting_query_failed' });
+    }
+  }
+
   if (!dept || dept === 'all') {
-    // Return ALL waiting patients across all departments
     const all = [];
     for (const [d, list] of HOSPITAL_WAITING.entries()) {
       all.push(...list);
     }
-    // Sort by createdAt ascending
     all.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     return res.json({ success: true, department: 'all', waiting: all });
   }
@@ -4846,6 +4871,55 @@ app.delete('/api/hospital/waiting/:roomId', optionalHospitalOrg, (req, res) => {
     }
   }
   res.json({ success: true, sessionId: null });
+});
+
+// POST /api/hospital/assign-room — 접수에서 진료실 배정 (PT → 진료실 연결)
+app.post('/api/hospital/assign-room', optionalHospitalOrg, async (req, res) => {
+  try {
+    const { roomId, consultationRoomId } = req.body || {};
+    const ptRoomId = String(roomId || '').trim();
+    const consultRoomId = String(consultationRoomId || '').trim();
+    if (!ptRoomId || !consultRoomId) return res.status(400).json({ error: 'roomId_and_consultationRoomId_required' });
+
+    const session = await dbGet(
+      'SELECT id, room_id, assigned_room, patient_token FROM hospital_sessions WHERE room_id = ? AND status = ? LIMIT 1',
+      [ptRoomId, 'active']
+    );
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
+
+    const roomRow = await dbGet('SELECT id, name FROM hospital_rooms WHERE id = ? LIMIT 1', [consultRoomId]);
+    if (!roomRow) return res.status(404).json({ error: 'consultation_room_not_found' });
+
+    await dbRun('UPDATE hospital_sessions SET assigned_room = ? WHERE id = ?', [consultRoomId, session.id]);
+    const orgId = req.hospitalOrgId;
+    if (orgId) dbRun('UPDATE hospital_sessions SET org_id = ? WHERE id = ?', [orgId, session.id]).catch(() => {});
+
+    for (const [dept, list] of HOSPITAL_WAITING.entries()) {
+      const idx = list.findIndex(w => w.roomId === ptRoomId);
+      if (idx !== -1) {
+        list.splice(idx, 1);
+        io.to(`hospital:watch:${dept}`).emit('hospital:patient-picked', { roomId: ptRoomId, department: dept });
+        io.to('hospital:watch:__all__').emit('hospital:patient-picked', { roomId: ptRoomId, department: dept });
+        break;
+      }
+    }
+
+    const payload = {
+      roomId: ptRoomId,
+      sessionId: session.id,
+      consultationRoomId: consultRoomId,
+      consultationRoomName: roomRow.name,
+      patientToken: session.patient_token || null,
+      createdAt: new Date().toISOString(),
+    };
+    io.to(ptRoomId).emit('hospital:room-assigned', payload);
+    io.to(`hospital:consultation:${consultRoomId}`).emit('hospital:patient-assigned', payload);
+
+    res.json({ success: true, roomId: ptRoomId, consultationRoomId: consultRoomId, consultationRoomName: roomRow.name });
+  } catch (e) {
+    console.error('[hospital:assign-room] error:', e?.message);
+    res.status(500).json({ error: 'assign_failed' });
+  }
 });
 
 // GET /api/hospital/patient/:patientToken/history — 환자 이전 방문 기록 + 대화 요약
@@ -5297,6 +5371,52 @@ io.on('connection', (kioskSocket) => {
     const channel = `hospital:watch:${department}`;
     kioskSocket.leave(channel);
     console.log(`[hospital:unwatch] 🔇 Staff unwatching dept=${department} (socket=${kioskSocket.id})`);
+  });
+
+  // 진료실별 대기 목록 시청 (consultation room staff)
+  kioskSocket.on('hospital:consultation:watch', ({ consultationRoomId }) => {
+    if (!consultationRoomId) return;
+    const channel = `hospital:consultation:${consultationRoomId}`;
+    kioskSocket.join(channel);
+    kioskSocket._hospitalConsultationRoom = consultationRoomId;
+    console.log(`[hospital:consultation:watch] 👁️ Staff watching consultation room=${consultationRoomId} (socket=${kioskSocket.id})`);
+  });
+
+  kioskSocket.on('hospital:consultation:unwatch', ({ consultationRoomId }) => {
+    if (!consultationRoomId) return;
+    const channel = `hospital:consultation:${consultationRoomId}`;
+    kioskSocket.leave(channel);
+    if (kioskSocket._hospitalConsultationRoom === consultationRoomId) delete kioskSocket._hospitalConsultationRoom;
+    console.log(`[hospital:consultation:unwatch] 🔇 Staff unwatching consultation room=${consultationRoomId} (socket=${kioskSocket.id})`);
+  });
+
+  // 진료실 직원이 환자에게 "진료실 입장 요청" 보낼 때
+  kioskSocket.on('hospital:request-consultation-entry', async ({ roomId, consultationRoomId, consultationRoomName }) => {
+    if (!roomId) return;
+    const ptRoomId = String(roomId).trim();
+    io.to(ptRoomId).emit('hospital:enter-consultation-request', {
+      roomId: ptRoomId,
+      consultationRoomId: consultationRoomId || null,
+      consultationRoomName: consultationRoomName || null,
+    });
+  });
+
+  // 환자가 진료실 입장 수락 시
+  kioskSocket.on('hospital:enter-consultation', async ({ roomId }) => {
+    if (!roomId) return;
+    const ptRoomId = String(roomId).trim();
+    try {
+      const session = await dbGet(
+        'SELECT id, assigned_room FROM hospital_sessions WHERE room_id = ? AND status = ? LIMIT 1',
+        [ptRoomId, 'active']
+      );
+      if (session && session.assigned_room) {
+        io.to(`hospital:consultation:${session.assigned_room}`).emit('hospital:enter-consultation', {
+          roomId: ptRoomId,
+          sessionId: session.id,
+        });
+      }
+    } catch (_) {}
   });
 });
 
