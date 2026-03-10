@@ -18,6 +18,7 @@ import HospitalDashboard from "./pages/HospitalDashboard";
 import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
+import OrgSetup from "./pages/OrgSetup";
 import FixedRoom from "./pages/FixedRoom";
 import FixedRoomVAD from "./pages/FixedRoomVAD";
 import AdminLogin from "./pages/Admin/AdminLogin";
@@ -42,6 +43,9 @@ async function rootRedirectLoader({ request }) {
   const me = await fetchAuthMe();
   if (me.authenticated) {
     await syncAuthUserToLocalIdentity();
+    if (me.user?.accountType === "organization") {
+      return redirect("/hospital-dashboard");
+    }
     return redirect("/interpret");
   }
   return redirect("/login");
@@ -55,6 +59,10 @@ const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+    path: "/org-setup",
+    element: <OrgSetup />,
   },
   {
     path: "/setup",

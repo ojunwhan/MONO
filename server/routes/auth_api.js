@@ -202,6 +202,10 @@ function mapUser(user) {
     phoneNumber: user.phone_number || "",
     statusMessage: user.status_message || "",
     createdAt: user.created_at || null,
+    accountType: user.account_type === "organization" ? "organization" : "personal",
+    orgName: user.org_name || "",
+    businessNumber: user.business_number || "",
+    contactName: user.contact_name || "",
   };
 }
 

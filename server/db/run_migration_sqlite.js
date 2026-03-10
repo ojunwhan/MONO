@@ -27,6 +27,10 @@ async function main() {
     const hasKakaoId = columns.some((c) => c?.name === "kakao_id");
     const hasLineId = columns.some((c) => c?.name === "line_id");
     const hasAppleId = columns.some((c) => c?.name === "apple_id");
+    const hasAccountType = columns.some((c) => c?.name === "account_type");
+    const hasOrgName = columns.some((c) => c?.name === "org_name");
+    const hasBusinessNumber = columns.some((c) => c?.name === "business_number");
+    const hasContactName = columns.some((c) => c?.name === "contact_name");
     if (!hasPhone) {
       await exec("ALTER TABLE users ADD COLUMN phone_number TEXT;");
     }
@@ -47,6 +51,18 @@ async function main() {
     }
     if (!hasAppleId) {
       await exec("ALTER TABLE users ADD COLUMN apple_id TEXT;");
+    }
+    if (!hasAccountType) {
+      await exec("ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'personal';");
+    }
+    if (!hasOrgName) {
+      await exec("ALTER TABLE users ADD COLUMN org_name TEXT;");
+    }
+    if (!hasBusinessNumber) {
+      await exec("ALTER TABLE users ADD COLUMN business_number TEXT;");
+    }
+    if (!hasContactName) {
+      await exec("ALTER TABLE users ADD COLUMN contact_name TEXT;");
     }
   }
   const roomMembersTable = await all(

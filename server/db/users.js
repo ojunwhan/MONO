@@ -195,6 +195,25 @@ async function updateUserProfile(userId, patch) {
       ? current.phone_number || ""
       : normalizePhoneNumber(patch.phoneNumber);
 
+  const nextAccountType =
+    patch.accountType == null
+      ? (current.account_type || "personal")
+      : String(patch.accountType).trim().toLowerCase() === "organization"
+        ? "organization"
+        : "personal";
+  const nextOrgName =
+    patch.orgName == null
+      ? (current.org_name || null)
+      : String(patch.orgName || "").trim().slice(0, 120) || null;
+  const nextBusinessNumber =
+    patch.businessNumber == null
+      ? (current.business_number || null)
+      : String(patch.businessNumber || "").trim().replace(/\s/g, "").slice(0, 20) || null;
+  const nextContactName =
+    patch.contactName == null
+      ? (current.contact_name || null)
+      : String(patch.contactName || "").trim().slice(0, 60) || null;
+
   let nextMonoId = current.mono_id;
   if (patch.monoId != null) {
     const requested = normalizeMonoId(patch.monoId);
@@ -214,10 +233,14 @@ async function updateUserProfile(userId, patch) {
         avatar_url = ?,
         native_language = ?,
         phone_number = ?,
-        status_message = ?
+        status_message = ?,
+        account_type = ?,
+        org_name = ?,
+        business_number = ?,
+        contact_name = ?
     WHERE id = ?
     `,
-    [nextNickname, nextMonoId, nextAvatar, nextLang, nextPhone || null, nextStatus, targetId]
+    [nextNickname, nextMonoId, nextAvatar, nextLang, nextPhone || null, nextStatus, nextAccountType, nextOrgName, nextBusinessNumber, nextContactName, targetId]
   );
 
   return findUserById(targetId);
