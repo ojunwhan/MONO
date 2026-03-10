@@ -24,7 +24,10 @@ import {
   RefreshCw,
   Download,
   Copy,
+  LayoutGrid,
+  Plus,
 } from "lucide-react";
+import QRCode from "react-qr-code";
 import {
   BarChart,
   Bar,
@@ -44,6 +47,7 @@ const MENU_ITEMS = [
   { id: "overview", label: "통계 개요", icon: BarChart3 },
   { id: "history", label: "환자 통역 이력", icon: Users },
   { id: "departments", label: "진료과별 현황", icon: Building2 },
+  { id: "rooms", label: "방 관리", icon: LayoutGrid },
   { id: "reports", label: "보고서 출력", icon: FileText },
 ];
 
@@ -279,9 +283,213 @@ export default function HospitalDashboard() {
           {activeMenu === "overview" && <OverviewPanel />}
           {activeMenu === "history" && <HistoryPanel />}
           {activeMenu === "departments" && <DepartmentsPanel />}
+          {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
           {activeMenu === "reports" && <ReportsPanel />}
         </div>
       </main>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// ROOMS PANEL — 방 관리 (추가, QR, 인쇄, 링크 복사)
+// ═══════════════════════════════════════════
+const ROOM_TEMPLATES = [
+  { value: "reception", label: "접수 모드" },
+  { value: "consultation", label: "상담 모드" },
+];
+
+function RoomsPanel({ authUser }) {
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addName, setAddName] = useState("");
+  const [addTemplate, setAddTemplate] = useState("reception");
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchRooms = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const data = await r.json();
+      if (data.success) setRooms(data.rooms || []);
+    } catch (e) {
+      console.error("rooms fetch failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  const buildRoomUrl = useCallback(
+    (room, kiosk = false) => {
+      if (!origin) return "";
+      const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
+      const orgSuffix =
+        authUser?.accountType === "organization" && authUser?.id
+          ? `&org=${encodeURIComponent(authUser.id)}`
+          : "";
+      return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
+    },
+    [authUser, origin]
+  );
+
+  const handleAddRoom = async (e) => {
+    e.preventDefault();
+    const name = addName.trim();
+    if (!name) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch("/api/hospital/rooms", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, template: addTemplate }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        setRooms((prev) => [data.room, ...prev]);
+        setAddName("");
+        setAddTemplate("reception");
+      }
+    } catch (e) {
+      console.error("add room failed:", e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePrintQR = (room) => {
+    const kioskUrl = buildRoomUrl(room, true);
+    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(kioskUrl)}`;
+    const win = window.open("", "_blank", "width=400,height=500");
+    if (!win) return;
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8"><title>QR 인쇄 - ${room.name}</title>
+          <style>
+            body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; box-sizing: border-box; }
+            .room-name { font-size: 24px; font-weight: bold; margin-bottom: 24px; text-align: center; }
+            img { display: block; }
+          </style>
+        </head>
+        <body>
+          <div class="room-name">${room.name}</div>
+          <img src="${qrImgSrc}" alt="QR" />
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 300);
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+      <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+        <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-4">방 추가</h2>
+        <form onSubmit={handleAddRoom} className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] text-[var(--color-text-secondary)]">방 이름</label>
+            <input
+              type="text"
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              placeholder="예: 접수 데스크 1, 정형외과 진료실 2"
+              className="w-[240px] px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] text-[var(--color-text-secondary)]">템플릿</label>
+            <select
+              value={addTemplate}
+              onChange={(e) => setAddTemplate(e.target.value)}
+              className="px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            >
+              {ROOM_TEMPLATES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="h-[40px] px-4 rounded-[8px] bg-[#3B82F6] text-white text-[13px] font-medium hover:bg-[#2563EB] disabled:opacity-50 flex items-center gap-2"
+          >
+            <Plus size={16} />
+            방 추가
+          </button>
+        </form>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {rooms.map((room) => (
+          <RoomCard
+            key={room.id}
+            room={room}
+            staffUrl={buildRoomUrl(room, false)}
+            kioskUrl={buildRoomUrl(room, true)}
+            onPrintQR={handlePrintQR}
+          />
+        ))}
+      </div>
+      {rooms.length === 0 && (
+        <p className="text-[13px] text-[var(--color-text-secondary)] py-8 text-center">
+          등록된 방이 없습니다. 위에서 방을 추가해 주세요.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RoomCard({ room, staffUrl, kioskUrl, onPrintQR }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyStaff = () => {
+    navigator.clipboard?.writeText(staffUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] flex flex-col items-center">
+      <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3 text-center">
+        {room.name}
+      </h3>
+      <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
+        <QRCode value={kioskUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+      </div>
+      <div className="flex flex-wrap gap-2 w-full justify-center">
+        <button
+          type="button"
+          onClick={() => onPrintQR(room)}
+          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+        >
+          <Printer size={14} />
+          QR 인쇄
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyStaff}
+          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+        >
+          <Copy size={14} />
+          {copied ? "복사됨" : "직원 PC용 링크 복사"}
+        </button>
+      </div>
     </div>
   );
 }

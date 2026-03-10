@@ -4405,6 +4405,19 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       }
     } catch (_) {}
 
+    // hospital_rooms — 병원별 방 관리 (org_id 격리)
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS hospital_rooms (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        template TEXT NOT NULL DEFAULT 'reception',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_rooms_org ON hospital_rooms(org_id);`); } catch (_) {}
+    console.log('[hospital] ✅ hospital_rooms table ready');
+
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages + patient_token columns)');
 
     // ── ROOMS ↔ DB 동기화: 서버 시작 시 active 병원 세션 복원 ──
@@ -5186,6 +5199,40 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalOrg, async 
     res.json({ success: true, session, messages });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
+  }
+});
+
+// GET /api/hospital/rooms — 병원별 방 목록 (org 격리)
+app.get('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
+  try {
+    const orgId = req.hospitalOrgId;
+    const rooms = await dbAll(
+      'SELECT id, org_id, name, template, created_at FROM hospital_rooms WHERE org_id = ? ORDER BY created_at DESC',
+      [orgId]
+    );
+    res.json({ success: true, rooms: rooms || [] });
+  } catch (e) {
+    res.status(500).json({ error: 'rooms_query_failed' });
+  }
+});
+
+// POST /api/hospital/rooms — 방 추가 (org 필수)
+app.post('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
+  try {
+    const orgId = req.hospitalOrgId;
+    const { name, template } = req.body || {};
+    const roomName = String(name || '').trim();
+    const roomTemplate = (template === 'consultation' ? 'consultation' : 'reception');
+    if (!roomName) return res.status(400).json({ error: 'name_required' });
+    const id = uuidv4();
+    await dbRun(
+      'INSERT INTO hospital_rooms (id, org_id, name, template) VALUES (?, ?, ?, ?)',
+      [id, orgId, roomName, roomTemplate]
+    );
+    const room = await dbGet('SELECT id, org_id, name, template, created_at FROM hospital_rooms WHERE id = ?', [id]);
+    res.status(201).json({ success: true, room });
+  } catch (e) {
+    res.status(500).json({ error: 'room_create_failed' });
   }
 });
 
