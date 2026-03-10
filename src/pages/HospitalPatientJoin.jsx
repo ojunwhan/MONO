@@ -41,11 +41,16 @@ export default function HospitalPatientJoin() {
   const joinCalledRef = useRef(false);
   const urlToken = searchParams.get("token") || null;
   const urlOrg = searchParams.get("org") || null;
+  const urlRoom = searchParams.get("room") || null;
+  const urlPt = searchParams.get("pt") || null;
 
-  const dept = useMemo(
-    () => HOSPITAL_DEPARTMENTS.find((d) => d.id === department) || null,
-    [department]
-  );
+  const dept = useMemo(() => {
+    const found = HOSPITAL_DEPARTMENTS.find((d) => d.id === department);
+    if (found) return found;
+    if (department === "consultation")
+      return { id: "consultation", labelKo: "진료실", label: "Consultation", icon: "🩺" };
+    return null;
+  }, [department]);
 
   // Language
   const detected = useMemo(() => detectUserLanguage(), []);
@@ -87,16 +92,22 @@ export default function HospitalPatientJoin() {
         body: JSON.stringify({ patientToken, language: lang, department: dept }),
       });
 
-      // 2. 새 room 생성 (서버가 roomId 반환)
+      // 2. 새 room 생성 또는 진료실 입장 (서버가 roomId 반환)
+      const joinBody = {
+        department: department || dept?.id || "general",
+        patientToken,
+        language: lang,
+        ...(urlOrg ? { org: urlOrg } : {}),
+      };
+      if ((department === "consultation" || dept?.id === "consultation") && urlRoom) {
+        joinBody.room = urlRoom;
+        const ptFromStorage = urlPt || (typeof localStorage !== "undefined" ? localStorage.getItem("mono_hospital_current_pt") : null);
+        if (ptFromStorage) joinBody.pt = ptFromStorage;
+      }
       const res = await fetch("/api/hospital/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          department: dept,
-          patientToken,
-          language: lang,
-          ...(urlOrg ? { org: urlOrg } : {}),
-        }),
+        body: JSON.stringify(joinBody),
       });
       const data = await res.json();
       if (!data.success || !data.roomId) {
@@ -108,8 +119,9 @@ export default function HospitalPatientJoin() {
       const guestId = `guest_${uuidv4().slice(0, 8)}`;
       const cleanName = getPatientLabel(lang);
 
-      // 3. localStorage에 언어 저장
+      // 3. localStorage에 언어 저장 + 접수 시 현재 PT 저장 (진료실 QR 스캔 시 재사용)
       localStorage.setItem("myLang", lang);
+      if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
 
       // 4. pending 메시지 조회 (직원이 보낸 오프라인 메시지)
       let pendingMessages = [];
@@ -158,7 +170,7 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate, selectedLang, urlToken, urlOrg]);
+  }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt]);
 
   // ── Render: Language Selection ──
   if (step === "language") {

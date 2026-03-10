@@ -124,6 +124,62 @@ function KioskGuideText() {
   return <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center animate-pulse h-[28px]">{messages[idx]}</p>;
 }
 
+// 진료실 키오스크: QR 상시 표시 + patient-arrived 시 VAD 대화창으로 전환
+function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams, navTo }) {
+  const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
+  const isConsultation = template === "consultation";
+  const qrUrl = isConsultation
+    ? `${window.location.origin}/hospital/join/consultation?room=${encodeURIComponent(urlRoom)}${urlOrg ? `&org=${encodeURIComponent(urlOrg)}` : ""}`
+    : `${window.location.origin}/hospital/join/reception${urlOrg ? `?org=${encodeURIComponent(urlOrg)}` : ""}`;
+  const displayName = roomName || staffDept.labelKo;
+
+  useEffect(() => {
+    if (!isConsultation || !urlRoom) return;
+    socket.emit("hospital:consultation:watch", { consultationRoomId: urlRoom });
+    const onArrived = (payload) => {
+      if (payload?.consultationRoomId !== urlRoom || !payload?.roomId) return;
+      const fromLang = localStorage.getItem("myLang") || "ko";
+      navTo(`/fixed-room/${payload.roomId}`, {
+        replace: false,
+        state: {
+          fromLang,
+          localName: "",
+          role: "Doctor",
+          isCreator: true,
+          siteContext: "hospital_consultation",
+          roomType: "oneToOne",
+          hospitalDept: staffDept,
+          hospitalTemplate: "consultation",
+          saveMode: false,
+          patientToken: payload.patientToken ?? null,
+          inputMode: "vad",
+          sessionId: payload.sessionId ?? null,
+        },
+      });
+    };
+    socket.on("hospital:patient-arrived", onArrived);
+    return () => {
+      socket.off("hospital:patient-arrived", onArrived);
+      socket.emit("hospital:consultation:unwatch", { consultationRoomId: urlRoom });
+    };
+  }, [isConsultation, urlRoom, navTo, staffDept]);
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
+      <div className="mb-6"><MonoLogo /></div>
+      <div className="text-center mb-4">
+        <span className="text-[64px] block mb-2">{staffDept.icon}</span>
+        <h2 className="text-[28px] font-bold">{displayName}</h2>
+        <p className="text-[14px] text-[var(--color-text-secondary)]">{staffDept.label}</p>
+      </div>
+      <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+        <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+      </div>
+      <KioskGuideText />
+    </div>
+  );
+}
+
 export default function HospitalApp() {
   const location = useLocation();
   const navTo = useNav();
@@ -272,23 +328,16 @@ export default function HospitalApp() {
   }
 
   if (hasKioskParams) {
-    const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
-    const joinDept = template === "consultation" ? "consultation" : "reception";
-    const qrUrl = `${window.location.origin}/hospital/join/${joinDept}${urlOrg ? `?org=${encodeURIComponent(urlOrg)}` : ""}`;
-    const displayName = roomName || staffDept.labelKo;
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
-        <div className="mb-6"><MonoLogo /></div>
-        <div className="text-center mb-4">
-          <span className="text-[64px] block mb-2">{staffDept.icon}</span>
-          <h2 className="text-[28px] font-bold">{displayName}</h2>
-          <p className="text-[14px] text-[var(--color-text-secondary)]">{staffDept.label}</p>
-        </div>
-        <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
-          <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-        </div>
-        <KioskGuideText />
-      </div>
+      <ConsultationKioskView
+        template={template}
+        urlRoom={urlRoom}
+        roomName={roomName}
+        staffDept={staffDept}
+        authUser={authUser}
+        searchParams={searchParams}
+        navTo={navTo}
+      />
     );
   }
 

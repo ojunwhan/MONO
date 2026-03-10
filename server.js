@@ -4407,6 +4407,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE hospital_messages ADD COLUMN org_id TEXT");
         console.log('[hospital] ✅ added org_id column to hospital_messages');
       }
+      if (!msgCols2.some(c => c.name === 'session_type')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN session_type TEXT DEFAULT 'reception'");
+        console.log('[hospital] ✅ added session_type column to hospital_messages');
+      }
     } catch (_) {}
 
     // hospital_rooms — 병원별 방 관리 (org_id 격리)
@@ -4614,14 +4618,95 @@ const KIOSK_STATIONS = new Map();
 const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, createdAt }]
 
 // POST /api/hospital/join — 환자가 QR 스캔 후 채널 연결 (환자 1명 = 채널 1개, 재방문 시 기존 채널 재사용)
+// consultation + room: 진료실 QR 스캔 시 pt(기존 PT번호) 있으면 세션 재사용 및 assigned_room 연결, 없으면 새 PT 생성
 app.post('/api/hospital/join', async (req, res) => {
   try {
-    const { department, patientToken, patientId, language, org } = req.body || {};
+    const { department, patientToken, patientId, language, org, room: consultationRoomId, pt: existingPtRoomId } = req.body || {};
     const dept = String(department || 'general').trim();
     const pToken = patientToken ? String(patientToken).trim() : (patientId ? String(patientId).trim() : null);
     const lang = language ? String(language).trim() : null;
     const orgId = org ? String(org).trim() : null;
+    const consultRoomId = consultationRoomId ? String(consultationRoomId).trim() : null;
+    const ptRoomId = existingPtRoomId ? String(existingPtRoomId).trim() : null;
     const hospitalSiteContext = `hospital_${dept}`;
+
+    // ── 진료실 입장 (consultation + room): 기존 PT 재사용 또는 새 PT, assigned_room 설정 후 patient-arrived 알림 ──
+    if (dept === 'consultation' && consultRoomId) {
+      const roomRow = await dbGet('SELECT id, name FROM hospital_rooms WHERE id = ? LIMIT 1', [consultRoomId]);
+      if (!roomRow) return res.status(400).json({ error: 'consultation_room_not_found' });
+
+      let roomId;
+      let sessionId;
+      let isExistingSession = false;
+
+      if (ptRoomId) {
+        const existingSession = await dbGet(
+          'SELECT id, room_id, patient_token FROM hospital_sessions WHERE room_id = ? AND status = ? LIMIT 1',
+          [ptRoomId, 'active']
+        );
+        if (existingSession) {
+          await dbRun('UPDATE hospital_sessions SET assigned_room = ? WHERE id = ?', [consultRoomId, existingSession.id]);
+          roomId = existingSession.room_id;
+          sessionId = existingSession.id;
+          isExistingSession = true;
+          if (!ROOMS.has(roomId)) {
+            ROOMS.set(roomId, {
+              roomType: 'oneToOne',
+              ownerLang: 'auto',
+              guestLang: lang ? mapLang(lang) : 'auto',
+              siteContext: 'hospital_consultation',
+              locked: true,
+              ownerPid: null,
+              participants: {},
+              callSignCounters: {},
+              expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+              hospitalMode: true,
+              department: 'consultation',
+              patientToken: existingSession.patient_token,
+              hospitalSessionId: sessionId,
+            });
+          }
+        }
+      }
+
+      if (!roomId) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let candidate;
+        let exists;
+        do {
+          candidate = 'PT-';
+          for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
+          exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
+        } while (exists);
+        roomId = candidate;
+        sessionId = uuidv4();
+        const createdAt = new Date().toISOString();
+        await dbRun(
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, assigned_room)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+          [sessionId, pToken || null, roomId, 'consultation', createdAt, pToken || 'auto', 'hospital', orgId, consultRoomId]
+        );
+        ROOMS.set(roomId, {
+          roomType: 'oneToOne',
+          ownerLang: 'auto',
+          guestLang: lang ? mapLang(lang) : 'auto',
+          siteContext: 'hospital_consultation',
+          locked: true,
+          ownerPid: null,
+          participants: {},
+          callSignCounters: {},
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          hospitalMode: true,
+          department: 'consultation',
+          patientToken: pToken,
+          hospitalSessionId: sessionId,
+        });
+      }
+
+      const payload = { roomId, sessionId, consultationRoomId: consultRoomId, consultationRoomName: roomRow.name, patientToken: pToken || null };
+      io.to(`hospital:consultation:${consultRoomId}`).emit('hospital:patient-arrived', payload);
+      return res.json({ success: true, roomId, patientToken: pToken || undefined, isExistingSession, sessionId });
+    }
 
     // 1) patientToken으로 hospital_patients upsert
     if (pToken) {
@@ -5069,7 +5154,7 @@ app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
   }
 });
 
-// POST /api/hospital/message — 병원 대화 메시지 저장 (org 소유 세션만)
+// POST /api/hospital/message — 병원 대화 메시지 저장 (org 소유 세션만, session_type: reception|consultation)
 app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
@@ -5077,13 +5162,14 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!sessionId || !roomId || !originalText) {
       return res.status(400).json({ error: 'missing_fields' });
     }
-    const session = await dbGet('SELECT id FROM hospital_sessions WHERE id = ? AND (org_id IS NULL OR org_id = ?) LIMIT 1', [sessionId, orgId]);
+    const session = await dbGet('SELECT id, assigned_room FROM hospital_sessions WHERE id = ? AND (org_id IS NULL OR org_id = ?) LIMIT 1', [sessionId, orgId]);
     if (!session) return res.status(404).json({ error: 'session_not_found' });
+    const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
     await dbRun(
-      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '', orgId]
+      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '', orgId, sessionType]
     );
     res.json({ success: true, id: msgId });
   } catch (e) {
