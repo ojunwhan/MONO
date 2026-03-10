@@ -123,12 +123,7 @@ export default function HospitalPatientJoin() {
       localStorage.setItem("myLang", lang);
       if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
 
-      // 진료실 입장: 대화창 열지 않고 안내 화면만 표시 (태블릿이 VAD 게스트로 참여)
       const isConsultationJoin = department === "consultation" && urlRoom;
-      if (isConsultationJoin) {
-        setStep("consultation_connected");
-        return;
-      }
 
       // 4. pending 메시지 조회 (직원이 보낸 오프라인 메시지)
       let pendingMessages = [];
@@ -138,7 +133,42 @@ export default function HospitalPatientJoin() {
         if (pendingData.ok && Array.isArray(pendingData.messages)) pendingMessages = pendingData.messages;
       } catch (_) {}
 
-      // 5. guest session 저장
+      if (isConsultationJoin) {
+        // 상담실: 환자 폰 → /fixed-room/:roomId (FixedRoomVAD, VAD)
+        sessionStorage.setItem(
+          "mono_guest",
+          JSON.stringify({
+            roomId,
+            lang,
+            name: cleanName,
+            guestId,
+            siteContext: "hospital_consultation",
+            roomType: "oneToOne",
+            joinedAt: Date.now(),
+            patientToken,
+          })
+        );
+        navigate(`/fixed-room/${roomId}`, {
+          replace: true,
+          state: {
+            fromLang: lang,
+            localName: cleanName,
+            guestId,
+            isGuest: true,
+            isCreator: false,
+            roleHint: "guest",
+            siteContext: "hospital_consultation",
+            roomType: "oneToOne",
+            hospitalDept: dept,
+            patientToken,
+            sessionId: data.sessionId,
+            pendingMessages,
+          },
+        });
+        return;
+      }
+
+      // 접수처: 환자 폰 → /room/:roomId (ChatScreen, PTT)
       sessionStorage.setItem(
         "mono_guest",
         JSON.stringify({
@@ -152,22 +182,15 @@ export default function HospitalPatientJoin() {
           patientToken,
         })
       );
-
-      // 6. FixedRoomVAD로 이동 (환자 = 게스트). sessionId, pendingMessages 전달
-      navigate(`/fixed-room/${roomId}`, {
+      navigate(`/room/${roomId}`, {
         replace: true,
         state: {
           fromLang: lang,
           localName: cleanName,
           guestId,
-          isGuest: true,
-          isCreator: false,
-          roleHint: "guest",
           siteContext: `hospital_${department}`,
           roomType: "oneToOne",
-          hospitalDept: dept,
           patientToken,
-          sessionId: data.sessionId,
           pendingMessages,
         },
       });
@@ -346,35 +369,6 @@ export default function HospitalPatientJoin() {
               : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Render: 진료실 연결 완료 (환자 폰은 안내만, 태블릿이 VAD 대화창) ──
-  if (step === "consultation_connected") {
-    return (
-      <div
-        style={{
-          minHeight: "100dvh",
-          background: "#ffffff",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "32px 24px",
-          textAlign: "center",
-        }}
-      >
-        <MonoLogo />
-        <p style={{ marginTop: "24px", fontSize: "20px", color: "#1a1a1a", fontWeight: 600 }}>
-          진료실 연결되었습니다.
-        </p>
-        <p style={{ marginTop: "12px", fontSize: "16px", color: "#374151" }}>
-          태블릿을 확인해주세요.
-        </p>
-        <p style={{ marginTop: "32px", fontSize: "12px", color: "#9ca3af" }}>
-          Powered by MONO Medical Interpreter
-        </p>
       </div>
     );
   }
