@@ -204,9 +204,11 @@ function InterpretingVAD({
     return () => { pauseVadRef.current = null; };
   }, [vad.pause, pauseVadRef]);
 
+  // VAD 로딩 완료 후에만 start 호출 (로딩 중 호출 시 동작 안 함)
   useEffect(() => {
+    if (vad.loading || vad.errored) return;
     vad.start().catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vad.loading, vad.errored]);
 
   useEffect(() => {
     if (vad.loading) { setStatus(STATUS.LOADING); return; }
