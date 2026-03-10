@@ -227,6 +227,16 @@ export default function HospitalApp() {
     }
   }, [shouldRedirect, navTo]);
 
+  // 환자가 진료실 키오스크 URL을 스캔한 경우(폰): join URL로 리다이렉트 → HospitalPatientJoin → VAD
+  useEffect(() => {
+    if (!hasKioskParams || template !== "consultation" || !urlRoom) return;
+    const w = typeof window !== "undefined" ? window.innerWidth : 1024;
+    if (w > 768) return;
+    const org = searchParams.get("org") || "";
+    const joinUrl = `/hospital/join/consultation?room=${encodeURIComponent(urlRoom)}${org ? `&org=${encodeURIComponent(org)}` : ""}`;
+    navTo(joinUrl, { replace: true });
+  }, [hasKioskParams, template, urlRoom, searchParams, navTo]);
+
   useEffect(() => {
     if ((hasStaffParams || hasKioskParams) && urlRoom) {
       fetch("/api/hospital/rooms", { credentials: "include" })

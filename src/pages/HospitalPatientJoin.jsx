@@ -72,6 +72,17 @@ export default function HospitalPatientJoin() {
     setShowLangGrid(false);
   }, []);
 
+  // 진료실 QR 스캔 시 (consultation + room): 자동 join → /fixed-room/PT-XXX(VAD)로 이동
+  const didAutoJoinRef = useRef(false);
+  useEffect(() => {
+    if (department !== "consultation" || !urlRoom || didAutoJoinRef.current || joinCalledRef.current) return;
+    didAutoJoinRef.current = true;
+    setStep("connecting");
+    handleJoin();
+  }, [department, urlRoom, handleJoin]);
+
+  const isConsultationAutoJoin = department === "consultation" && urlRoom;
+
   // ── 통역 시작: 새 roomId 생성 → 서버에 등록 → ChatScreen 입장 ──
   const handleJoin = useCallback(async () => {
     if (joinCalledRef.current) return;
@@ -172,8 +183,40 @@ export default function HospitalPatientJoin() {
     }
   }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt]);
 
-  // ── Render: Language Selection ──
+  // ── Render: Language Selection (진료실 자동 입장이면 건너뛰고 connecting 표시) ──
   if (step === "language") {
+    if (isConsultationAutoJoin) {
+      return (
+        <div
+          style={{
+            minHeight: "100dvh",
+            background: "#ffffff",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "32px 20px",
+          }}
+        >
+          <MonoLogo />
+          <div
+            style={{
+              marginTop: "32px",
+              width: "48px",
+              height: "48px",
+              border: "4px solid #e5e7eb",
+              borderTopColor: "#3B82F6",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
+            진료실 입장 중…
+          </p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      );
+    }
     return (
       <div
         style={{
@@ -289,7 +332,11 @@ export default function HospitalPatientJoin() {
           }}
         />
         <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-          {isExistingSession ? "이전 상담 채널에 다시 연결합니다" : "통역을 시작합니다"}
+          {department === "consultation"
+            ? "진료실 입장 중…"
+            : isExistingSession
+              ? "이전 상담 채널에 다시 연결합니다"
+              : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -327,7 +374,12 @@ export default function HospitalPatientJoin() {
         </p>
         <button
           type="button"
-          onClick={() => { setStep("language"); setShowLangGrid(true); joinCalledRef.current = false; }}
+          onClick={() => {
+            setStep("language");
+            setShowLangGrid(true);
+            joinCalledRef.current = false;
+            didAutoJoinRef.current = false;
+          }}
           style={{
             padding: "8px 24px",
             borderRadius: "8px",
