@@ -156,6 +156,7 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           patientToken: payload.patientToken ?? null,
           sessionId: payload.sessionId ?? null,
           inputMode: "vad",
+          consultationKioskRoomId: urlRoom,
         },
       });
     };

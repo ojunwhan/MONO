@@ -140,6 +140,7 @@ export default function FixedRoomVAD() {
   const stateSessionId = state.sessionId || null;
   const sessionIdRef = useRef(stateSessionId);
   const pendingMessages = state.pendingMessages || [];
+  const consultationKioskRoomId = state.consultationKioskRoomId || null;
   const [roomAssignedBanner, setRoomAssignedBanner] = useState(null);
   const [enterConsultationRequest, setEnterConsultationRequest] = useState(null);
   useEffect(() => {
@@ -484,7 +485,11 @@ export default function FixedRoomVAD() {
           const template = hospitalTemplate && (hospitalTemplate === "reception" || hospitalTemplate === "consultation") ? hospitalTemplate : "reception";
           navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
         } else {
-          setStep("ended");
+          if (consultationKioskRoomId) {
+            navigate(`/hospital?template=consultation&room=${encodeURIComponent(consultationKioskRoomId)}&kiosk=true`, { replace: true });
+          } else {
+            setStep("ended");
+          }
         }
       })();
     };
@@ -514,7 +519,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory]);
+  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId]);
 
   // ── 환자 전용: 접수→진료실 배정 알림, 진료실 입장 요청 수락 ──
   useEffect(() => {
