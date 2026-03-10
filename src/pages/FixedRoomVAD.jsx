@@ -1161,20 +1161,28 @@ export default function FixedRoomVAD() {
                 버튼으로 말하기 (PTT)
               </button>
             </div>
-            {/* PTT 모드: 누르고 있을 때만 마이크 동작 */}
+            {/* PTT 모드: 클릭 → 녹음 시작, 다시 클릭 → 전송 (MONO 기본 동작) */}
             {inputMode === "ptt" && (
               <div style={{ marginBottom: "10px" }}>
                 <button
                   type="button"
-                  onPointerDown={(e) => { e.preventDefault(); vad.start(); }}
-                  onPointerUp={() => vad.pause()}
-                  onPointerLeave={() => vad.pause()}
+                  onClick={async () => {
+                    if (vad.listening) {
+                      vad.pause();
+                    } else {
+                      try {
+                        await vad.start();
+                      } catch (e) {
+                        console.warn("[PTT] vad.start failed", e);
+                      }
+                    }
+                  }}
                   style={{
                     width: "100%",
                     padding: "14px",
                     borderRadius: "12px",
                     border: "none",
-                    background: "#3b82f6",
+                    background: vad.listening ? "#dc2626" : "#3b82f6",
                     color: "white",
                     fontSize: "14px",
                     fontWeight: 600,
@@ -1186,7 +1194,7 @@ export default function FixedRoomVAD() {
                   }}
                 >
                   <Mic size={18} />
-                  말하기 (버튼을 누르고 있을 때만)
+                  {vad.listening ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
                 </button>
               </div>
             )}
