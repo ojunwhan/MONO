@@ -28,6 +28,8 @@ const attachKakaoAuth = require('./server/routes/auth_kakao');
 const attachLineAuth = require('./server/routes/auth_line');
 const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
+const requireHospitalOrg = attachAuthApi.requireHospitalOrg;
+const optionalHospitalOrg = attachAuthApi.optionalHospitalOrg;
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 const cron = require('node-cron');
 const { generateCostReport } = require('./server/cost-report');
@@ -4368,6 +4370,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       if (!sesCols.some(c => c.name === 'started_at')) {
         await dbRun("ALTER TABLE hospital_sessions ADD COLUMN started_at TEXT");
       }
+      if (!sesCols.some(c => c.name === 'org_id')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN org_id TEXT");
+        console.log('[hospital] ✅ added org_id column to hospital_sessions');
+      }
     } catch (_) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hs_patient_token ON hospital_sessions(patient_token);`); } catch (_) {}
 
@@ -4392,6 +4398,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       if (!msgCols2.some(c => c.name === 'delivered')) {
         await dbRun("ALTER TABLE hospital_messages ADD COLUMN delivered INTEGER DEFAULT 0");
         console.log('[hospital] ✅ added delivered column to hospital_messages');
+      }
+      if (!msgCols2.some(c => c.name === 'org_id')) {
+        await dbRun("ALTER TABLE hospital_messages ADD COLUMN org_id TEXT");
+        console.log('[hospital] ✅ added org_id column to hospital_messages');
       }
     } catch (_) {}
 
@@ -4589,10 +4599,11 @@ const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, cre
 // POST /api/hospital/join — 환자가 QR 스캔 후 채널 연결 (환자 1명 = 채널 1개, 재방문 시 기존 채널 재사용)
 app.post('/api/hospital/join', async (req, res) => {
   try {
-    const { department, patientToken, patientId, language } = req.body || {};
+    const { department, patientToken, patientId, language, org } = req.body || {};
     const dept = String(department || 'general').trim();
     const pToken = patientToken ? String(patientToken).trim() : (patientId ? String(patientId).trim() : null);
     const lang = language ? String(language).trim() : null;
+    const orgId = org ? String(org).trim() : null;
     const hospitalSiteContext = `hospital_${dept}`;
 
     // 1) patientToken으로 hospital_patients upsert
@@ -4667,9 +4678,9 @@ app.post('/api/hospital/join', async (req, res) => {
       sessionId = uuidv4();
       try {
         await dbRun(
-          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital']
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId]
         );
       } catch (dbErr) {
         console.warn('[hospital:join] session insert warning:', dbErr?.message);
@@ -4804,14 +4815,18 @@ app.get('/api/hospital/waiting', (req, res) => {
   res.json({ success: true, department: dept, waiting: list });
 });
 
-// DELETE /api/hospital/waiting/:roomId — 대기 목록에서 제거 (통역 시작 시). 응답에 sessionId 포함.
-app.delete('/api/hospital/waiting/:roomId', (req, res) => {
+// DELETE /api/hospital/waiting/:roomId — 대기 목록에서 제거 (통역 시작 시). 로그인된 기관이면 해당 세션에 org_id 부여.
+app.delete('/api/hospital/waiting/:roomId', optionalHospitalOrg, (req, res) => {
   const { roomId } = req.params;
+  const orgId = req.hospitalOrgId;
   for (const [dept, list] of HOSPITAL_WAITING.entries()) {
     const idx = list.findIndex(w => w.roomId === roomId);
     if (idx !== -1) {
       const removed = list[idx];
       list.splice(idx, 1);
+      if (orgId && removed.sessionId) {
+        dbRun('UPDATE hospital_sessions SET org_id = ? WHERE id = ?', [orgId, removed.sessionId]).catch(() => {});
+      }
       io.to(`hospital:watch:${dept}`).emit('hospital:patient-picked', { roomId, department: dept });
       io.to('hospital:watch:__all__').emit('hospital:patient-picked', { roomId, department: dept });
       return res.json({ success: true, sessionId: removed.sessionId || null });
@@ -4967,18 +4982,21 @@ app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
   }
 });
 
-// POST /api/hospital/message — 병원 대화 메시지 저장
-app.post('/api/hospital/message', async (req, res) => {
+// POST /api/hospital/message — 병원 대화 메시지 저장 (org 소유 세션만)
+app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
   try {
+    const orgId = req.hospitalOrgId;
     const { sessionId, roomId, senderRole, senderLang, originalText, translatedText, translatedLang } = req.body || {};
     if (!sessionId || !roomId || !originalText) {
       return res.status(400).json({ error: 'missing_fields' });
     }
+    const session = await dbGet('SELECT id FROM hospital_sessions WHERE id = ? AND (org_id IS NULL OR org_id = ?) LIMIT 1', [sessionId, orgId]);
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
     const msgId = uuidv4();
     await dbRun(
-      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '']
+      `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '', orgId]
     );
     res.json({ success: true, id: msgId });
   } catch (e) {
@@ -4991,25 +5009,26 @@ app.post('/api/hospital/message', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 // GET /api/hospital/dashboard/stats — 대시보드 통계 개요
-app.get('/api/hospital/dashboard/stats', async (req, res) => {
+app.get('/api/hospital/dashboard/stats', requireHospitalOrg, async (req, res) => {
   try {
+    const orgId = req.hospitalOrgId;
     const { startDate, endDate } = req.query;
     const today = new Date().toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
 
-    // 오늘 통역 건수
+    // 오늘 통역 건수 (본인 org만)
     const todayRow = await dbGet(
-      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE DATE(created_at) = ?`, [today]
+      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE DATE(created_at) = ? AND (org_id IS NULL OR org_id = ?)`, [today, orgId]
     );
 
     // 이번 달 누적
     const monthRow = await dbGet(
-      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE created_at >= ?`, [monthStart]
+      `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE created_at >= ? AND (org_id IS NULL OR org_id = ?)`, [monthStart, orgId]
     );
 
     // 사용 언어 종류 수
     const langRow = await dbGet(
-      `SELECT COUNT(DISTINCT guest_lang) as cnt FROM hospital_sessions WHERE guest_lang IS NOT NULL AND guest_lang != ''`
+      `SELECT COUNT(DISTINCT guest_lang) as cnt FROM hospital_sessions WHERE guest_lang IS NOT NULL AND guest_lang != '' AND (org_id IS NULL OR org_id = ?)`, [orgId]
     );
 
     // 평균 통역 시간 (분)
@@ -5018,36 +5037,36 @@ app.get('/api/hospital/dashboard/stats', async (req, res) => {
          CASE WHEN ended_at IS NOT NULL AND created_at IS NOT NULL
          THEN (julianday(ended_at) - julianday(created_at)) * 24 * 60
          ELSE NULL END
-       ) as avg_min FROM hospital_sessions WHERE status = 'ended'`
+       ) as avg_min FROM hospital_sessions WHERE status = 'ended' AND (org_id IS NULL OR org_id = ?)`, [orgId]
     );
 
     // 최근 7일 일별 통역 건수
     const dailyStats = await dbAll(
       `SELECT DATE(created_at) as date, COUNT(*) as count
        FROM hospital_sessions
-       WHERE created_at >= date('now', '-7 days')
+       WHERE created_at >= date('now', '-7 days') AND (org_id IS NULL OR org_id = ?)
        GROUP BY DATE(created_at)
-       ORDER BY date ASC`
+       ORDER BY date ASC`, [orgId]
     );
 
     // 언어별 비율
     const languageStats = await dbAll(
       `SELECT guest_lang as language, COUNT(*) as count
        FROM hospital_sessions
-       WHERE guest_lang IS NOT NULL AND guest_lang != ''
+       WHERE guest_lang IS NOT NULL AND guest_lang != '' AND (org_id IS NULL OR org_id = ?)
        GROUP BY guest_lang
-       ORDER BY count DESC`
+       ORDER BY count DESC`, [orgId]
     );
 
     // 진료과별 현황
     const deptStats = await dbAll(
-      `SELECT department, COUNT(*) as count,
+      `SELECT COALESCE(department, dept) as department, COUNT(*) as count,
               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
               COUNT(DISTINCT guest_lang) as lang_count
        FROM hospital_sessions
-       WHERE department IS NOT NULL AND department != ''
-       GROUP BY department
-       ORDER BY count DESC`
+       WHERE (department IS NOT NULL AND department != '' OR dept IS NOT NULL AND dept != '') AND (org_id IS NULL OR org_id = ?)
+       GROUP BY COALESCE(department, dept)
+       ORDER BY count DESC`, [orgId]
     );
 
     res.json({
@@ -5068,19 +5087,20 @@ app.get('/api/hospital/dashboard/stats', async (req, res) => {
 });
 
 // GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (페이지네이션 + 필터)
-app.get('/api/hospital/dashboard/sessions', async (req, res) => {
+app.get('/api/hospital/dashboard/sessions', requireHospitalOrg, async (req, res) => {
   try {
+    const orgId = req.hospitalOrgId;
     const { startDate, endDate, department, language, search, page: pg, limit: lim } = req.query;
     const page = Math.max(1, Number(pg) || 1);
     const limit = Math.min(100, Math.max(1, Number(lim) || 20));
     const offset = (page - 1) * limit;
 
-    let where = '1=1';
-    const params = [];
+    let where = '(s.org_id IS NULL OR s.org_id = ?)';
+    const params = [orgId];
 
     if (startDate) { where += ' AND DATE(s.created_at) >= ?'; params.push(startDate); }
     if (endDate) { where += ' AND DATE(s.created_at) <= ?'; params.push(endDate); }
-    if (department) { where += ' AND s.department = ?'; params.push(department); }
+    if (department) { where += ' AND (s.department = ? OR s.dept = ?)'; params.push(department, department); }
     if (language) { where += ' AND (s.guest_lang = ? OR s.host_lang = ?)'; params.push(language, language); }
     if (search) {
       where += ' AND (s.chart_number LIKE ? OR s.room_id LIKE ?)';
@@ -5121,14 +5141,15 @@ app.get('/api/hospital/dashboard/sessions', async (req, res) => {
   }
 });
 
-// GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회
-app.get('/api/hospital/sessions', async (req, res) => {
+// GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회 (org 기준)
+app.get('/api/hospital/sessions', requireHospitalOrg, async (req, res) => {
+  const orgId = req.hospitalOrgId;
   const roomId = req.query.roomId ? String(req.query.roomId).trim() : null;
   if (roomId) {
     try {
       const row = await dbGet(
-        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1",
-        [roomId]
+        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' AND (org_id IS NULL OR org_id = ?) LIMIT 1",
+        [roomId, orgId]
       );
       return res.json({ success: true, sessionId: row ? row.id : null });
     } catch (e) {
@@ -5137,8 +5158,8 @@ app.get('/api/hospital/sessions', async (req, res) => {
   }
   try {
     const { chartNumber, stationId, date, limit: lim } = req.query;
-    let sql = 'SELECT * FROM hospital_sessions WHERE 1=1';
-    const params = [];
+    let sql = 'SELECT * FROM hospital_sessions WHERE (org_id IS NULL OR org_id = ?)';
+    const params = [orgId];
     if (chartNumber) { sql += ' AND chart_number = ?'; params.push(chartNumber); }
     if (stationId) { sql += ' AND station_id = ?'; params.push(stationId); }
     if (date) { sql += ' AND DATE(created_at) = ?'; params.push(date); }
@@ -5151,11 +5172,12 @@ app.get('/api/hospital/sessions', async (req, res) => {
   }
 });
 
-// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역
-app.get('/api/hospital/sessions/:sessionId/messages', async (req, res) => {
+// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (org 소유만)
+app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalOrg, async (req, res) => {
   try {
+    const orgId = req.hospitalOrgId;
     const { sessionId } = req.params;
-    const session = await dbGet('SELECT * FROM hospital_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    const session = await dbGet('SELECT * FROM hospital_sessions WHERE id = ? AND (org_id IS NULL OR org_id = ?) LIMIT 1', [sessionId, orgId]);
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const messages = await dbAll(
       'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',

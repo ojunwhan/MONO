@@ -40,6 +40,7 @@ export default function HospitalPatientJoin() {
   const navigate = useNavigate();
   const joinCalledRef = useRef(false);
   const urlToken = searchParams.get("token") || null;
+  const urlOrg = searchParams.get("org") || null;
 
   const dept = useMemo(
     () => HOSPITAL_DEPARTMENTS.find((d) => d.id === department) || null,
@@ -94,6 +95,7 @@ export default function HospitalPatientJoin() {
           department: dept,
           patientToken,
           language: lang,
+          ...(urlOrg ? { org: urlOrg } : {}),
         }),
       });
       const data = await res.json();
@@ -156,7 +158,7 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate, selectedLang, urlToken]);
+  }, [department, navigate, selectedLang, urlToken, urlOrg]);
 
   // ── Render: Language Selection ──
   if (step === "language") {

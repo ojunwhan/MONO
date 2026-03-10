@@ -168,6 +168,42 @@ function verifyToken(req, res, next) {
   }
 }
 
+/** 로그인 시에만 검사하고, organization이면 req.hospitalOrgId 설정. 비로그인/개인은 req.hospitalOrgId = null */
+async function optionalHospitalOrg(req, res, next) {
+  req.hospitalOrgId = null;
+  const token = readToken(req);
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await findUserById(payload.sub);
+    if (user && String(user.account_type || "personal") === "organization") {
+      req.hospitalOrgId = payload.sub;
+    }
+  } catch (_) {}
+  next();
+}
+
+async function requireHospitalOrg(req, res, next) {
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json({ error: "server_misconfig_jwt_secret" });
+  }
+  const token = readToken(req);
+  if (!token) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.auth = payload;
+    const user = await findUserById(payload.sub);
+    if (!user) return res.status(404).json({ error: "user_not_found" });
+    if (String(user.account_type || "personal") !== "organization") {
+      return res.status(403).json({ error: "organization_account_required" });
+    }
+    req.hospitalOrgId = payload.sub;
+    return next();
+  } catch (e) {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+}
+
 async function checkUsageLimitMiddleware(req, res, next) {
   try {
     const overview = await getUserBillingOverview(req.auth?.sub);
@@ -897,3 +933,6 @@ module.exports = function attachAuthApi(app) {
   });
 };
 
+module.exports.verifyToken = verifyToken;
+module.exports.requireHospitalOrg = requireHospitalOrg;
+module.exports.optionalHospitalOrg = optionalHospitalOrg;

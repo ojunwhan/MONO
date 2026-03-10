@@ -164,6 +164,7 @@ export default function HospitalApp() {
 
   const [copiedStaffUrl, setCopiedStaffUrl] = useState(false);
   const [copiedKioskUrl, setCopiedKioskUrl] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
 
   const [saveMode, setSaveMode] = useState(false);
   const [summaryMessages, setSummaryMessages] = useState([]);
@@ -183,6 +184,13 @@ export default function HospitalApp() {
 
   useEffect(() => {
     loadDirHandle().then((h) => { if (h) { setHasSaveDir(true); setSaveDirName(h.name || ""); } });
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => { if (data?.user) setAuthUser(data.user); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -269,7 +277,7 @@ export default function HospitalApp() {
       ? `${origin}/hospital?template=${adminTemplate}&dept=${adminDept.id}`
       : "";
     const kioskUrl = adminTemplate && adminDept
-      ? `${origin}/hospital?template=${adminTemplate}&dept=${adminDept.id}&kiosk=true`
+      ? `${origin}/hospital?template=${adminTemplate}&dept=${adminDept.id}&kiosk=true${authUser?.accountType === "organization" && authUser?.id ? `&org=${encodeURIComponent(authUser.id)}` : ""}`
       : "";
 
     const handleCopyStaffUrl = () => {
@@ -368,7 +376,8 @@ export default function HospitalApp() {
   }
 
   if (isKioskView && selectedDeptFromUrl) {
-    const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDeptFromUrl.id)}`;
+    const urlOrg = searchParams.get("org") || "";
+    const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDeptFromUrl.id)}${urlOrg ? `?org=${encodeURIComponent(urlOrg)}` : ""}`;
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
         <div className="mb-6"><MonoLogo /></div>
