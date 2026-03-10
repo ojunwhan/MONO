@@ -1,5 +1,6 @@
-// src/pages/HospitalApp.jsx — 병원 전용 진입 (두 가지 템플릿: 접수/상담)
-// template=reception | template=consultation, kiosk=true 시 QR만 표시
+// src/pages/HospitalApp.jsx
+// 설계: /hospital = 관리자 세팅(템플릿+진료과 → URL 표시+복사)
+//       /hospital?template=&dept= = 직원 PC(StaffModePanel), /hospital?template=&dept=&kiosk=true = 키오스크(QR만)
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate as useNav, useSearchParams } from "react-router-dom";
 import { detectUserLanguage } from "../constants/languageProfiles";
@@ -11,7 +12,6 @@ import QRCode from "react-qr-code";
 import socket from "../socket";
 import { playNotificationSound } from "../audio/notificationSound";
 import {
-  ChevronLeft,
   Shield,
   ShieldOff,
   Copy,
@@ -19,11 +19,11 @@ import {
   RotateCcw,
   Check,
   ClipboardList,
-  Tablet,
   Monitor,
   Bell,
   Users,
   FolderOpen,
+  Tablet,
 } from "lucide-react";
 
 function HospitalLogo() {
@@ -135,6 +135,22 @@ export default function HospitalApp() {
   const kiosk = searchParams.get("kiosk") === "true";
   const urlDept = searchParams.get("dept") || "";
 
+  const selectedDeptFromUrl = useMemo(
+    () => (urlDept ? HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept) : null),
+    [urlDept]
+  );
+
+  const [adminTemplate, setAdminTemplate] = useState(() => template === "reception" || template === "consultation" ? template : "");
+  const [adminDept, setAdminDept] = useState(() => {
+    if (urlDept) return HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept) || null;
+    return null;
+  });
+
+  const [selectedDept, setSelectedDept] = useState(() => {
+    if (urlDept) return HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept) || null;
+    return null;
+  });
+
   const detected = useMemo(() => detectUserLanguage(), []);
   const savedLang = useMemo(() => {
     const saved = localStorage.getItem("myLang");
@@ -144,12 +160,10 @@ export default function HospitalApp() {
   const initialLang = useMemo(() => savedLang || detected?.code || "ko", [detected, savedLang]);
   const [selectedLang, setSelectedLang] = useState(initialLang);
   const [showLangGrid, setShowLangGrid] = useState(false);
-
-  const [selectedDept, setSelectedDept] = useState(() => {
-    if (urlDept) return HOSPITAL_DEPARTMENTS.find((d) => d.id === urlDept) || null;
-    return null;
-  });
   const [step, setStep] = useState("choose");
+
+  const [copiedStaffUrl, setCopiedStaffUrl] = useState(false);
+  const [copiedKioskUrl, setCopiedKioskUrl] = useState(false);
 
   const [saveMode, setSaveMode] = useState(false);
   const [summaryMessages, setSummaryMessages] = useState([]);
@@ -159,8 +173,6 @@ export default function HospitalApp() {
   const [saveDirName, setSaveDirName] = useState("");
   const [autoSaveResult, setAutoSaveResult] = useState("");
   const autoSaveTriggered = useRef(false);
-
-  const [isPC] = useState(typeof window !== "undefined" && window.innerWidth >= 1024);
 
   useEffect(() => {
     if (urlDept && (template === "reception" || template === "consultation")) {
@@ -195,182 +207,10 @@ export default function HospitalApp() {
       .then(setAutoSaveResult).catch(() => setAutoSaveResult("none"));
   }, [step, summaryMessages, summaryDept, selectedDept, selectedLang]);
 
-  if (!template) {
-    return (
-      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
-        <div className="mx-auto w-full max-w-[520px] px-4 py-8">
-          <div className="flex justify-center mb-8"><HospitalLogo /></div>
-          <h1 className="text-[20px] font-bold text-center mb-2">병원 모드</h1>
-          <p className="text-[13px] text-[var(--color-text-secondary)] text-center mb-8">사용할 모드를 선택하세요</p>
-          <div className="grid grid-cols-1 gap-4 mb-8">
-            <button type="button" onClick={() => setSearchParams({ template: "reception" })}
-              className="flex items-center gap-4 p-5 rounded-[16px] border-2 border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F] transition-all text-left">
-              <span className="text-[40px]">🖥️</span>
-              <div>
-                <span className="text-[16px] font-semibold block">접수 모드</span>
-                <span className="text-[12px] text-[var(--color-text-secondary)]">접수처 · 원무과 · 약국</span>
-              </div>
-            </button>
-            <button type="button" onClick={() => setSearchParams({ template: "consultation" })}
-              className="flex items-center gap-4 p-5 rounded-[16px] border-2 border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F] transition-all text-left">
-              <span className="text-[40px]">🩺</span>
-              <div>
-                <span className="text-[16px] font-semibold block">상담 모드</span>
-                <span className="text-[12px] text-[var(--color-text-secondary)]">진료실 · 상담실 · 검사실</span>
-              </div>
-            </button>
-          </div>
-          <div className="flex justify-center gap-3">
-            <button type="button" onClick={() => navTo("/hospital/records")}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]">
-              <ClipboardList size={16} /> 통역 기록 조회
-            </button>
-            <button type="button" onClick={() => navTo("/hospital-dashboard")}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#3B82F6] text-[13px] font-medium text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]">
-              <ClipboardList size={16} /> 관리 대시보드
-            </button>
-          </div>
-          <p className="mt-8 text-center text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (kiosk && selectedDept) {
-    const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDept.id)}`;
-    return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
-        <div className="mb-6"><MonoLogo /></div>
-        <div className="text-center mb-4">
-          <span className="text-[64px] block mb-2">{selectedDept.icon}</span>
-          <h2 className="text-[28px] font-bold">{selectedDept.labelKo}</h2>
-          <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
-        </div>
-        <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
-          <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-        </div>
-        <KioskGuideText />
-        <p className="mt-6 text-[10px] text-[var(--color-text-secondary)]">
-          직원 PC: <span className="font-mono text-[#3B82F6]">/hospital?template={template}&dept={selectedDept.id}</span>
-        </p>
-      </div>
-    );
-  }
-
-  if (kiosk && !selectedDept) {
-    return (
-      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
-        <div className="mx-auto w-full max-w-[480px] px-4 py-6">
-          <div className="flex justify-center mb-6"><HospitalLogo /></div>
-          <p className="text-[14px] font-semibold text-center mb-4">진료과 선택 (키오스크)</p>
-          <div className="space-y-3">
-            {HOSPITAL_DEPARTMENTS.map((dept) => (
-              <button key={dept.id} type="button" onClick={() => setSearchParams({ template, kiosk: "true", dept: dept.id })}
-                className="w-full flex items-center gap-3 p-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-bg-secondary)] text-left">
-                <span className="text-[28px]">{dept.icon}</span>
-                <span className="text-[15px] font-medium">{dept.labelKo}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setSearchParams({ template })} className="mt-4 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">← 키오스크 취소</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (template && selectedDept && !kiosk) {
-    return (
-      <StaffModePanel
-        template={template}
-        selectedDept={selectedDept}
-        selectedLang={selectedLang}
-        setSelectedLang={setSelectedLang}
-        showLangGrid={showLangGrid}
-        setShowLangGrid={setShowLangGrid}
-        saveMode={saveMode}
-        setSaveMode={setSaveMode}
-        navTo={navTo}
-        onBack={() => { setSearchParams({ template }); setSelectedDept(null); setStep("choose"); }}
-      />
-    );
-  }
-
-  const handleDeptSelect = (dept) => {
-    setSelectedDept(dept);
-    setSearchParams({ template, dept: dept.id });
-  };
-
-  const leftPanelContent = (
-    <>
-      <div className="flex justify-center mb-8"><HospitalLogo /></div>
-      <div className="mb-6">
-        <LanguageFlagPicker selectedLang={selectedLang} showGrid={showLangGrid} onToggleGrid={() => setShowLangGrid((p) => !p)}
-          onSelect={(code) => { setSelectedLang(code); localStorage.setItem("myLang", code); setShowLangGrid(false); }} />
-      </div>
-      {!showLangGrid && (
-        <div>
-          <h2 className="text-[15px] font-semibold text-center mb-4 text-[var(--color-text)]">진료과 선택</h2>
-          {HOSPITAL_DEPARTMENTS.filter((d) => d.id === "reception").map((dept) => (
-            <button key={dept.id} type="button" onClick={() => handleDeptSelect(dept)}
-              className={`w-full flex items-center gap-4 p-4 mb-3 rounded-[16px] border-2 transition-all ${selectedDept?.id === dept.id ? "border-[#2563EB] bg-[#DBEAFE] dark:bg-[#1E4A7F]" : "border-[#3B82F6] bg-[#EFF6FF] dark:bg-[#1E3A5F]"}`}>
-              <span className="text-[36px]">{dept.icon}</span>
-              <div className="text-left">
-                <span className="text-[15px] font-semibold block">{dept.labelKo}</span>
-                <span className="text-[11px] text-[#3B82F6]">{dept.label}</span>
-              </div>
-            </button>
-          ))}
-          <div className="grid grid-cols-2 gap-3">
-            {HOSPITAL_DEPARTMENTS.filter((d) => d.id !== "reception").map((dept) => (
-              <button key={dept.id} type="button" onClick={() => handleDeptSelect(dept)}
-                className={`flex flex-col items-center gap-2 p-4 rounded-[16px] border transition-all ${selectedDept?.id === dept.id ? "border-[#3B82F6] bg-[#DBEAFE] dark:bg-[#1E4A7F]" : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6]"}`}>
-                <span className="text-[28px]">{dept.icon}</span>
-                <span className="text-[13px] font-medium">{dept.labelKo}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <button type="button" onClick={() => navTo("/hospital/records")} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]">
-          <ClipboardList size={16} /> 통역 기록 조회
-        </button>
-        <button type="button" onClick={() => navTo("/hospital-dashboard")} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#3B82F6] text-[13px] font-medium text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]">
-          <ClipboardList size={16} /> 관리 대시보드
-        </button>
-      </div>
-      <p className="mt-4 text-center text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
-    </>
-  );
-
-  const rightPanelContent = selectedDept ? (
-    <div className="flex flex-col items-center justify-center h-full px-8 py-8">
-      <div className="text-center mb-4">
-        <span className="text-[56px] block mb-2">{selectedDept.icon}</span>
-        <h2 className="text-[24px] font-bold">{selectedDept.labelKo}</h2>
-        <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
-      </div>
-      <div className="mb-4 p-4 rounded-[12px] bg-white dark:bg-[#1e293b]" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
-        <QRCode value={`${window.location.origin}/hospital/join/${encodeURIComponent(selectedDept.id)}`} size={200} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-      </div>
-      <div className="flex gap-3 mt-2">
-        <button type="button" onClick={() => window.open(`/hospital?template=${template}&kiosk=true&dept=${selectedDept.id}`, "_blank")}
-          className="flex items-center gap-2 px-4 py-2 rounded-[10px] border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg)]">
-          <Tablet size={14} /> 태블릿 QR 열기
-        </button>
-        <button type="button" onClick={() => setSearchParams({ template, dept: selectedDept.id })}
-          className="flex items-center gap-2 px-4 py-2 rounded-[10px] border border-[#3B82F6] text-[12px] font-medium text-[#3B82F6] hover:bg-[#EFF6FF]">
-          <Monitor size={14} /> 직원 PC (대기 목록)
-        </button>
-      </div>
-      <p className="mt-4 text-[11px] text-[var(--color-text-secondary)] text-center max-w-[320px]">환자가 QR을 스캔하면 방이 생성됩니다. 직원 PC에서 대기 환자를 확인하고 통역을 시작하세요.</p>
-    </div>
-  ) : (
-    <div className="text-center">
-      <span className="text-[64px] block mb-4 opacity-30">🏥</span>
-      <h3 className="text-[18px] font-semibold opacity-60">진료과를 선택하세요</h3>
-    </div>
-  );
+  const isStaffView = template && urlDept && !kiosk;
+  const isKioskView = template && urlDept && kiosk;
+  const isKioskDeptPicker = kiosk && template && !urlDept;
+  const isAdminMode = !isStaffView && !isKioskView && !isKioskDeptPicker;
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); setSelectedDept(null); setSearchParams({}); };
@@ -423,17 +263,167 @@ export default function HospitalApp() {
     );
   }
 
-  if (!isPC) {
-    return <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]"><div className="mx-auto max-w-[480px] px-4 py-6">{leftPanelContent}</div></div>;
-  }
-  return (
-    <div className="text-[var(--color-text)] flex h-[100vh] overflow-hidden">
-      <div className="w-[40%] overflow-y-auto bg-[var(--color-bg)]">
-        <div className="mx-auto max-w-[480px] px-6 py-6">{leftPanelContent}</div>
+  if (isAdminMode) {
+    const origin = window.location.origin;
+    const staffUrl = adminTemplate && adminDept
+      ? `${origin}/hospital?template=${adminTemplate}&dept=${adminDept.id}`
+      : "";
+    const kioskUrl = adminTemplate && adminDept
+      ? `${origin}/hospital?template=${adminTemplate}&dept=${adminDept.id}&kiosk=true`
+      : "";
+
+    const handleCopyStaffUrl = () => {
+      if (staffUrl) {
+        navigator.clipboard?.writeText(staffUrl).then(() => { setCopiedStaffUrl(true); setTimeout(() => setCopiedStaffUrl(false), 2000); }).catch(() => {});
+      }
+    };
+    const handleCopyKioskUrl = () => {
+      if (kioskUrl) {
+        navigator.clipboard?.writeText(kioskUrl).then(() => { setCopiedKioskUrl(true); setTimeout(() => setCopiedKioskUrl(false), 2000); }).catch(() => {});
+      }
+    };
+
+    return (
+      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+        <div className="mx-auto w-full max-w-[520px] px-4 py-8">
+          <div className="flex justify-center mb-8"><HospitalLogo /></div>
+          <h1 className="text-[20px] font-bold text-center mb-2">병원 모드 세팅</h1>
+          <p className="text-[13px] text-[var(--color-text-secondary)] text-center mb-6">관리자: 템플릿과 진료과를 선택한 뒤 아래 URL을 직원/키오스크에 전달하세요.</p>
+
+          <div className="mb-6">
+            <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-3">1. 템플릿 선택</h2>
+            <div className="grid grid-cols-1 gap-3">
+              <button type="button" onClick={() => setAdminTemplate("reception")}
+                className={`flex items-center gap-4 p-4 rounded-[16px] border-2 transition-all text-left ${adminTemplate === "reception" ? "border-[#2563EB] bg-[#DBEAFE] dark:bg-[#1E4A7F]" : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6]"}`}>
+                <span className="text-[32px]">🖥️</span>
+                <div>
+                  <span className="text-[15px] font-semibold block">접수 모드</span>
+                  <span className="text-[12px] text-[var(--color-text-secondary)]">접수처 · 원무과 · 약국</span>
+                </div>
+              </button>
+              <button type="button" onClick={() => setAdminTemplate("consultation")}
+                className={`flex items-center gap-4 p-4 rounded-[16px] border-2 transition-all text-left ${adminTemplate === "consultation" ? "border-[#2563EB] bg-[#DBEAFE] dark:bg-[#1E4A7F]" : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6]"}`}>
+                <span className="text-[32px]">🩺</span>
+                <div>
+                  <span className="text-[15px] font-semibold block">상담 모드</span>
+                  <span className="text-[12px] text-[var(--color-text-secondary)]">진료실 · 상담실 · 검사실</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-3">2. 진료과 선택</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {HOSPITAL_DEPARTMENTS.map((dept) => (
+                <button key={dept.id} type="button" onClick={() => setAdminDept(dept)}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-[12px] border transition-all ${adminDept?.id === dept.id ? "border-[#3B82F6] bg-[#DBEAFE] dark:bg-[#1E4A7F]" : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[#3B82F6]"}`}>
+                  <span className="text-[24px]">{dept.icon}</span>
+                  <span className="text-[12px] font-medium">{dept.labelKo}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {adminTemplate && adminDept && (
+            <div className="mb-6 p-4 rounded-[16px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+              <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-3">3. 접속 URL (복사 후 전달)</h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] mb-1 flex items-center gap-1"><Monitor size={12} /> 직원 PC용</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[11px] font-mono text-[#3B82F6] truncate bg-[var(--color-bg)] px-2 py-1.5 rounded">{staffUrl}</code>
+                    <button type="button" onClick={handleCopyStaffUrl} className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[12px] font-medium hover:bg-[var(--color-bg)]">
+                      {copiedStaffUrl ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}{copiedStaffUrl ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] mb-1 flex items-center gap-1"><Tablet size={12} /> 키오스크용</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[11px] font-mono text-[#3B82F6] truncate bg-[var(--color-bg)] px-2 py-1.5 rounded">{kioskUrl}</code>
+                    <button type="button" onClick={handleCopyKioskUrl} className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[12px] font-medium hover:bg-[var(--color-bg)]">
+                      {copiedKioskUrl ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}{copiedKioskUrl ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-center gap-3">
+            <button type="button" onClick={() => navTo("/hospital/records")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]">
+              <ClipboardList size={16} /> 통역 기록 조회
+            </button>
+            <button type="button" onClick={() => navTo("/hospital-dashboard")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#3B82F6] text-[13px] font-medium text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]">
+              <ClipboardList size={16} /> 관리 대시보드
+            </button>
+          </div>
+          <p className="mt-8 text-center text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
+        </div>
       </div>
-      <div className="w-[60%] overflow-y-auto bg-[var(--color-bg-secondary)] border-l border-[var(--color-border)]">{rightPanelContent}</div>
-    </div>
-  );
+    );
+  }
+
+  if (isKioskView && selectedDeptFromUrl) {
+    const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(selectedDeptFromUrl.id)}`;
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
+        <div className="mb-6"><MonoLogo /></div>
+        <div className="text-center mb-4">
+          <span className="text-[64px] block mb-2">{selectedDeptFromUrl.icon}</span>
+          <h2 className="text-[28px] font-bold">{selectedDeptFromUrl.labelKo}</h2>
+          <p className="text-[14px] text-[var(--color-text-secondary)]">{selectedDeptFromUrl.label}</p>
+        </div>
+        <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+          <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+        </div>
+        <KioskGuideText />
+      </div>
+    );
+  }
+
+  if (isKioskDeptPicker) {
+    return (
+      <div className="min-h-[100dvh] text-[var(--color-text)] bg-[var(--color-bg)]">
+        <div className="mx-auto w-full max-w-[480px] px-4 py-6">
+          <div className="flex justify-center mb-6"><HospitalLogo /></div>
+          <p className="text-[14px] font-semibold text-center mb-4">진료과 선택 (키오스크)</p>
+          <div className="space-y-3">
+            {HOSPITAL_DEPARTMENTS.map((dept) => (
+              <button key={dept.id} type="button" onClick={() => setSearchParams({ template, kiosk: "true", dept: dept.id })}
+                className="w-full flex items-center gap-3 p-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-bg-secondary)] text-left">
+                <span className="text-[28px]">{dept.icon}</span>
+                <span className="text-[15px] font-medium">{dept.labelKo}</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setSearchParams({ template })} className="mt-4 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">← 키오스크 취소</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isStaffView && selectedDeptFromUrl) {
+    return (
+      <StaffModePanel
+        template={template}
+        selectedDept={selectedDeptFromUrl}
+        selectedLang={selectedLang}
+        setSelectedLang={setSelectedLang}
+        showLangGrid={showLangGrid}
+        setShowLangGrid={setShowLangGrid}
+        saveMode={saveMode}
+        setSaveMode={setSaveMode}
+        navTo={navTo}
+        onBack={() => setSearchParams({})}
+      />
+    );
+  }
+
+  return null;
 }
 
 function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
@@ -511,6 +501,7 @@ function StaffModePanel({ template, selectedDept, selectedLang, setSelectedLang,
         siteContext: `hospital_${selectedDept.id}`,
         roomType: "oneToOne",
         hospitalDept: selectedDept,
+        hospitalTemplate: template,
         saveMode,
         patientToken: patient.patientToken ?? null,
         inputMode,

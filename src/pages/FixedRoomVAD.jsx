@@ -123,6 +123,7 @@ export default function FixedRoomVAD() {
   // ── location.state에서 수신 ──
   const siteContext = state.siteContext || "general";
   const hospitalDept = state.hospitalDept || null;
+  const hospitalTemplate = state.hospitalTemplate || "";
   const patientToken = state.patientToken || null;
   const fromLang = state.fromLang || localStorage.getItem("myLang") || "ko";
   const roleHint = state.roleHint || "owner";
@@ -478,7 +479,8 @@ export default function FixedRoomVAD() {
         await doStopInterpreting();
         if (isOwner) {
           const deptId = hospitalDept?.id || "reception";
-          navigate(`/hospital?mode=staff&dept=${deptId}`, { replace: true });
+          const template = hospitalTemplate && (hospitalTemplate === "reception" || hospitalTemplate === "consultation") ? hospitalTemplate : "reception";
+          navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
         } else {
           setStep("ended");
         }
@@ -510,7 +512,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
     };
-  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory]);
+  }, [roomId, participantId, step, active, vad, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory]);
 
   // ── VAD 상태 → UI 상태 동기화 ──
   useEffect(() => {
