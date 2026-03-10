@@ -5294,9 +5294,10 @@ app.get('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
 app.post('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
-    const { name, template } = req.body || {};
+    const { name, template: rawTemplate } = req.body || {};
     const roomName = String(name || '').trim();
-    const roomTemplate = (template === 'consultation' ? 'consultation' : 'reception');
+    const templateStr = String(rawTemplate || 'reception').toLowerCase();
+    const roomTemplate = templateStr === 'consultation' ? 'consultation' : 'reception';
     if (!roomName) return res.status(400).json({ error: 'name_required' });
     const id = uuidv4();
     await dbRun(
@@ -5307,6 +5308,22 @@ app.post('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
     res.status(201).json({ success: true, room });
   } catch (e) {
     res.status(500).json({ error: 'room_create_failed' });
+  }
+});
+
+// DELETE /api/hospital/rooms/:id — 방 삭제 (본인 org만)
+app.delete('/api/hospital/rooms/:id', requireHospitalOrg, async (req, res) => {
+  try {
+    const orgId = req.hospitalOrgId;
+    const roomId = String(req.params.id || '').trim();
+    if (!roomId) return res.status(400).json({ error: 'room_id_required' });
+    const room = await dbGet('SELECT id, org_id FROM hospital_rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'room_not_found' });
+    if (room.org_id !== orgId) return res.status(403).json({ error: 'forbidden' });
+    await dbRun('DELETE FROM hospital_rooms WHERE id = ?', [roomId]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'room_delete_failed' });
   }
 });
 

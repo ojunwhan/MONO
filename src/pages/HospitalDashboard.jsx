@@ -24,6 +24,7 @@ import {
   Copy,
   LayoutGrid,
   Plus,
+  Trash2,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import {
@@ -370,6 +371,7 @@ function RoomsPanel({ authUser }) {
             staffUrl={buildRoomUrl(room, false)}
             kioskUrl={buildRoomUrl(room, true)}
             onPrintQR={handlePrintQR}
+            onDelete={fetchRooms}
           />
         ))}
       </div>
@@ -382,8 +384,9 @@ function RoomsPanel({ authUser }) {
   );
 }
 
-function RoomCard({ room, staffUrl, kioskUrl, onPrintQR }) {
+function RoomCard({ room, staffUrl, kioskUrl, onPrintQR, onDelete }) {
   const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleCopyStaff = () => {
     navigator.clipboard?.writeText(staffUrl).then(() => {
@@ -392,11 +395,43 @@ function RoomCard({ room, staffUrl, kioskUrl, onPrintQR }) {
     }).catch(() => {});
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm(`"${room.name}" 방을 삭제하시겠습니까?`)) return;
+    setDeleting(true);
+    try {
+      const r = await fetch(`/api/hospital/rooms/${encodeURIComponent(room.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (r.ok && onDelete) await onDelete();
+    } catch (e) {
+      console.error("delete room failed:", e);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const templateLabel = room.template === "consultation" ? "상담 모드 (VAD)" : "접수 모드 (PTT)";
+
   return (
     <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] flex flex-col items-center">
-      <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3 text-center">
-        {room.name}
-      </h3>
+      <div className="w-full flex items-start justify-between gap-2 mb-2">
+        <h3 className="text-[15px] font-semibold text-[var(--color-text)] text-center flex-1 min-w-0">
+          {room.name}
+        </h3>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="flex-shrink-0 p-1.5 rounded-[8px] text-[var(--color-text-secondary)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400 disabled:opacity-50"
+          title="방 삭제"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+      <span className="text-[11px] font-medium text-[var(--color-text-secondary)] mb-3 px-2 py-1 rounded-md bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+        {templateLabel}
+      </span>
       <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
         <QRCode value={kioskUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
       </div>
