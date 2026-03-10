@@ -4378,6 +4378,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE hospital_sessions ADD COLUMN assigned_room TEXT");
         console.log('[hospital] ✅ added assigned_room column to hospital_sessions');
       }
+      if (!sesCols.some(c => c.name === 'status')) {
+        await dbRun("ALTER TABLE hospital_sessions ADD COLUMN status TEXT DEFAULT 'active'");
+        console.log('[hospital] ✅ added status column to hospital_sessions');
+      }
     } catch (_) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hs_patient_token ON hospital_sessions(patient_token);`); } catch (_) {}
 
@@ -4733,7 +4737,7 @@ app.post('/api/hospital/join', async (req, res) => {
     let existingSession = null;
     if (pToken) {
       existingSession = await dbGet(
-        `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND status = 'active' ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
+        `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
         [pToken]
       );
     }
