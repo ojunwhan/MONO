@@ -43,9 +43,6 @@ async function rootRedirectLoader({ request }) {
   const me = await fetchAuthMe();
   if (me.authenticated) {
     await syncAuthUserToLocalIdentity();
-    if (me.user?.accountType === "organization") {
-      return redirect("/hospital-dashboard");
-    }
     return redirect("/interpret");
   }
   return redirect("/login");
