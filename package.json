@@ -6,6 +6,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
+    "migrate": "node server/db/run_migration_sqlite.js",
     "db:migrate:sqlite": "node server/db/run_migration_sqlite.js",
     "sim:stress": "node scripts/stress-sim.js",
     "sim:stress:5m": "node scripts/stress-sim.js",

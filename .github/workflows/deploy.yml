@@ -23,4 +23,4 @@ jobs:
 
       - name: Deploy on server
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@15.164.59.178 "cd /home/ubuntu/mono && git fetch origin && git reset --hard origin/feature/hospital-plastic-surgery && npm run build && pm2 restart mono"
+          ssh -o StrictHostKeyChecking=no ubuntu@15.164.59.178 "cd /home/ubuntu/mono && git fetch origin && git reset --hard origin/feature/hospital-plastic-surgery && npm run migrate && npm run build && pm2 restart mono"
