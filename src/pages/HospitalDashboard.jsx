@@ -406,12 +406,20 @@ function RoomsPanel({ authUser }) {
 
 function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
   const [copied, setCopied] = useState(false);
+  const [copiedTablet, setCopiedTablet] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleCopyStaff = () => {
     navigator.clipboard?.writeText(staffUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  const handleCopyTablet = () => {
+    navigator.clipboard?.writeText(kioskUrl).then(() => {
+      setCopiedTablet(true);
+      setTimeout(() => setCopiedTablet(false), 2000);
     }).catch(() => {});
   };
 
@@ -463,6 +471,14 @@ function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
         >
           <Printer size={14} />
           QR 인쇄
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyTablet}
+          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+        >
+          <Copy size={14} />
+          {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
         </button>
         <button
           type="button"

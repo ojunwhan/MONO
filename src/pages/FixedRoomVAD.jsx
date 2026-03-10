@@ -268,10 +268,12 @@ export default function FixedRoomVAD() {
   // ── 통역 시작 공통 로직 ──
   const doStartInterpreting = useCallback(async () => {
     setStep("interpreting");
-    await vad.start();
     setActive(true);
     setStatus(STATUS.LISTENING);
-  }, [vad]);
+    if (inputMode !== "ptt") {
+      await vad.start();
+    }
+  }, [vad, inputMode]);
 
   // ── 통역 종료 공통 로직 ──
   const doStopInterpreting = useCallback(async () => {
@@ -283,6 +285,13 @@ export default function FixedRoomVAD() {
     seenIdsRef.current.clear();
     setPartnerInfo(null);
   }, [vad]);
+
+  // PTT 모드로 전환 시 자동 감지(VAD) 즉시 중지
+  useEffect(() => {
+    if (inputMode === "ptt" && step === "interpreting") {
+      vad.pause();
+    }
+  }, [inputMode, step, vad]);
 
   // ── 소켓: 이벤트 수신 ──
   useEffect(() => {
@@ -1152,6 +1161,35 @@ export default function FixedRoomVAD() {
                 버튼으로 말하기 (PTT)
               </button>
             </div>
+            {/* PTT 모드: 누르고 있을 때만 마이크 동작 */}
+            {inputMode === "ptt" && (
+              <div style={{ marginBottom: "10px" }}>
+                <button
+                  type="button"
+                  onPointerDown={(e) => { e.preventDefault(); vad.start(); }}
+                  onPointerUp={() => vad.pause()}
+                  onPointerLeave={() => vad.pause()}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    borderRadius: "12px",
+                    border: "none",
+                    background: "#3b82f6",
+                    color: "white",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <Mic size={18} />
+                  말하기 (버튼을 누르고 있을 때만)
+                </button>
+              </div>
+            )}
             {/* 텍스트 입력창 (항상 표시) */}
             <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
               <input
