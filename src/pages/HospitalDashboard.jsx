@@ -23,6 +23,7 @@ import {
   Activity,
   RefreshCw,
   Download,
+  Copy,
 } from "lucide-react";
 import {
   BarChart,
@@ -69,6 +70,35 @@ const CHART_COLORS = [
 
 const DEPT_MAP = {};
 HOSPITAL_DEPARTMENTS.forEach((d) => { DEPT_MAP[d.id] = d; });
+
+function UrlCopyRow({ label, path }) {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const fullUrl = origin ? `${origin}${path}` : path;
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(fullUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[var(--color-text-secondary)]">{label}</span>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 min-w-0 truncate text-[11px] text-[var(--color-text)] bg-[var(--color-bg)] px-2 py-1 rounded border border-[var(--color-border)]">
+          {fullUrl}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex-shrink-0 px-2 py-1 rounded-[6px] border border-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)] transition-colors whitespace-nowrap"
+        >
+          {copied ? "복사됨 ✓" : "복사"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function getLangLabel(code) {
   return LANG_LABELS[code?.toLowerCase()] || code?.toUpperCase() || "-";
@@ -178,6 +208,25 @@ export default function HospitalDashboard() {
             );
           })}
         </nav>
+
+        {/* 접속 주소 안내 */}
+        <div className="p-4 border-t border-[var(--color-border)]">
+          <h3 className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">
+            📋 접속 주소 안내
+          </h3>
+          <div className="space-y-2 text-[10px] font-mono bg-[var(--color-bg-secondary)] rounded-[8px] p-3 border border-[var(--color-border)]">
+            {[
+              { label: "🖥️ 접수 모드 (직원 PC)", path: "/hospital?template=reception" },
+              { label: "📟 접수 모드 (태블릿 키오스크)", path: "/hospital?template=reception&kiosk=true" },
+              { label: "🩺 상담 모드 (직원 PC)", path: "/hospital?template=consultation" },
+              { label: "📟 상담 모드 (태블릿 키오스크)", path: "/hospital?template=consultation&kiosk=true" },
+              { label: "📊 관리 대시보드", path: "/hospital-dashboard" },
+              { label: "📁 통역 기록 조회", path: "/hospital/records" },
+            ].map((item) => (
+              <UrlCopyRow key={item.path} label={item.label} path={item.path} />
+            ))}
+          </div>
+        </div>
 
         {/* Back button */}
         <div className="p-4 border-t border-[var(--color-border)]">

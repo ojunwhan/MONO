@@ -131,7 +131,8 @@ export default function FixedRoomVAD() {
   const isOwner = !isGuest;
   const saveMessages = state.saveMessages === true;
   const summaryOnly = state.summaryOnly === true;
-  const inputMode = state.inputMode || "ptt";
+  const inputModeInitial = state.inputMode || "ptt";
+  const [inputMode, setInputMode] = useState(inputModeInitial);
   const autoReset = state.autoReset === true;
   const orgCode = state.orgCode || "";
   const deptCode = state.deptCode || "";
@@ -182,6 +183,7 @@ export default function FixedRoomVAD() {
   const [active, setActive] = useState(false);
   const messagesEndRef = useRef(null);
   const pendingMergedRef = useRef(false);
+  const [textInputValue, setTextInputValue] = useState("");
 
   // ── 입장 시 pending 메시지(직원이 보낸 오프라인 메시지)를 목록에 반영 ──
   useEffect(() => {
@@ -555,6 +557,29 @@ export default function FixedRoomVAD() {
   const handleStopInterpreting = useCallback(() => {
     socket.emit("fixed-room:end", { roomId });
   }, [roomId]);
+
+  // ── 텍스트 메시지 전송 (send-message) ──
+  const sendTextMessage = useCallback(() => {
+    const trimmed = (textInputValue || "").trim();
+    if (!trimmed || !roomId || !participantId) return;
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: msgId,
+        originalText: trimmed,
+        translatedText: "",
+        mine: true,
+        timestamp: Date.now(),
+      },
+    ]);
+    setTextInputValue("");
+    socket.emit("send-message", {
+      roomId,
+      participantId,
+      message: { id: msgId, text: trimmed },
+    });
+  }, [roomId, participantId, textInputValue]);
 
   // ── 뒤로 가기 ──
   const handleBack = useCallback(() => {
@@ -978,6 +1003,81 @@ export default function FixedRoomVAD() {
             borderTop: "1px solid rgba(255,255,255,0.1)",
             flexShrink: 0,
           }}>
+            {/* VAD / PTT 전환 토글 */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
+              <button
+                type="button"
+                onClick={() => setInputMode("vad")}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: inputMode === "vad" ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.2)",
+                  background: inputMode === "vad" ? "rgba(34,197,94,0.2)" : "transparent",
+                  color: "white",
+                  fontSize: "12px",
+                  fontWeight: inputMode === "vad" ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                자동 감지 (VAD)
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("ptt")}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: inputMode === "ptt" ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.2)",
+                  background: inputMode === "ptt" ? "rgba(59,130,246,0.2)" : "transparent",
+                  color: "white",
+                  fontSize: "12px",
+                  fontWeight: inputMode === "ptt" ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                버튼으로 말하기 (PTT)
+              </button>
+            </div>
+            {/* 텍스트 입력창 (항상 표시) */}
+            <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+              <input
+                type="text"
+                value={textInputValue}
+                onChange={(e) => setTextInputValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
+                placeholder="텍스트 입력 후 Enter 또는 전송"
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "#1e293b",
+                  color: "white",
+                  fontSize: "14px",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                onClick={sendTextMessage}
+                disabled={!textInputValue?.trim()}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: textInputValue?.trim() ? "#3b82f6" : "#4b5563",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: textInputValue?.trim() ? "pointer" : "not-allowed",
+                }}
+              >
+                전송
+              </button>
+            </div>
             {isOwner ? (
               <button
                 onClick={handleStopInterpreting}
