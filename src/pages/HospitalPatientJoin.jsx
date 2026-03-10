@@ -123,6 +123,13 @@ export default function HospitalPatientJoin() {
       localStorage.setItem("myLang", lang);
       if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
 
+      // 진료실 입장: 대화창 열지 않고 안내 화면만 표시 (태블릿이 VAD 게스트로 참여)
+      const isConsultationJoin = department === "consultation" && urlRoom;
+      if (isConsultationJoin) {
+        setStep("consultation_connected");
+        return;
+      }
+
       // 4. pending 메시지 조회 (직원이 보낸 오프라인 메시지)
       let pendingMessages = [];
       try {
@@ -339,6 +346,35 @@ export default function HospitalPatientJoin() {
               : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Render: 진료실 연결 완료 (환자 폰은 안내만, 태블릿이 VAD 대화창) ──
+  if (step === "consultation_connected") {
+    return (
+      <div
+        style={{
+          minHeight: "100dvh",
+          background: "#ffffff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "32px 24px",
+          textAlign: "center",
+        }}
+      >
+        <MonoLogo />
+        <p style={{ marginTop: "24px", fontSize: "20px", color: "#1a1a1a", fontWeight: 600 }}>
+          진료실 연결되었습니다.
+        </p>
+        <p style={{ marginTop: "12px", fontSize: "16px", color: "#374151" }}>
+          태블릿을 확인해주세요.
+        </p>
+        <p style={{ marginTop: "32px", fontSize: "12px", color: "#9ca3af" }}>
+          Powered by MONO Medical Interpreter
+        </p>
       </div>
     );
   }

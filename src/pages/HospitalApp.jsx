@@ -138,22 +138,24 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
     socket.emit("hospital:consultation:watch", { consultationRoomId: urlRoom });
     const onArrived = (payload) => {
       if (payload?.consultationRoomId !== urlRoom || !payload?.roomId) return;
+      const ptRoomId = payload.roomId;
       const fromLang = localStorage.getItem("myLang") || "ko";
-      navTo(`/fixed-room/${payload.roomId}`, {
+      navTo(`/fixed-room/${ptRoomId}`, {
         replace: false,
         state: {
           fromLang,
           localName: "",
-          role: "Doctor",
-          isCreator: true,
+          isGuest: true,
+          isCreator: false,
+          roleHint: "guest",
           siteContext: "hospital_consultation",
           roomType: "oneToOne",
           hospitalDept: staffDept,
           hospitalTemplate: "consultation",
           saveMode: false,
           patientToken: payload.patientToken ?? null,
-          inputMode: "vad",
           sessionId: payload.sessionId ?? null,
+          inputMode: "vad",
         },
       });
     };
