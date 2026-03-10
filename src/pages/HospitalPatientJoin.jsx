@@ -160,9 +160,11 @@ export default function HospitalPatientJoin() {
             siteContext: "hospital_consultation",
             roomType: "oneToOne",
             hospitalDept: dept,
+            hospitalTemplate: "consultation",
             patientToken,
             sessionId: data.sessionId,
             pendingMessages,
+            inputMode: "vad",
           },
         });
         return;
@@ -203,51 +205,10 @@ export default function HospitalPatientJoin() {
     }
   }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt]);
 
-  // 진료실 QR 스캔 시 (consultation + room): 자동 join → /fixed-room/PT-XXX(VAD)로 이동
-  const didAutoJoinRef = useRef(false);
-  useEffect(() => {
-    if (department !== "consultation" || !urlRoom || didAutoJoinRef.current || joinCalledRef.current) return;
-    didAutoJoinRef.current = true;
-    setStep("connecting");
-    handleJoin();
-  }, [department, urlRoom, handleJoin]);
+  // 상담실(consultation)도 접수처와 동일하게 언어 선택 후 "통역 시작" 클릭 시에만 join (자동 join 제거 → 언어 선택 화면 건너뛰기 방지)
 
-  const isConsultationAutoJoin = department === "consultation" && urlRoom;
-
-  // ── Render: Language Selection (진료실 자동 입장이면 건너뛰고 connecting 표시) ──
+  // ── Render: Language Selection ──
   if (step === "language") {
-    if (isConsultationAutoJoin) {
-      return (
-        <div
-          style={{
-            minHeight: "100dvh",
-            background: "#ffffff",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "32px 20px",
-          }}
-        >
-          <MonoLogo />
-          <div
-            style={{
-              marginTop: "32px",
-              width: "48px",
-              height: "48px",
-              border: "4px solid #e5e7eb",
-              borderTopColor: "#3B82F6",
-              borderRadius: "50%",
-              animation: "spin 0.8s linear infinite",
-            }}
-          />
-          <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-            진료실 입장 중…
-          </p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      );
-    }
     return (
       <div
         style={{
@@ -409,7 +370,6 @@ export default function HospitalPatientJoin() {
             setStep("language");
             setShowLangGrid(true);
             joinCalledRef.current = false;
-            didAutoJoinRef.current = false;
           }}
           style={{
             padding: "8px 24px",
