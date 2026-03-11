@@ -3261,8 +3261,7 @@ io.on('connection', (socket) => {
       // ══════════════════════════════════════
       if (roomType === "oneToOne") {
         const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
-        if (!otherPid) { console.log("[1:1] no other participant"); return; }
-        const otherP = meta.participants[otherPid];
+        const otherP = otherPid ? meta.participants[otherPid] : null;
         const toLang = otherP?.lang || "en";
 
         // Resolve sender display name for receiver's language
@@ -3316,9 +3315,11 @@ io.on('connection', (socket) => {
         if (isGarbageText(translated)) return;
 
         // → Other: 번역 시 스트리밍으로 이미 전송됨. 동일 언어 시 receive-message로 한 번에 전송
-        if (otherP?.socketId) {
+        // 태블릿→의사 PC: otherP가 없을 때도 같은 방(roomId)의 다른 소켓에 전달
+        const targetSocketId = otherP?.socketId;
+        if (targetSocketId) {
           if (fromLang === toLang) {
-            io.to(otherP.socketId).emit("receive-message", {
+            io.to(targetSocketId).emit("receive-message", {
               id: msgId, roomId, roomType,
               senderPid: participantId,
               senderDisplayName,
@@ -3329,13 +3330,26 @@ io.on('connection', (socket) => {
             });
           }
           addToRoomContext(roomId, { text: translated || finalText, lang: toLang, role: 'assistant' });
-        socket.emit("message-status", {
-          roomId,
-          messageId: msgId,
-          participantId: otherPid,
-          status: "delivered",
-          at: Date.now(),
-        });
+          if (otherPid) {
+            socket.emit("message-status", {
+              roomId,
+              messageId: msgId,
+              participantId: otherPid,
+              status: "delivered",
+              at: Date.now(),
+            });
+          }
+        } else {
+          socket.to(roomId).emit("receive-message", {
+            id: msgId, roomId, roomType,
+            senderPid: participantId,
+            senderDisplayName,
+            senderCallSign: senderDisplayName,
+            originalText: finalText, translatedText: translated,
+            text: translated || finalText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
+          });
+          addToRoomContext(roomId, { text: translated || finalText, lang: toLang, role: 'assistant' });
         }
         // Always send push for background/lock-screen reliability.
         // SW suppresses notification when app window is visible.
@@ -3757,8 +3771,7 @@ io.on('connection', (socket) => {
     // ══════════════════════════════════════
     if (roomType === "oneToOne") {
       const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
-      if (!otherPid) return;
-      const otherP = meta.participants[otherPid];
+      const otherP = otherPid ? meta.participants[otherPid] : null;
       const toLang = otherP?.lang || "en";
 
       // Sender's display name adapted to receiver's language
@@ -3784,8 +3797,9 @@ io.on('connection', (socket) => {
       }
 
       // → Other (sender name adapted to receiver's language)
-      if (otherP?.socketId) {
-        io.to(otherP.socketId).emit('receive-message', {
+      const targetSocketId = otherP?.socketId;
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('receive-message', {
           id, roomId, roomType,
           senderPid: participantId,
           senderDisplayName,
@@ -3795,18 +3809,31 @@ io.on('connection', (socket) => {
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
         addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
-        io.to(otherP.socketId).emit("notify", {
+        io.to(targetSocketId).emit("notify", {
           title: senderDisplayName || "MONO",
           body: draft?.substring(0, 50) || "",
           roomId,
         });
-        socket.emit("message-status", {
-          roomId,
-          messageId: id,
-          participantId: otherPid,
-          status: "delivered",
-          at: Date.now(),
+        if (otherPid) {
+          socket.emit("message-status", {
+            roomId,
+            messageId: id,
+            participantId: otherPid,
+            status: "delivered",
+            at: Date.now(),
+          });
+        }
+      } else {
+        socket.to(roomId).emit('receive-message', {
+          id, roomId, roomType,
+          senderPid: participantId,
+          senderDisplayName,
+          senderCallSign: senderDisplayName,
+          originalText: trimmedText, translatedText: draft,
+          text: draft || trimmedText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
+        addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
       }
       // Push only when receiver is not actively viewing this room in foreground.
       maybeSendPushToUser(otherPid, {
@@ -3820,9 +3847,13 @@ io.on('connection', (socket) => {
       let finalizedForTts = draft;
       try {
         const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
-        if (!isGarbageText(hq) && otherP?.socketId) {
+        if (!isGarbageText(hq)) {
           finalizedForTts = hq;
-          io.to(otherP.socketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+          if (targetSocketId) {
+            io.to(targetSocketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+          } else {
+            socket.to(roomId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+          }
         }
         // ── Hospital: update translated text ──
         if (meta.hospitalSessionId || meta.hospitalMode) {
@@ -3835,11 +3866,18 @@ io.on('connection', (socket) => {
       // TTS → other (typed messages also get spoken)
       try {
         const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
-        if (ttsBuffer && otherP?.socketId) {
-          io.to(otherP.socketId).emit("tts_audio", {
-            senderPid: participantId, format: "mp3",
-            audio: ttsBuffer.toString("base64"),
-          });
+        if (ttsBuffer) {
+          if (targetSocketId) {
+            io.to(targetSocketId).emit("tts_audio", {
+              senderPid: participantId, format: "mp3",
+              audio: ttsBuffer.toString("base64"),
+            });
+          } else {
+            socket.to(roomId).emit("tts_audio", {
+              senderPid: participantId, format: "mp3",
+              audio: ttsBuffer.toString("base64"),
+            });
+          }
         }
       } catch (e) { console.warn("[tts:send-msg]:", e?.message); }
 
@@ -5222,8 +5260,8 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
 
     // Fetch messages per session
     for (const sess of sessions) {
-      sess.messages = await dbAll(
-        `SELECT id, sender_role, original_text, translated_text, lang, created_at
+        sess.messages = await dbAll(
+        `SELECT id, sender_role, original_text, translated_text, COALESCE(sender_lang, lang) as lang, created_at
          FROM hospital_messages WHERE room_id = ? ORDER BY created_at ASC LIMIT 200`,
         [sess.room_id]
       ).catch(() => []);

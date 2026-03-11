@@ -64,11 +64,17 @@ export default function HospitalPatientJoin() {
     savedLang || detected?.code || "en"
   );
   const [showLangGrid, setShowLangGrid] = useState(true);
-  const [step, setStep] = useState("language"); // 'language' | 'connecting' | 'error'
+  const [step, setStep] = useState("language"); // 'language' | 'connecting' | 'error' | 'patientWaiting'
   const [error, setError] = useState("");
   const [isExistingSession, setIsExistingSession] = useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
   const [localHistoryList, setLocalHistoryList] = useState([]);
+  const [patientWaitingRoomId, setPatientWaitingRoomId] = useState(null);
+  const [patientWaitingToken, setPatientWaitingToken] = useState(null);
+  const [patientWaitingSessionId, setPatientWaitingSessionId] = useState(null);
+  const [serverHistoryOpen, setServerHistoryOpen] = useState(false);
+  const [serverHistory, setServerHistory] = useState({ sessions: [] });
+  const [serverHistoryLoading, setServerHistoryLoading] = useState(false);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -138,39 +144,11 @@ export default function HospitalPatientJoin() {
       } catch (_) {}
 
       if (isConsultationJoin) {
-        // 상담실: 환자 폰 → /fixed-room/:roomId (FixedRoomVAD, VAD)
-        sessionStorage.setItem(
-          "mono_guest",
-          JSON.stringify({
-            roomId,
-            lang,
-            name: cleanName,
-            guestId,
-            siteContext: "hospital_consultation",
-            roomType: "oneToOne",
-            joinedAt: Date.now(),
-            patientToken,
-          })
-        );
-        navigate(`/fixed-room/${roomId}`, {
-          replace: true,
-          state: {
-            fromLang: lang,
-            localName: cleanName,
-            guestId,
-            isGuest: true,
-            isCreator: false,
-            roleHint: "guest",
-            siteContext: "hospital_consultation",
-            roomType: "oneToOne",
-            hospitalDept: dept,
-            hospitalTemplate: "consultation",
-            patientToken,
-            sessionId: data.sessionId,
-            pendingMessages,
-            inputMode: urlInputMode === "ptt" ? "ptt" : "vad",
-          },
-        });
+        // 상담실: 환자 폰은 방에 참여하지 않음. PT-XXXXXX 발급 후 대기 화면만 표시. 대화는 태블릿↔의사 PC 간에만 진행.
+        setStep("patientWaiting");
+        setPatientWaitingRoomId(roomId);
+        setPatientWaitingToken(patientToken);
+        setPatientWaitingSessionId(data.sessionId || null);
         return;
       }
 
@@ -416,6 +394,116 @@ export default function HospitalPatientJoin() {
               : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Render: 상담실 환자 대기 (방 참여 없음, PT 번호 + 통역 기록 보기) ──
+  if (step === "patientWaiting") {
+    const loadServerHistory = async () => {
+      const token = patientWaitingToken;
+      if (!token) return;
+      setServerHistoryLoading(true);
+      setServerHistoryOpen(true);
+      try {
+        const res = await fetch(`/api/hospital/patient/${encodeURIComponent(token)}/history`);
+        const data = await res.json().catch(() => ({}));
+        setServerHistory({ sessions: data.sessions || [], found: data.found });
+      } catch (_) {
+        setServerHistory({ sessions: [], found: false });
+      } finally {
+        setServerHistoryLoading(false);
+      }
+    };
+    const formatDate = (str) => {
+      if (!str) return "";
+      const d = new Date(str);
+      return d.toLocaleDateString("ko-KR", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    };
+    return (
+      <div style={{ minHeight: "100dvh", background: "#f8fafc", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
+        <MonoLogo />
+        <div style={{ marginTop: "24px", padding: "20px", background: "#fff", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+          <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 8px" }}>통역 번호</p>
+          <p style={{ fontSize: "22px", fontWeight: 700, color: "#0f172a", margin: 0, letterSpacing: "0.05em" }}>
+            {patientWaitingRoomId || "—"}
+          </p>
+          <p style={{ fontSize: "13px", color: "#64748b", marginTop: "12px" }}>
+            진료실에서 이 번호를 알려주시면 통역이 연결됩니다. 이 기기는 대기만 하시면 됩니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={loadServerHistory}
+          style={{
+            marginTop: "20px",
+            padding: "14px 20px",
+            borderRadius: "10px",
+            border: "1px solid #e2e8f0",
+            background: "#fff",
+            color: "#334155",
+            fontSize: "15px",
+            fontWeight: 500,
+            cursor: "pointer",
+            width: "100%",
+          }}
+        >
+          내 통역 기록 보기
+        </button>
+        {serverHistoryOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              zIndex: 100,
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+            onClick={() => setServerHistoryOpen(false)}
+          >
+            <div
+              style={{
+                background: "#fff",
+                width: "100%",
+                maxWidth: "480px",
+                maxHeight: "80dvh",
+                borderRadius: "16px 16px 0 0",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ padding: "16px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "16px", fontWeight: 600 }}>통역 기록</span>
+                <button type="button" onClick={() => setServerHistoryOpen(false)} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#64748b" }}>×</button>
+              </div>
+              <div style={{ flex: 1, overflow: "auto", padding: "12px" }}>
+                {serverHistoryLoading ? (
+                  <p style={{ textAlign: "center", color: "#64748b", padding: "24px" }}>불러오는 중…</p>
+                ) : !serverHistory.sessions || serverHistory.sessions.length === 0 ? (
+                  <p style={{ textAlign: "center", color: "#64748b", padding: "24px" }}>저장된 통역 기록이 없습니다.</p>
+                ) : (
+                  serverHistory.sessions.map((sess) => (
+                    <div key={sess.id || sess.room_id} style={{ marginBottom: "20px" }}>
+                      <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "8px" }}>{formatDate(sess.started_at || sess.ended_at)} · {sess.room_id}</p>
+                      <div style={{ background: "#f1f5f9", borderRadius: "10px", padding: "12px" }}>
+                        {(sess.messages || []).map((msg) => (
+                          <div key={msg.id} style={{ marginBottom: "8px", fontSize: "14px" }}>
+                            <span style={{ color: "#64748b", marginRight: "6px" }}>{msg.sender_role === "host" ? "직원" : "환자"}:</span>
+                            <span>{msg.translated_text || msg.original_text || ""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
