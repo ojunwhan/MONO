@@ -161,8 +161,10 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       });
     };
     socket.on("hospital:patient-arrived", onArrived);
+    socket.on("hospital:switch-to-chat", onArrived);
     return () => {
       socket.off("hospital:patient-arrived", onArrived);
+      socket.off("hospital:switch-to-chat", onArrived);
       socket.emit("hospital:consultation:unwatch", { consultationRoomId: urlRoom });
     };
   }, [isConsultation, urlRoom, navTo, staffDept]);

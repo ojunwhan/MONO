@@ -2836,6 +2836,11 @@ io.on('connection', (socket) => {
 
       console.log(`[JOIN:1:1] ${socket.id} "${nativeName}" -> ${roomId}`);
       ROOMS.set(roomId, meta);
+      const isHospitalRoom = String(meta.siteContext || "").startsWith("hospital_");
+      if (isHospitalRoom) {
+        const pids = Object.keys(meta.participants);
+        console.log(`[consultation:join] roomId=${roomId} participantId=${participantId} roleHint=${roleHint} participantsCount=${pids.length} pids=[${pids.join(",")}]`);
+      }
       emitRoutes(roomId);
       emitParticipants(roomId);
       try {
@@ -3263,6 +3268,11 @@ io.on('connection', (socket) => {
         const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
         const otherP = otherPid ? meta.participants[otherPid] : null;
         const toLang = otherP?.lang || "en";
+        const isHospital1to1 = String(meta.siteContext || "").startsWith("hospital_");
+        if (isHospital1to1) {
+          const pcount = Object.keys(meta.participants).length;
+          console.log(`[consultation:stt] roomId=${roomId} sender=${participantId} otherPid=${otherPid || 'none'} participants=${pcount} otherSocketId=${otherP?.socketId || 'none'}`);
+        }
 
         // Resolve sender display name for receiver's language
         const senderP = meta.participants[participantId];
@@ -3319,6 +3329,17 @@ io.on('connection', (socket) => {
         const targetSocketId = otherP?.socketId;
         if (targetSocketId) {
           if (fromLang === toLang) {
+            io.to(targetSocketId).emit("receive-message", {
+              id: msgId, roomId, roomType,
+              senderPid: participantId,
+              senderDisplayName,
+              senderCallSign: senderDisplayName,
+              originalText: finalText, translatedText: translated,
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
+            });
+          } else {
+            // 번역 경로에서도 최종 receive-message 전송 (클라이언트가 stream-end만 놓칠 수 있음)
             io.to(targetSocketId).emit("receive-message", {
               id: msgId, roomId, roomType,
               senderPid: participantId,
@@ -4980,6 +5001,7 @@ app.post('/api/hospital/join', async (req, res) => {
 
       const payload = { roomId, sessionId, consultationRoomId: consultRoomId, consultationRoomName: roomRow.name, patientToken: pToken || null };
       io.to(`hospital:consultation:${consultRoomId}`).emit('hospital:patient-arrived', payload);
+      io.to(`hospital:consultation:${consultRoomId}`).emit('hospital:switch-to-chat', payload);
       return res.json({ success: true, roomId, patientToken: pToken || undefined, isExistingSession, sessionId });
     }
 
