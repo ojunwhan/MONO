@@ -138,32 +138,24 @@ export default function HospitalDashboard() {
   const [activeMenu, setActiveMenu] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authUser, setAuthUser] = useState(null);
-  const [authStatus, setAuthStatus] = useState("pending"); // pending | denied | allowed
+  const [authStatus, setAuthStatus] = useState("pending");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const res = await fetch("/api/hospital/auth/me", { credentials: "include" });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok || !data?.authenticated || !data?.user) {
-          const redirect = encodeURIComponent("/hospital-dashboard");
-          navigate(`/login?redirect=${redirect}`, { replace: true });
+        if (!res.ok || !data?.authenticated) {
+          navigate("/hospital-login?redirect=" + encodeURIComponent("/hospital-dashboard"), { replace: true });
           return;
         }
-        const statsRes = await fetch("/api/hospital/dashboard/stats", { credentials: "include" });
-        if (cancelled) return;
-        if (statsRes.status === 403) {
-          setAuthStatus("denied");
-          return;
-        }
-        setAuthUser(data.user);
+        setAuthUser({ org_code: data.org_code, email: data.email, role: data.role });
         setAuthStatus("allowed");
       } catch {
         if (!cancelled) {
-          const redirect = encodeURIComponent("/hospital-dashboard");
-          navigate(`/login?redirect=${redirect}`, { replace: true });
+          navigate("/hospital-login?redirect=" + encodeURIComponent("/hospital-dashboard"), { replace: true });
         }
       }
     })();
@@ -174,26 +166,6 @@ export default function HospitalDashboard() {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-bg-secondary)]">
         <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (authStatus === "denied") {
-    return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-[var(--color-bg-secondary)] text-[var(--color-text)] px-6">
-        <div className="max-w-md w-full text-center space-y-4">
-          <p className="text-[18px] font-semibold">접근 권한이 없습니다.</p>
-          <p className="text-[14px] text-[var(--color-text-secondary)]">
-            병원 대시보드는 허용된 관리자만 이용할 수 있습니다.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate("/home", { replace: true })}
-            className="mt-4 px-4 py-2 rounded-[8px] bg-[var(--color-border)] hover:bg-[var(--color-bg)] text-[var(--color-text)] text-[14px]"
-          >
-            홈으로
-          </button>
-        </div>
       </div>
     );
   }
@@ -314,10 +286,7 @@ function RoomsPanel({ authUser }) {
     (room, kiosk = false) => {
       if (!origin) return "";
       const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
-      const orgSuffix =
-        authUser?.accountType === "organization" && authUser?.id
-          ? `&org=${encodeURIComponent(authUser.id)}`
-          : "";
+      const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
       return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
     },
     [authUser, origin]
@@ -329,10 +298,7 @@ function RoomsPanel({ authUser }) {
       if (!origin) return "";
       const template = room.template || "reception";
       const joinPath = `/hospital/join/${template}`;
-      const orgSuffix =
-        authUser?.accountType === "organization" && authUser?.id
-          ? `&org=${encodeURIComponent(authUser.id)}`
-          : "";
+      const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
       const query =
         template === "consultation"
           ? `?room=${encodeURIComponent(room.id)}${orgSuffix}`

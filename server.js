@@ -22,6 +22,7 @@ const Groq = require('groq-sdk');
 const fs = require('fs');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 // Google 및 Kakao 인증 라우트 모듈 불러오기
 const attachGoogleAuth = require('./server/routes/auth_google');
 const attachKakaoAuth = require('./server/routes/auth_kakao');
@@ -29,7 +30,6 @@ const attachLineAuth = require('./server/routes/auth_line');
 const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
 const requireHospitalOrg = attachAuthApi.requireHospitalOrg;
-const requireHospitalDashboardAdmin = attachAuthApi.requireHospitalDashboardAdmin;
 const optionalHospitalOrg = attachAuthApi.optionalHospitalOrg;
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 const cron = require('node-cron');
@@ -4446,7 +4446,51 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       );
     `);
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_rooms_org ON hospital_rooms(org_id);`); } catch (_) {}
+    try {
+      const roomCols = await dbAll("PRAGMA table_info(hospital_rooms)");
+      if (!roomCols.some(c => c.name === 'org_code')) {
+        await dbRun("ALTER TABLE hospital_rooms ADD COLUMN org_code TEXT");
+        console.log('[hospital] ✅ added org_code column to hospital_rooms');
+      }
+    } catch (_) {}
     console.log('[hospital] ✅ hospital_rooms table ready');
+
+    // hospital_admins — 병원 대시보드 전용 이메일+비밀번호 로그인
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS hospital_admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_code TEXT NOT NULL,
+        email TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(org_code, email)
+      );
+    `);
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_admins_org ON hospital_admins(org_code);`); } catch (_) {}
+    try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hospital_admins_email ON hospital_admins(email);`); } catch (_) {}
+    console.log('[hospital] ✅ hospital_admins table ready');
+
+    // 병원 관리자 시드 (없으면 추가). organizations 행은 004 블록에서 생성 후 채움.
+    const hospitalAdminSeeds = [
+      { org_code: 'CHEONGDAM', email: 'cheongdam@lingora.chat', password: 'Cheongdam2026!', name: '청담 관리자' },
+      { org_code: 'ORG-0001', email: 'seoul@lingora.chat', password: 'Seoul2026!', name: '서울 관리자' },
+    ];
+    for (const seed of hospitalAdminSeeds) {
+      try {
+        const existing = await dbGet('SELECT id FROM hospital_admins WHERE org_code = ? AND email = ? LIMIT 1', [seed.org_code, seed.email]);
+        if (!existing) {
+          const hash = await bcrypt.hash(seed.password, 10);
+          await dbRun(
+            'INSERT INTO hospital_admins (org_code, email, password_hash, name) VALUES (?, ?, ?, ?)',
+            [seed.org_code, seed.email, hash, seed.name || '']
+          );
+          console.log('[hospital] ✅ seeded hospital_admin:', seed.email);
+        }
+      } catch (e) {
+        console.warn('[hospital] seed hospital_admin failed:', e?.message);
+      }
+    }
 
     console.log('[hospital] ✅ hospital tables ready (patients + sessions + messages + patient_token columns)');
 
@@ -4613,6 +4657,16 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     await dbRun(
       `INSERT OR IGNORE INTO admin_settings (key, value) VALUES ('admin_setup_done', 'false')`
     );
+    // 병원 관리자 시드용 기관 등록 (CHEONGDAM, ORG-0001)
+    try {
+      for (const oc of ['CHEONGDAM', 'ORG-0001']) {
+        const ex = await dbGet('SELECT id FROM organizations WHERE org_code = ? LIMIT 1', [oc]);
+        if (!ex) {
+          await dbRun('INSERT INTO organizations (org_code, name, org_type, plan) VALUES (?, ?, ?, ?)', [oc, oc + ' 병원', 'hospital', 'trial']);
+          console.log('[admin] ✅ seeded organization:', oc);
+        }
+      }
+    } catch (_) {}
     // 인덱스 생성
     await dbExec(`
       CREATE INDEX IF NOT EXISTS idx_org_dept_org_id     ON org_departments(org_id);
@@ -4638,6 +4692,105 @@ const KIOSK_STATIONS = new Map();
 // In-memory hospital department watchers: department → Set<socketId>
 // Each watching staff member's socket joins room `hospital:watch:${department}`
 const HOSPITAL_WAITING = new Map(); // department → [{ roomId, department, createdAt }]
+
+const HOSPITAL_TOKEN_COOKIE = 'hospital_token';
+const HOSPITAL_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function readHospitalToken(req) {
+  const cookieToken = req.cookies?.[HOSPITAL_TOKEN_COOKIE];
+  if (cookieToken) return cookieToken;
+  const auth = req.headers?.authorization || '';
+  if (String(auth).toLowerCase().startsWith('bearer ')) return String(auth).slice(7).trim();
+  return '';
+}
+
+function requireHospitalAdminJwt(req, res, next) {
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json({ error: 'server_misconfig_jwt_secret' });
+  }
+  const token = readHospitalToken(req);
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.role !== 'hospital_admin') {
+      return res.status(403).json({ error: 'forbidden', message: '접근 권한이 없습니다.' });
+    }
+    req.hospitalOrgCode = payload.org_code || null;
+    req.hospitalAdminEmail = payload.email || null;
+    req.hospitalAdminId = payload.sub || null;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
+// POST /api/hospital/auth/login — 병원 관리자 이메일+비밀번호 로그인
+app.post('/api/hospital/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    const emailTrim = (email || '').trim().toLowerCase();
+    const pwd = password || '';
+    if (!emailTrim || !pwd) {
+      return res.status(400).json({ error: 'email_password_required' });
+    }
+    const row = await dbGet(
+      'SELECT id, org_code, email, password_hash, name FROM hospital_admins WHERE email = ? LIMIT 1',
+      [emailTrim]
+    );
+    if (!row) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    const match = await bcrypt.compare(pwd, row.password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    const orgExists = await dbGet('SELECT 1 FROM organizations WHERE org_code = ? LIMIT 1', [row.org_code]);
+    if (!orgExists) {
+      return res.status(403).json({ error: 'org_not_found', message: '등록되지 않은 기관입니다.' });
+    }
+    const token = jwt.sign(
+      { sub: row.id, org_code: row.org_code, email: row.email, role: 'hospital_admin' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    const secureCookie = req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
+    res.cookie(HOSPITAL_TOKEN_COOKIE, token, {
+      httpOnly: true,
+      secure: secureCookie,
+      sameSite: 'lax',
+      maxAge: HOSPITAL_TOKEN_MAX_AGE,
+    });
+    return res.json({
+      success: true,
+      org_code: row.org_code,
+      email: row.email,
+      name: row.name || '',
+      role: 'hospital_admin',
+    });
+  } catch (e) {
+    console.error('[hospital:auth:login]', e?.message);
+    res.status(500).json({ error: 'login_failed' });
+  }
+});
+
+// GET /api/hospital/auth/me — 병원 관리자 인증 확인 (대시보드 로더/프론트용)
+app.get('/api/hospital/auth/me', requireHospitalAdminJwt, (req, res) => {
+  res.json({
+    authenticated: true,
+    org_code: req.hospitalOrgCode,
+    email: req.hospitalAdminEmail,
+    role: 'hospital_admin',
+  });
+});
+
+// POST /api/hospital/auth/logout — 병원 관리자 로그아웃 (쿠키 삭제)
+app.post('/api/hospital/auth/logout', (req, res) => {
+  res.clearCookie(HOSPITAL_TOKEN_COOKIE, {
+    httpOnly: true,
+    sameSite: 'lax',
+  });
+  res.json({ success: true });
+});
 
 // POST /api/hospital/join — 환자가 QR 스캔 후 채널 연결 (환자 1명 = 채널 1개, 재방문 시 기존 채널 재사용)
 // consultation + room: 진료실 QR 스캔 시 pt(기존 PT번호) 있으면 세션 재사용 및 assigned_room 연결, 없으면 새 PT 생성
@@ -5214,28 +5367,26 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
 // HOSPITAL DASHBOARD — 통계 API
 // ═══════════════════════════════════════════════════════════════
 
-// GET /api/hospital/dashboard/stats — 대시보드 통계 개요 (org_code 필터: /admin 전체, /hospital-dashboard 본인 org만)
-app.get('/api/hospital/dashboard/stats', requireHospitalDashboardAdmin, async (req, res) => {
+app.get('/api/hospital/dashboard/stats', requireHospitalAdminJwt, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const today = new Date().toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
 
-    const isAdminView = req.hospitalDashboardIsAdmin && !(req.hospitalOrgCode || '').trim();
-    const orgCodeFilter = isAdminView ? null : (req.hospitalOrgCode || 'UNKNOWN');
-    const whereOrg = isAdminView ? '1=1' : "(COALESCE(org_code, 'UNKNOWN') = ?)";
-    const params = isAdminView ? [] : [orgCodeFilter];
+    const orgCodeFilter = req.hospitalOrgCode || 'UNKNOWN';
+    const whereOrg = "(COALESCE(org_code, 'UNKNOWN') = ?)";
+    const params = [orgCodeFilter];
 
     // 오늘 통역 건수
     const todayRow = await dbGet(
       `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE DATE(created_at) = ? AND ${whereOrg}`,
-      isAdminView ? [today] : [today, orgCodeFilter]
+      [today, orgCodeFilter]
     );
 
     // 이번 달 누적
     const monthRow = await dbGet(
       `SELECT COUNT(*) as cnt FROM hospital_sessions WHERE created_at >= ? AND ${whereOrg}`,
-      isAdminView ? [monthStart] : [monthStart, orgCodeFilter]
+      [monthStart, orgCodeFilter]
     );
 
     // 사용 언어 종류 수
@@ -5303,18 +5454,17 @@ app.get('/api/hospital/dashboard/stats', requireHospitalDashboardAdmin, async (r
   }
 });
 
-// GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (org_code 필터: /admin 전체, /hospital-dashboard 본인 org만)
-app.get('/api/hospital/dashboard/sessions', requireHospitalDashboardAdmin, async (req, res) => {
+// GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (JWT org_code로 필터)
+app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req, res) => {
   try {
     const { startDate, endDate, department, language, search, page: pg, limit: lim } = req.query;
     const page = Math.max(1, Number(pg) || 1);
     const limit = Math.min(100, Math.max(1, Number(lim) || 20));
     const offset = (page - 1) * limit;
 
-    const isAdminView = req.hospitalDashboardIsAdmin && !(req.hospitalOrgCode || '').trim();
-    const orgCodeFilter = isAdminView ? null : (req.hospitalOrgCode || 'UNKNOWN');
-    let where = isAdminView ? '1=1' : "(COALESCE(s.org_code, 'UNKNOWN') = ?)";
-    const params = isAdminView ? [] : [orgCodeFilter];
+    const orgCodeFilter = req.hospitalOrgCode || 'UNKNOWN';
+    let where = "(COALESCE(s.org_code, 'UNKNOWN') = ?)";
+    const params = [orgCodeFilter];
 
     if (startDate) { where += ' AND DATE(s.created_at) >= ?'; params.push(startDate); }
     if (endDate) { where += ' AND DATE(s.created_at) <= ?'; params.push(endDate); }
@@ -5360,14 +5510,14 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalDashboardAdmin, async
 });
 
 // GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회 (org 기준)
-app.get('/api/hospital/sessions', requireHospitalDashboardAdmin, async (req, res) => {
-  const orgId = req.hospitalOrgId;
+app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
+  const orgCode = req.hospitalOrgCode || 'UNKNOWN';
   const roomId = req.query.roomId ? String(req.query.roomId).trim() : null;
   if (roomId) {
     try {
       const row = await dbGet(
-        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' AND (org_id IS NULL OR org_id = ?) LIMIT 1",
-        [roomId, orgId]
+        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' AND (COALESCE(org_code, 'UNKNOWN') = ?) LIMIT 1",
+        [roomId, orgCode]
       );
       return res.json({ success: true, sessionId: row ? row.id : null });
     } catch (e) {
@@ -5376,8 +5526,8 @@ app.get('/api/hospital/sessions', requireHospitalDashboardAdmin, async (req, res
   }
   try {
     const { chartNumber, stationId, date, limit: lim } = req.query;
-    let sql = 'SELECT * FROM hospital_sessions WHERE (org_id IS NULL OR org_id = ?)';
-    const params = [orgId];
+    let sql = "SELECT * FROM hospital_sessions WHERE (COALESCE(org_code, 'UNKNOWN') = ?)";
+    const params = [orgCode];
     if (chartNumber) { sql += ' AND chart_number = ?'; params.push(chartNumber); }
     if (stationId) { sql += ' AND station_id = ?'; params.push(stationId); }
     if (date) { sql += ' AND DATE(created_at) = ?'; params.push(date); }
@@ -5391,11 +5541,14 @@ app.get('/api/hospital/sessions', requireHospitalDashboardAdmin, async (req, res
 });
 
 // GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (org 소유만)
-app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalDashboardAdmin, async (req, res) => {
+app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, async (req, res) => {
   try {
-    const orgId = req.hospitalOrgId;
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
     const { sessionId } = req.params;
-    const session = await dbGet('SELECT * FROM hospital_sessions WHERE id = ? AND (org_id IS NULL OR org_id = ?) LIMIT 1', [sessionId, orgId]);
+    const session = await dbGet(
+      "SELECT * FROM hospital_sessions WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?) LIMIT 1",
+      [sessionId, orgCode]
+    );
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const messages = await dbAll(
       'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
@@ -5407,13 +5560,13 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalDashboardAd
   }
 });
 
-// GET /api/hospital/rooms — 병원별 방 목록 (org 격리)
-app.get('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) => {
+// GET /api/hospital/rooms — 병원별 방 목록 (JWT org_code로 필터)
+app.get('/api/hospital/rooms', requireHospitalAdminJwt, async (req, res) => {
   try {
-    const orgId = req.hospitalOrgId;
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
     const rooms = await dbAll(
-      'SELECT id, org_id, name, template, created_at FROM hospital_rooms WHERE org_id = ? ORDER BY created_at DESC',
-      [orgId]
+      "SELECT id, org_id, org_code, name, template, created_at FROM hospital_rooms WHERE (COALESCE(org_code, 'UNKNOWN') = ?) ORDER BY created_at DESC",
+      [orgCode]
     );
     res.json({ success: true, rooms: rooms || [] });
   } catch (e) {
@@ -5421,10 +5574,10 @@ app.get('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) =
   }
 });
 
-// POST /api/hospital/rooms — 방 추가 (org 필수)
-app.post('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) => {
+// POST /api/hospital/rooms — 방 추가 (JWT org_code 사용)
+app.post('/api/hospital/rooms', requireHospitalAdminJwt, async (req, res) => {
   try {
-    const orgId = req.hospitalOrgId;
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
     const { name, template: rawTemplate } = req.body || {};
     const roomName = String(name || '').trim();
     const templateStr = String(rawTemplate || 'reception').toLowerCase();
@@ -5432,25 +5585,25 @@ app.post('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) 
     if (!roomName) return res.status(400).json({ error: 'name_required' });
     const id = uuidv4();
     await dbRun(
-      'INSERT INTO hospital_rooms (id, org_id, name, template) VALUES (?, ?, ?, ?)',
-      [id, orgId, roomName, roomTemplate]
+      'INSERT INTO hospital_rooms (id, org_id, org_code, name, template) VALUES (?, ?, ?, ?, ?)',
+      [id, orgCode, orgCode, roomName, roomTemplate]
     );
-    const room = await dbGet('SELECT id, org_id, name, template, created_at FROM hospital_rooms WHERE id = ?', [id]);
+    const room = await dbGet('SELECT id, org_id, org_code, name, template, created_at FROM hospital_rooms WHERE id = ?', [id]);
     res.status(201).json({ success: true, room });
   } catch (e) {
     res.status(500).json({ error: 'room_create_failed' });
   }
 });
 
-// DELETE /api/hospital/rooms/:id — 방 삭제 (본인 org만)
-app.delete('/api/hospital/rooms/:id', requireHospitalDashboardAdmin, async (req, res) => {
+// DELETE /api/hospital/rooms/:id — 방 삭제 (본인 org_code만)
+app.delete('/api/hospital/rooms/:id', requireHospitalAdminJwt, async (req, res) => {
   try {
-    const orgId = req.hospitalOrgId;
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
     const roomId = String(req.params.id || '').trim();
     if (!roomId) return res.status(400).json({ error: 'room_id_required' });
-    const room = await dbGet('SELECT id, org_id FROM hospital_rooms WHERE id = ?', [roomId]);
+    const room = await dbGet("SELECT id, org_code FROM hospital_rooms WHERE id = ?", [roomId]);
     if (!room) return res.status(404).json({ error: 'room_not_found' });
-    if (room.org_id !== orgId) return res.status(403).json({ error: 'forbidden' });
+    if ((room.org_code || 'UNKNOWN') !== orgCode) return res.status(403).json({ error: 'forbidden' });
     await dbRun('DELETE FROM hospital_rooms WHERE id = ?', [roomId]);
     res.json({ success: true });
   } catch (e) {

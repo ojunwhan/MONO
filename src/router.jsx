@@ -15,6 +15,7 @@ import PrivacyPage from "./pages/Privacy";
 import HospitalApp from "./pages/HospitalApp";
 import HospitalRecords from "./pages/HospitalRecords";
 import HospitalDashboard from "./pages/HospitalDashboard";
+import HospitalLogin from "./pages/HospitalLogin";
 import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
@@ -49,9 +50,9 @@ async function rootRedirectLoader({ request }) {
 }
 
 async function hospitalDashboardLoader() {
-  const me = await fetchAuthMe();
-  if (!me.authenticated || !me.user) {
-    return redirect("/login?redirect=" + encodeURIComponent("/hospital-dashboard"));
+  const res = await fetch("/api/hospital/auth/me", { credentials: "include" });
+  if (!res.ok) {
+    return redirect("/hospital-login?redirect=" + encodeURIComponent("/hospital-dashboard"));
   }
   return null;
 }
@@ -130,6 +131,10 @@ const router = createBrowserRouter([
   {
     path: "/hospital/join/:department",
     element: <HospitalPatientJoin />,
+  },
+  {
+    path: "/hospital-login",
+    element: <HospitalLogin />,
   },
   {
     path: "/hospital-dashboard",
