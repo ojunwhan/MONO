@@ -795,7 +795,7 @@ function OverviewPanel({ authUser }) {
             <div className="space-y-4">
               <button
                 type="button"
-                onClick={() => { window.location.href = buildStaffUrl(receptionRoom, false); setStartModal(null); }}
+                onClick={() => window.open(buildStaffUrl(receptionRoom, false), "_blank")}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold"
                 style={{ backgroundColor: HOSPITAL_PRIMARY }}
               >
@@ -817,7 +817,7 @@ function OverviewPanel({ authUser }) {
                   className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-[13px] font-medium"
                 >
                   <Copy size={14} />
-                  {tabletUrlCopied ? "복사됨" : "태블릿 QR 복사"}
+                  {tabletUrlCopied ? "복사됨!" : "태블릿 QR 복사"}
                 </button>
               </div>
             </div>
