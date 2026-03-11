@@ -48,6 +48,14 @@ async function rootRedirectLoader({ request }) {
   return redirect("/login");
 }
 
+async function hospitalDashboardLoader() {
+  const me = await fetchAuthMe();
+  if (!me.authenticated || !me.user) {
+    return redirect("/login?redirect=" + encodeURIComponent("/hospital-dashboard"));
+  }
+  return null;
+}
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -125,6 +133,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/hospital-dashboard",
+    loader: hospitalDashboardLoader,
     element: <HospitalDashboard />,
   },
   {
