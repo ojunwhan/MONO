@@ -230,15 +230,8 @@ export default function HospitalApp() {
     }
   }, [shouldRedirect, navTo]);
 
-  // 환자가 진료실 키오스크 URL을 스캔한 경우(폰): join URL로 리다이렉트 → HospitalPatientJoin → VAD
-  useEffect(() => {
-    if (!hasKioskParams || template !== "consultation" || !urlRoom) return;
-    const w = typeof window !== "undefined" ? window.innerWidth : 1024;
-    if (w > 768) return;
-    const org = searchParams.get("org") || "";
-    const joinUrl = `/hospital/join/consultation?room=${encodeURIComponent(urlRoom)}${org ? `&org=${encodeURIComponent(org)}` : ""}`;
-    navTo(joinUrl, { replace: true });
-  }, [hasKioskParams, template, urlRoom, searchParams, navTo]);
+  // kiosk=true URL 접속 시 반드시 QR 화면만 표시. 환자 입장(hospital:patient-arrived) 시에만 ConsultationKioskView에서 대화창으로 전환.
+  // (이전: 768px 이하에서 join으로 리다이렉트하던 로직 제거 — 태블릿이 QR 대신 입장 화면으로 넘어가는 버그 원인)
 
   useEffect(() => {
     if ((hasStaffParams || hasKioskParams) && urlRoom) {
