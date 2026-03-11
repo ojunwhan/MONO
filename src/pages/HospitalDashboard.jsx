@@ -1,5 +1,6 @@
 // src/pages/HospitalDashboard.jsx — 병원 전용 관리 대시보드
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import {
@@ -133,16 +134,71 @@ function monthStartStr() {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
 export default function HospitalDashboard() {
+  const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authUser, setAuthUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState("pending"); // pending | denied | allowed
 
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => { if (data?.user) setAuthUser(data.user); })
-      .catch(() => {});
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok || !data?.authenticated || !data?.user) {
+          const redirect = encodeURIComponent("/hospital-dashboard");
+          navigate(`/login?redirect=${redirect}`, { replace: true });
+          return;
+        }
+        const statsRes = await fetch("/api/hospital/dashboard/stats", { credentials: "include" });
+        if (cancelled) return;
+        if (statsRes.status === 403) {
+          setAuthStatus("denied");
+          return;
+        }
+        setAuthUser(data.user);
+        setAuthStatus("allowed");
+      } catch {
+        if (!cancelled) {
+          const redirect = encodeURIComponent("/hospital-dashboard");
+          navigate(`/login?redirect=${redirect}`, { replace: true });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  if (authStatus === "pending") {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-bg-secondary)]">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (authStatus === "denied") {
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-[var(--color-bg-secondary)] text-[var(--color-text)] px-6">
+        <div className="max-w-md w-full text-center space-y-4">
+          <p className="text-[18px] font-semibold">접근 권한이 없습니다.</p>
+          <p className="text-[14px] text-[var(--color-text-secondary)]">
+            병원 대시보드는 허용된 관리자만 이용할 수 있습니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/home", { replace: true })}
+            className="mt-4 px-4 py-2 rounded-[8px] bg-[var(--color-border)] hover:bg-[var(--color-bg)] text-[var(--color-text)] text-[14px]"
+          >
+            홈으로
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus !== "allowed") return null;
 
   return (
     <div className="min-h-[100dvh] flex bg-[var(--color-bg-secondary)]">

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { startKakaoLogin } from "../auth/kakaoLogin";
 import { Building2, User } from "lucide-react";
 
@@ -18,8 +19,10 @@ function MonoLogo() {
 
 export default function LoginPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const redirectPath = searchParams.get("redirect") || "";
   const [purpose, setPurpose] = useState(null); // null | "personal" | "organization"
-  const nextPath = purpose === "organization" ? "/org-setup" : "/home";
+  const nextPath = redirectPath || (purpose === "organization" ? "/org-setup" : "/home");
 
   return (
     <div className="min-h-[100dvh] bg-[var(--color-bg)] text-[var(--color-text)]">

@@ -204,6 +204,33 @@ async function requireHospitalOrg(req, res, next) {
   }
 }
 
+/** 대시보드 전용: 로그인 + ADMIN_EMAILS에 포함된 이메일만 허용. 허용 시 req.hospitalOrgId = userId */
+async function requireHospitalDashboardAdmin(req, res, next) {
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json({ error: "server_misconfig_jwt_secret" });
+  }
+  const token = readToken(req);
+  if (!token) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.auth = payload;
+    const user = await findUserById(payload.sub);
+    if (!user) return res.status(404).json({ error: "user_not_found" });
+    const adminEmails = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const email = (user.email || "").trim().toLowerCase();
+    if (!adminEmails.length || !email || !adminEmails.includes(email)) {
+      return res.status(403).json({ error: "access_denied", message: "접근 권한이 없습니다." });
+    }
+    req.hospitalOrgId = payload.sub;
+    return next();
+  } catch (e) {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+}
+
 async function checkUsageLimitMiddleware(req, res, next) {
   try {
     const overview = await getUserBillingOverview(req.auth?.sub);
@@ -935,4 +962,5 @@ module.exports = function attachAuthApi(app) {
 
 module.exports.verifyToken = verifyToken;
 module.exports.requireHospitalOrg = requireHospitalOrg;
+module.exports.requireHospitalDashboardAdmin = requireHospitalDashboardAdmin;
 module.exports.optionalHospitalOrg = optionalHospitalOrg;

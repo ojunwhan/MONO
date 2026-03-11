@@ -29,6 +29,7 @@ const attachLineAuth = require('./server/routes/auth_line');
 const attachAppleAuth = require('./server/routes/auth_apple');
 const attachAuthApi = require('./server/routes/auth_api');
 const requireHospitalOrg = attachAuthApi.requireHospitalOrg;
+const requireHospitalDashboardAdmin = attachAuthApi.requireHospitalDashboardAdmin;
 const optionalHospitalOrg = attachAuthApi.optionalHospitalOrg;
 const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 const cron = require('node-cron');
@@ -5186,7 +5187,7 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 // GET /api/hospital/dashboard/stats — 대시보드 통계 개요
-app.get('/api/hospital/dashboard/stats', requireHospitalOrg, async (req, res) => {
+app.get('/api/hospital/dashboard/stats', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const { startDate, endDate } = req.query;
@@ -5264,7 +5265,7 @@ app.get('/api/hospital/dashboard/stats', requireHospitalOrg, async (req, res) =>
 });
 
 // GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (페이지네이션 + 필터)
-app.get('/api/hospital/dashboard/sessions', requireHospitalOrg, async (req, res) => {
+app.get('/api/hospital/dashboard/sessions', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const { startDate, endDate, department, language, search, page: pg, limit: lim } = req.query;
@@ -5319,7 +5320,7 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalOrg, async (req, res)
 });
 
 // GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회 (org 기준)
-app.get('/api/hospital/sessions', requireHospitalOrg, async (req, res) => {
+app.get('/api/hospital/sessions', requireHospitalDashboardAdmin, async (req, res) => {
   const orgId = req.hospitalOrgId;
   const roomId = req.query.roomId ? String(req.query.roomId).trim() : null;
   if (roomId) {
@@ -5350,7 +5351,7 @@ app.get('/api/hospital/sessions', requireHospitalOrg, async (req, res) => {
 });
 
 // GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (org 소유만)
-app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalOrg, async (req, res) => {
+app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const { sessionId } = req.params;
@@ -5367,7 +5368,7 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalOrg, async 
 });
 
 // GET /api/hospital/rooms — 병원별 방 목록 (org 격리)
-app.get('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
+app.get('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const rooms = await dbAll(
@@ -5381,7 +5382,7 @@ app.get('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
 });
 
 // POST /api/hospital/rooms — 방 추가 (org 필수)
-app.post('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
+app.post('/api/hospital/rooms', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const { name, template: rawTemplate } = req.body || {};
@@ -5402,7 +5403,7 @@ app.post('/api/hospital/rooms', requireHospitalOrg, async (req, res) => {
 });
 
 // DELETE /api/hospital/rooms/:id — 방 삭제 (본인 org만)
-app.delete('/api/hospital/rooms/:id', requireHospitalOrg, async (req, res) => {
+app.delete('/api/hospital/rooms/:id', requireHospitalDashboardAdmin, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
     const roomId = String(req.params.id || '').trim();
