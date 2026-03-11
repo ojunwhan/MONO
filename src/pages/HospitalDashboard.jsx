@@ -541,6 +541,7 @@ function OverviewPanel({ authUser }) {
   const [consultationInputMode, setConsultationInputMode] = useState(null); // 'vad' | 'ptt'
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [tabletUrlCopied, setTabletUrlCopied] = useState(false);
+  const [doctorPcUrlCopied, setDoctorPcUrlCopied] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   const fetchStats = useCallback(async () => {
@@ -839,6 +840,27 @@ function OverviewPanel({ authUser }) {
               <p className="text-[12px] text-slate-500">
                 {consultationInputMode === "vad" ? "VAD (자동 음성감지)" : "PTT (버튼식)"} · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
               </p>
+              <button
+                type="button"
+                onClick={() => window.open(buildStaffUrl(consultationRoom, false), "_blank")}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold"
+                style={{ backgroundColor: HOSPITAL_PRIMARY }}
+              >
+                <Monitor size={20} />
+                의사용 PC에서 열기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(buildStaffUrl(consultationRoom, false));
+                  setDoctorPcUrlCopied(true);
+                  setTimeout(() => setDoctorPcUrlCopied(false), 2000);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-300 text-[13px] font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <Copy size={14} />
+                {doctorPcUrlCopied ? "복사됨!" : "의사용 PC 링크 복사"}
+              </button>
               <div className="flex flex-col items-center">
                 <p className="text-[11px] text-slate-500 mb-1">환자 스캔용 QR (태블릿에 띄우세요)</p>
                 <div className="p-3 bg-white rounded-xl inline-block">
@@ -855,7 +877,7 @@ function OverviewPanel({ authUser }) {
                   style={{ backgroundColor: HOSPITAL_PRIMARY }}
                 >
                   <Tablet size={14} />
-                  {tabletUrlCopied ? "복사됨" : "태블릿 링크 복사"}
+                  {tabletUrlCopied ? "복사됨!" : "태블릿 링크 복사"}
                 </button>
               </div>
             </div>
