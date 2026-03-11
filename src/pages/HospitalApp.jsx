@@ -355,12 +355,19 @@ export default function HospitalApp() {
   }
 
   if (hasStaffParams) {
+    const org = searchParams.get("org") || "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const returnToReceptionUrl =
+      template === "reception" && urlRoom
+        ? `${origin}/hospital?template=reception&room=${encodeURIComponent(urlRoom)}${org ? `&org=${encodeURIComponent(org)}` : ""}`
+        : null;
     return (
       <StaffModePanel
         template={template}
         selectedDept={staffDept}
         roomName={roomName}
         consultationRoomId={urlRoom || null}
+        returnToReceptionUrl={returnToReceptionUrl}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
         showLangGrid={showLangGrid}
@@ -376,7 +383,7 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
+function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
   const [waitingPatients, setWaitingPatients] = useState([]);
   const [consultationRooms, setConsultationRooms] = useState([]);
   const [assignDropdownRoomId, setAssignDropdownRoomId] = useState(null);
@@ -455,6 +462,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               patientToken: data?.patientToken != null ? data.patientToken : null,
               createdAt: data?.createdAt || new Date().toISOString(),
               sessionId: data?.sessionId ?? null,
+              visitCount: data?.visitCount ?? 0,
             }]
       );
     };
@@ -560,6 +568,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         patientToken: patient.patientToken ?? null,
         inputMode,
         ...(sessionId ? { sessionId } : {}),
+        ...(returnToReceptionUrl ? { returnToReceptionUrl } : {}),
       },
     });
   };
@@ -624,6 +633,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                               입장 {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
                               {!isConsultationRoom && langInfo && ` · ${langInfo.name}`}
                               {!isConsultationRoom && waitSec > 0 && ` · 대기 ${waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}`}
+                              {(patient.visitCount ?? 0) > 1 && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded bg-[#2563EB]/15 text-[#2563EB] text-[10px] font-medium">
+                                  재방문 환자 — {(patient.visitCount ?? 0)}회 방문
+                                </span>
+                              )}
                             </p>
                             {accepted && <p className="text-[11px] text-green-600 dark:text-green-400 font-medium mt-0.5">✓ 진료실 입장 수락됨</p>}
                           </div>

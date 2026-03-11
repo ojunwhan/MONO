@@ -1970,6 +1970,9 @@ io.on('connection', (socket) => {
     } catch {}
 
     const meta = ROOMS.get(rid);
+    const isHospitalRoom = meta && String(meta.siteContext || '').startsWith('hospital_');
+    const isOneToOne = meta?.roomType === 'oneToOne';
+    const wasGuest = meta?.ownerPid && pid && meta.ownerPid !== pid;
     if (meta?.participants && pid && meta.participants[pid]?.socketId === socket.id) {
       delete meta.participants[pid];
       if (meta.ownerPid === pid) {
@@ -1979,6 +1982,10 @@ io.on('connection', (socket) => {
       ROOMS.set(rid, meta);
       emitParticipants(rid);
       emitRoutes(rid).catch(() => {});
+      // 환자가 먼저 나갈 때: 직원 PC/태블릿에 room:ended 전송 → QR 대기화면 복귀
+      if (isHospitalRoom && isOneToOne && wasGuest && io) {
+        io.to(rid).emit('room:ended', { roomId: rid, message: '환자가 나갔습니다.' });
+      }
     }
 
     SOCKET_ROLES.delete(socket.id);
@@ -4915,13 +4922,18 @@ app.post('/api/hospital/join', async (req, res) => {
       }
     }
 
-    // 2) 해당 환자의 기존 활성 세션 조회
+    // 2) 해당 환자의 기존 활성 세션 조회 + 재방문 횟수
     let existingSession = null;
+    let visitCount = 0;
     if (pToken) {
       existingSession = await dbGet(
         `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
         [pToken]
       );
+      try {
+        const vcRow = await dbGet('SELECT COUNT(*) as c FROM hospital_sessions WHERE patient_token = ?', [pToken]);
+        visitCount = vcRow?.c || 0;
+      } catch (_) {}
     }
 
     let roomId;
@@ -4992,8 +5004,8 @@ app.post('/api/hospital/join', async (req, res) => {
       });
 
       if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
-      HOSPITAL_WAITING.get(dept).push({ roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId });
-      const waitingData = { roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId };
+      HOSPITAL_WAITING.get(dept).push({ roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount });
+      const waitingData = { roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount };
       io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
       io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
       console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${roomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'}`);
@@ -5005,6 +5017,7 @@ app.post('/api/hospital/join', async (req, res) => {
       patientToken: pToken || undefined,
       isExistingSession,
       sessionId,
+      visitCount,
     });
   } catch (e) {
     console.error('[hospital:join] error:', e?.message);
@@ -5323,6 +5336,16 @@ app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
       `UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?`,
       [sessionId]
     );
+
+    // 환자 폰에 종료 안내 메시지 전송
+    const roomId = session.room_id;
+    if (roomId && io) {
+      io.to(roomId).emit('hospital:session-ended', {
+        message: '통역이 종료되었습니다. 수고하셨습니다.',
+        sessionId,
+        roomId,
+      });
+    }
 
     // Clear kiosk station
     for (const [sid, data] of KIOSK_STATIONS.entries()) {

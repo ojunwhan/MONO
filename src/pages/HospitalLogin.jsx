@@ -61,7 +61,7 @@ export default function HospitalLogin() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="이메일"
             autoComplete="email"
-            className="w-full h-12 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+            className="w-full h-12 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
           />
           <input
             type="password"
@@ -69,7 +69,7 @@ export default function HospitalLogin() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="비밀번호"
             autoComplete="current-password"
-            className="w-full h-12 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+            className="w-full h-12 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
           />
 
           {error && (
@@ -79,7 +79,7 @@ export default function HospitalLogin() {
           <button
             type="submit"
             disabled={loading || !email.trim() || !password}
-            className="w-full h-12 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
+            className="w-full h-12 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
           >
             {loading ? "확인 중..." : "로그인"}
           </button>

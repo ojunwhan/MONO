@@ -13,6 +13,7 @@ import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp } from "lucide-react";
+import { saveHospitalConversation } from "../db/hospitalConversations";
 
 // ── PTT 전용: PCM16 전송 (VAD 미사용) ──
 const PTT_CHUNK_SIZE = 24000; // 1.5초 @16kHz, server와 동일
@@ -442,6 +443,7 @@ export default function FixedRoomVAD() {
   const sessionIdRef = useRef(stateSessionId);
   const pendingMessages = state.pendingMessages || [];
   const consultationKioskRoomId = state.consultationKioskRoomId || null;
+  const returnToReceptionUrl = state.returnToReceptionUrl || null;
   const [roomAssignedBanner, setRoomAssignedBanner] = useState(null);
   const [enterConsultationRequest, setEnterConsultationRequest] = useState(null);
   useEffect(() => {
@@ -506,6 +508,20 @@ export default function FixedRoomVAD() {
       ...prev,
     ]);
   }, [pendingMessages]);
+
+  // ── 환자 폰: 병원 모드일 때 대화 내용 실시간 IndexedDB 저장 (PT-XXXXXX + 날짜) ──
+  const isHospitalGuest = isGuest && (hospitalDept || String(siteContext || "").startsWith("hospital_"));
+  useEffect(() => {
+    if (!isHospitalGuest || !roomId || messages.length === 0) return;
+    const toSave = messages.map((m) => ({
+      id: m.id,
+      originalText: m.originalText ?? m.text ?? "",
+      translatedText: m.translatedText ?? "",
+      mine: !!m.mine,
+      timestamp: m.timestamp,
+    }));
+    saveHospitalConversation(roomId, toSave).catch(() => {});
+  }, [isHospitalGuest, roomId, messages]);
 
   // PTT 모드일 때는 useVADPipeline을 호출하지 않음. VAD는 VADReadyButton / InterpretingVAD에서만 사용.
   const pauseVadRef = useRef(null);
@@ -776,6 +792,10 @@ export default function FixedRoomVAD() {
       (async () => {
         await doStopInterpreting();
         if (isOwner) {
+          if (returnToReceptionUrl) {
+            window.location.href = returnToReceptionUrl;
+            return;
+          }
           const deptId = hospitalDept?.id || "reception";
           const template = hospitalTemplate && (hospitalTemplate === "reception" || hospitalTemplate === "consultation") ? hospitalTemplate : "reception";
           navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
@@ -786,6 +806,33 @@ export default function FixedRoomVAD() {
             setStep("ended");
           }
         }
+      })();
+    };
+
+    // ── room:ended — 환자가 먼저 나감 → 직원 PC/태블릿 QR 대기화면 복귀 ──
+    const onRoomEnded = (payload) => {
+      if (payload?.roomId !== roomId) return;
+      if (!isOwner) return;
+      if (returnToReceptionUrl) {
+        window.location.href = returnToReceptionUrl;
+        return;
+      }
+      if (consultationKioskRoomId) {
+        navigate(`/hospital?template=consultation&room=${encodeURIComponent(consultationKioskRoomId)}&kiosk=true`, { replace: true });
+      } else {
+        const template = hospitalTemplate || "reception";
+        const deptId = hospitalDept?.id || "reception";
+        navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
+      }
+    };
+
+    // ── hospital:session-ended — 서버에서 세션 종료 시 환자에게 안내 메시지 ──
+    const onHospitalSessionEnded = (payload) => {
+      if (payload?.roomId !== roomId) return;
+      if (!isGuest) return;
+      (async () => {
+        await doStopInterpreting();
+        setStep("ended");
       })();
     };
 
@@ -800,6 +847,8 @@ export default function FixedRoomVAD() {
     socket.on("room-expired", onRoomExpired);
     socket.on("fixed-room:start", onFixedRoomStart);
     socket.on("fixed-room:end", onFixedRoomEnd);
+    socket.on("room:ended", onRoomEnded);
+    socket.on("hospital:session-ended", onHospitalSessionEnded);
 
     return () => {
       socket.off("partner-joined", onPartnerJoined);
@@ -813,8 +862,10 @@ export default function FixedRoomVAD() {
       socket.off("room-expired", onRoomExpired);
       socket.off("fixed-room:start", onFixedRoomStart);
       socket.off("fixed-room:end", onFixedRoomEnd);
+      socket.off("room:ended", onRoomEnded);
+      socket.off("hospital:session-ended", onHospitalSessionEnded);
     };
-  }, [roomId, participantId, step, active, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId]);
+  }, [roomId, participantId, step, active, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId, returnToReceptionUrl]);
 
   // ── 환자 전용: 접수→진료실 배정 알림, 진료실 입장 요청 수락 ──
   useEffect(() => {
@@ -843,10 +894,16 @@ export default function FixedRoomVAD() {
     socket.emit("fixed-room:start", { roomId });
   }, [roomId]);
 
-  // ── 직원: 통역 종료 (소켓으로 양쪽에 알림) ──
-  const handleStopInterpreting = useCallback(() => {
+  // ── 직원: 통역 종료 — 서버 세션 종료 API 호출 후 소켓으로 양쪽에 알림, 대화는 서버에 이미 저장됨 ──
+  const handleStopInterpreting = useCallback(async () => {
+    const sid = stateSessionId || sessionIdRef.current;
+    if (sid && (hospitalDept || hospitalTemplate)) {
+      try {
+        await fetch(`/api/hospital/session/${encodeURIComponent(sid)}/end`, { method: "POST", credentials: "include" });
+      } catch (_) {}
+    }
     socket.emit("fixed-room:end", { roomId });
-  }, [roomId]);
+  }, [roomId, stateSessionId, hospitalDept, hospitalTemplate]);
 
   // ── 텍스트 메시지 전송 (send-message) ──
   const sendTextMessage = useCallback(() => {
@@ -1332,11 +1389,11 @@ export default function FixedRoomVAD() {
           </div>
 
           <div style={{ textAlign: "center" }}>
-            <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#3b82f6" }}>
-              상담이 종료되었습니다
+            <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#2563EB" }}>
+              통역이 종료되었습니다. 수고하셨습니다.
             </h2>
             <p style={{ fontSize: "14px", opacity: 0.6, marginTop: "8px" }}>
-              감사합니다. 이 페이지를 닫아도 됩니다.
+              이 페이지를 닫아도 됩니다.
             </p>
           </div>
 

@@ -9,6 +9,7 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import { detectUserLanguage } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
+import { getAllHospitalConversations } from "../db/hospitalConversations";
 
 // ── Hospital mode: "환자" translated per language ──
 const PATIENT_LABEL = {
@@ -43,6 +44,7 @@ export default function HospitalPatientJoin() {
   const urlOrg = searchParams.get("org") || null;
   const urlRoom = searchParams.get("room") || null;
   const urlPt = searchParams.get("pt") || null;
+  const urlInputMode = searchParams.get("inputMode") || null; // 'vad' | 'ptt' (상담실용)
 
   const dept = useMemo(() => {
     const found = HOSPITAL_DEPARTMENTS.find((d) => d.id === department);
@@ -65,6 +67,8 @@ export default function HospitalPatientJoin() {
   const [step, setStep] = useState("language"); // 'language' | 'connecting' | 'error'
   const [error, setError] = useState("");
   const [isExistingSession, setIsExistingSession] = useState(false);
+  const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
+  const [localHistoryList, setLocalHistoryList] = useState([]);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -164,7 +168,7 @@ export default function HospitalPatientJoin() {
             patientToken,
             sessionId: data.sessionId,
             pendingMessages,
-            inputMode: "vad",
+            inputMode: urlInputMode === "ptt" ? "ptt" : "vad",
           },
         });
         return;
@@ -203,7 +207,7 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt]);
+  }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt, urlInputMode]);
 
   // 상담실(consultation)도 접수처와 동일하게 언어 선택 후 "통역 시작" 클릭 시에만 join (자동 join 제거 → 언어 선택 화면 건너뛰기 방지)
 
@@ -275,7 +279,7 @@ export default function HospitalPatientJoin() {
               height: "52px",
               borderRadius: "14px",
               border: "none",
-              background: "#3B82F6",
+              background: "#2563EB",
               color: "#ffffff",
               fontSize: "16px",
               fontWeight: 600,
@@ -285,6 +289,87 @@ export default function HospitalPatientJoin() {
           >
             통역 시작 / Start Interpretation
           </button>
+        )}
+
+        {/* 내 통역 기록 보기 (로컬 IndexedDB) */}
+        <button
+          type="button"
+          onClick={async () => {
+            setLocalHistoryOpen(true);
+            const list = await getAllHospitalConversations();
+            setLocalHistoryList(list || []);
+          }}
+          style={{
+            marginTop: "16px",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            border: "1px solid #e5e7eb",
+            background: "#f9fafb",
+            color: "#374151",
+            fontSize: "14px",
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
+        >
+          내 통역 기록 보기
+        </button>
+        {localHistoryOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 50,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "20px",
+            }}
+            onClick={() => setLocalHistoryOpen(false)}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: "16px",
+                maxWidth: "400px",
+                width: "100%",
+                maxHeight: "80vh",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>내 통역 기록</h3>
+                <button type="button" onClick={() => setLocalHistoryOpen(false)} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#6b7280" }}>×</button>
+              </div>
+              <div style={{ overflowY: "auto", flex: 1, padding: "12px" }}>
+                {localHistoryList.length === 0 ? (
+                  <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", padding: "24px" }}>저장된 통역 기록이 없습니다.</p>
+                ) : (
+                  localHistoryList.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: "14px 16px",
+                        marginBottom: "8px",
+                        background: "#f3f4f6",
+                        borderRadius: "12px",
+                        border: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: "#1f2937" }}>{item.roomId}</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
+                        {item.dateStr} · 대화 {item.messages?.length ?? 0}건
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Footer */}

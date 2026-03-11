@@ -15,6 +15,7 @@ import languages from "../constants/languages";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import useOutbox from "../hooks/useOutbox";
 import { touchRoom, recordRoomActivity, saveMessage, getMessages } from "../db";
+import { saveHospitalConversation } from "../db/hospitalConversations";
 import { fetchAuthMe } from "../auth/session";
 import {
   initBrowserTts,
@@ -365,6 +366,21 @@ export default function ChatScreen() {
       );
     Promise.all(tasks).catch(() => {});
   }, [roomId, messages]);
+
+  // 환자 폰: 병원 모드(접수 PTT)일 때 대화 실시간 IndexedDB 저장
+  useEffect(() => {
+    if (!isGuestMode || !isHospitalMode || !roomId || messages.length === 0) return;
+    const toSave = messages
+      .filter((m) => !m?.system)
+      .map((m) => ({
+        id: m.id,
+        originalText: m.originalText ?? m.text ?? "",
+        translatedText: m.translatedText ?? m.text ?? "",
+        mine: !!m.mine,
+        timestamp: m.timestamp,
+      }));
+    saveHospitalConversation(roomId, toSave).catch(() => {});
+  }, [isGuestMode, isHospitalMode, roomId, messages]);
 
   useEffect(() => {
     if (!peerInfo) return;

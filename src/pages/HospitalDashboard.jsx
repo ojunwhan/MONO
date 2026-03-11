@@ -26,6 +26,10 @@ import {
   LayoutGrid,
   Plus,
   Trash2,
+  Monitor,
+  Tablet,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import {
@@ -207,7 +211,7 @@ export default function HospitalDashboard() {
                 onClick={() => setActiveMenu(item.id)}
                 className={`w-full flex items-center gap-3 px-5 py-3 text-left text-[13px] font-medium transition-colors ${
                   isActive
-                    ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#3B82F6] border-r-2 border-[#3B82F6]"
+                    ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#2563EB] border-r-2 border-[#2563EB]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text)]"
                 }`}
               >
@@ -237,7 +241,7 @@ export default function HospitalDashboard() {
 
         {/* Content */}
         <div className="p-6">
-          {activeMenu === "overview" && <OverviewPanel />}
+          {activeMenu === "overview" && <OverviewPanel authUser={authUser} />}
           {activeMenu === "history" && <HistoryPanel />}
           {activeMenu === "departments" && <DepartmentsPanel />}
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
@@ -496,19 +500,19 @@ function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
         </button>
         <button
           type="button"
-          onClick={handleCopyTablet}
-          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
-        >
-          <Copy size={14} />
-          {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
-        </button>
-        <button
-          type="button"
           onClick={handleCopyStaff}
           className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
         >
           <Copy size={14} />
           {copied ? "복사됨" : "직원 PC용 링크 복사"}
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyTablet}
+          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+        >
+          <Copy size={14} />
+          {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
         </button>
       </div>
     </div>
@@ -516,11 +520,29 @@ function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
 }
 
 // ═══════════════════════════════════════════
-// 1. OVERVIEW PANEL — 통계 개요
+// 1. OVERVIEW PANEL — 통계 개요 + 원클릭 통역 시작
 // ═══════════════════════════════════════════
-function OverviewPanel() {
+const HOSPITAL_PRIMARY = "#2563EB";
+const HOSPITAL_BG = "#ffffff";
+const HOSPITAL_BG_DARK = "#0f172a";
+const HOSPITAL_BORDER = "#e2e8f0";
+const HOSPITAL_BORDER_DARK = "#334155";
+const HOSPITAL_TEXT = "#1e293b";
+const HOSPITAL_TEXT_DARK = "#f1f5f9";
+const HOSPITAL_TEXT_MUTED = "#64748b";
+const HOSPITAL_TEXT_MUTED_DARK = "#94a3b8";
+
+function OverviewPanel({ authUser }) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [startModal, setStartModal] = useState(null); // null | 'choose' | 'reception' | 'consultation-mode' | 'consultation-qr'
+  const [receptionRoom, setReceptionRoom] = useState(null);
+  const [consultationRoom, setConsultationRoom] = useState(null);
+  const [consultationInputMode, setConsultationInputMode] = useState(null); // 'vad' | 'ptt'
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [tabletUrlCopied, setTabletUrlCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -536,6 +558,94 @@ function OverviewPanel() {
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const getOrCreateReceptionRoom = useCallback(async () => {
+    if (!authUser?.org_code) return null;
+    setRoomsLoading(true);
+    try {
+      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const data = await r.json();
+      if (!data.success || !data.rooms) return null;
+      const existing = (data.rooms || []).find((x) => x.template === "reception");
+      if (existing) {
+        setReceptionRoom(existing);
+        setStartModal("reception");
+        return existing;
+      }
+      const createRes = await fetch("/api/hospital/rooms", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "접수처", template: "reception" }),
+      });
+      const createData = await createRes.json();
+      if (createData.success && createData.room) {
+        setReceptionRoom(createData.room);
+        setStartModal("reception");
+        return createData.room;
+      }
+    } catch (e) {
+      console.error("getOrCreateReceptionRoom", e);
+    } finally {
+      setRoomsLoading(false);
+    }
+    return null;
+  }, [authUser?.org_code]);
+
+  const getOrCreateConsultationRoom = useCallback(async () => {
+    if (!authUser?.org_code) return null;
+    setRoomsLoading(true);
+    try {
+      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const data = await r.json();
+      if (!data.success || !data.rooms) return null;
+      const existing = (data.rooms || []).find((x) => x.template === "consultation");
+      if (existing) {
+        setConsultationRoom(existing);
+        setStartModal("consultation-qr");
+        return existing;
+      }
+      const createRes = await fetch("/api/hospital/rooms", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "상담실", template: "consultation" }),
+      });
+      const createData = await createRes.json();
+      if (createData.success && createData.room) {
+        setConsultationRoom(createData.room);
+        setStartModal("consultation-qr");
+        return createData.room;
+      }
+    } catch (e) {
+      console.error("getOrCreateConsultationRoom", e);
+    } finally {
+      setRoomsLoading(false);
+    }
+    return null;
+  }, [authUser?.org_code]);
+
+  const buildStaffUrl = useCallback((room, kiosk = false) => {
+    if (!origin || !room) return "";
+    const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
+    const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+    return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
+  }, [authUser?.org_code, origin]);
+
+  const buildPatientJoinUrl = useCallback((room, extraParams = {}) => {
+    if (!origin || !room) return "";
+    const template = room.template || "reception";
+    const joinPath = `/hospital/join/${template}`;
+    const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+    let query =
+      template === "consultation"
+        ? `?room=${encodeURIComponent(room.id)}${orgSuffix}`
+        : orgSuffix ? `?${orgSuffix.slice(1)}` : "";
+    if (template === "consultation" && extraParams.inputMode) {
+      query += (query.includes("?") ? "&" : "?") + `inputMode=${encodeURIComponent(extraParams.inputMode)}`;
+    }
+    return `${origin}${joinPath}${query}`;
+  }, [authUser?.org_code, origin]);
 
   // All hooks MUST be called before any conditional returns
   const dailyChart = useMemo(() => {
@@ -572,6 +682,188 @@ function OverviewPanel() {
 
   return (
     <div className="space-y-6">
+      {/* 오늘 통역 시작하기 — 원클릭 */}
+      <div
+        className="p-6 rounded-[20px] border-2 flex flex-col items-center justify-center text-center min-h-[140px]"
+        style={{
+          background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
+          borderColor: HOSPITAL_PRIMARY,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setStartModal("choose")}
+          className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
+          style={{ backgroundColor: HOSPITAL_PRIMARY }}
+        >
+          <Activity size={24} />
+          오늘 통역 시작하기
+        </button>
+        <p className="mt-2 text-[13px] text-slate-600">접수처 또는 상담실 통역을 한 번에 시작합니다</p>
+      </div>
+
+      {/* 모달: 통역 유형 선택 */}
+      {startModal === "choose" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">통역 시작</h3>
+              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => getOrCreateReceptionRoom()}
+                disabled={roomsLoading}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-colors hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
+                style={{ borderColor: receptionRoom ? HOSPITAL_PRIMARY : HOSPITAL_BORDER }}
+              >
+                <span className="text-3xl">🖥️</span>
+                <div className="flex-1">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">접수처 통역</span>
+                  <span className="text-[12px] text-slate-500">직원 PC + 환자 폰 1:1 PTT</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStartModal("consultation-mode")}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
+              >
+                <span className="text-3xl">🩺</span>
+                <div className="flex-1">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">상담실 통역</span>
+                  <span className="text-[12px] text-slate-500">태블릿 고정, VAD 또는 PTT</span>
+                </div>
+              </button>
+            </div>
+            {roomsLoading && <p className="text-center text-[13px] text-slate-500 mt-2">방 확인 중...</p>}
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 상담실 — VAD / PTT 선택 */}
+      {startModal === "consultation-mode" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">상담실 통역 방식</h3>
+              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => { setConsultationInputMode("vad"); getOrCreateConsultationRoom(); }}
+                disabled={roomsLoading}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
+              >
+                <Mic size={24} style={{ color: HOSPITAL_PRIMARY }} />
+                <div className="flex-1">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">VAD (자동 음성감지)</span>
+                  <span className="text-[12px] text-slate-500">말하면 자동 감지</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setConsultationInputMode("ptt"); getOrCreateConsultationRoom(); }}
+                disabled={roomsLoading}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
+              >
+                <MicOff size={24} style={{ color: HOSPITAL_PRIMARY }} />
+                <div className="flex-1">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">PTT (버튼식)</span>
+                  <span className="text-[12px] text-slate-500">버튼 눌러서 말하기</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 접수처 — 직원 PC / 태블릿 QR */}
+      {startModal === "reception" && receptionRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">접수처 통역</h3>
+              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => { navigate(buildStaffUrl(receptionRoom, false)); setStartModal(null); }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold"
+                style={{ backgroundColor: HOSPITAL_PRIMARY }}
+              >
+                <Monitor size={20} />
+                직원 PC에서 열기
+              </button>
+              <div className="flex flex-col items-center">
+                <p className="text-[13px] text-slate-600 dark:text-slate-400 mb-2">태블릿용 QR</p>
+                <div className="p-3 bg-white rounded-xl inline-block">
+                  <QRCode value={buildStaffUrl(receptionRoom, true)} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(buildStaffUrl(receptionRoom, true));
+                    setTabletUrlCopied(true);
+                    setTimeout(() => setTabletUrlCopied(false), 2000);
+                  }}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-[13px] font-medium"
+                >
+                  <Copy size={14} />
+                  {tabletUrlCopied ? "복사됨" : "태블릿 QR 복사"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 상담실 — 태블릿 QR + 링크 복사 (환자 스캔용 QR에는 inputMode 포함) */}
+      {startModal === "consultation-qr" && consultationRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">상담실 통역 — 태블릿</h3>
+              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-[12px] text-slate-500">
+                {consultationInputMode === "vad" ? "VAD (자동 음성감지)" : "PTT (버튼식)"} · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
+              </p>
+              <div className="flex flex-col items-center">
+                <p className="text-[11px] text-slate-500 mb-1">환자 스캔용 QR (태블릿에 띄우세요)</p>
+                <div className="p-3 bg-white rounded-xl inline-block">
+                  <QRCode value={buildPatientJoinUrl(consultationRoom, { inputMode: consultationInputMode })} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(buildStaffUrl(consultationRoom, true));
+                    setTabletUrlCopied(true);
+                    setTimeout(() => setTabletUrlCopied(false), 2000);
+                  }}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold"
+                  style={{ backgroundColor: HOSPITAL_PRIMARY }}
+                >
+                  <Tablet size={14} />
+                  {tabletUrlCopied ? "복사됨" : "태블릿 링크 복사"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card, i) => {
