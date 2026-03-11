@@ -204,7 +204,7 @@ async function requireHospitalOrg(req, res, next) {
   }
 }
 
-/** 대시보드 전용: 로그인 + ADMIN_EMAILS에 포함된 이메일만 허용. 허용 시 req.hospitalOrgId = userId */
+/** 대시보드 전용: 로그인 + ADMIN_EMAILS에 포함된 이메일만 허용. 허용 시 req.hospitalOrgId, req.hospitalOrgCode, req.hospitalDashboardIsAdmin 설정 */
 async function requireHospitalDashboardAdmin(req, res, next) {
   if (!process.env.JWT_SECRET) {
     return res.status(500).json({ error: "server_misconfig_jwt_secret" });
@@ -225,6 +225,8 @@ async function requireHospitalDashboardAdmin(req, res, next) {
       return res.status(403).json({ error: "access_denied", message: "접근 권한이 없습니다." });
     }
     req.hospitalOrgId = payload.sub;
+    req.hospitalOrgCode = (user.org_code || "").trim() || null;
+    req.hospitalDashboardIsAdmin = adminEmails.includes(email);
     return next();
   } catch (e) {
     return res.status(401).json({ error: "invalid_token" });
@@ -269,6 +271,7 @@ function mapUser(user) {
     orgName: user.org_name || "",
     businessNumber: user.business_number || "",
     contactName: user.contact_name || "",
+    orgCode: user.org_code || "",
   };
 }
 
