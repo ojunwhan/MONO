@@ -533,7 +533,6 @@ const HOSPITAL_TEXT_MUTED = "#64748b";
 const HOSPITAL_TEXT_MUTED_DARK = "#94a3b8";
 
 function OverviewPanel({ authUser }) {
-  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [startModal, setStartModal] = useState(null); // null | 'choose' | 'reception' | 'consultation-mode' | 'consultation-qr'
@@ -796,7 +795,7 @@ function OverviewPanel({ authUser }) {
             <div className="space-y-4">
               <button
                 type="button"
-                onClick={() => { navigate(buildStaffUrl(receptionRoom, false)); setStartModal(null); }}
+                onClick={() => { window.location.href = buildStaffUrl(receptionRoom, false); setStartModal(null); }}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold"
                 style={{ backgroundColor: HOSPITAL_PRIMARY }}
               >
