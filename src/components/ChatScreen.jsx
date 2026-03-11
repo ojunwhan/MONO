@@ -7,7 +7,7 @@ import AudioWaveform from "./AudioWaveform";
 import QRCode from "react-qr-code";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
-import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode } from "lucide-react";
+import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode, Copy } from "lucide-react";
 import BottomSheet from "./BottomSheet";
 import ToastMessage from "./ToastMessage";
 import SITE_CONTEXTS from "../constants/siteContexts";
@@ -177,6 +177,22 @@ export default function ChatScreen() {
   const [showInviteQr, setShowInviteQr] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
   const roomMenuRef = useRef(null);
+
+  // ── 접수처 EMR/CRM 복사용: org 설정 (직원만) ──
+  const orgCodeForCopy = location.state?.orgCode || searchParams.get("org") || "";
+  const [orgCopySettings, setOrgCopySettings] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null); // 'emr' | 'crm' | null
+  useEffect(() => {
+    if (!isHospitalMode || isGuestMode || !orgCodeForCopy) return;
+    let cancelled = false;
+    fetch(`/api/hospital/org-settings?org_code=${encodeURIComponent(orgCodeForCopy)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.ok) setOrgCopySettings(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isHospitalMode, isGuestMode, orgCodeForCopy]);
 
   // ── Network & Offline queue ──
   const { isConnected, isOnline, isSocketConnected } = useNetworkStatus();
@@ -1370,6 +1386,52 @@ export default function ChatScreen() {
     return SITE_CONTEXTS.find(c => c.id === siteContext)?.labelKo || siteContext;
   }, [siteContext]);
 
+  // ── 접수처 EMR/CRM 복사용: 통역 기록 텍스트 생성 ──
+  const getTranscriptCopyText = useCallback(() => {
+    const dateStr = new Date().toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(/\s/g, " ").replace(/\//g, ".");
+    const staffLang = myShort || fromLang || "한국어";
+    const patientLang = resolvedPartnerShort || partnerShort || "영어";
+    const lines = [
+      "[MONO 통역 기록]",
+      `날짜: ${dateStr}`,
+      `환자번호: ${roomId || ""}`,
+      "---",
+    ];
+    messages.filter((m) => !m?.system).forEach((m) => {
+      const orig = (m.originalText || m.text || "").trim();
+      const trans = (m.translatedText || m.text || "").trim();
+      if (m.mine) {
+        if (orig) lines.push(`직원 (${staffLang}): ${orig}`);
+        if (trans) lines.push(`환자 (${patientLang}): ${trans}`);
+      } else {
+        if (orig) lines.push(`환자 (${patientLang}): ${orig}`);
+        if (trans) lines.push(`직원 (${staffLang}): ${trans}`);
+      }
+    });
+    lines.push("---", "Powered by MONO Medical Interpreter");
+    return lines.join("\n");
+  }, [messages, roomId, myShort, fromLang, resolvedPartnerShort, partnerShort]);
+
+  const handleCopyForTool = useCallback(async (kind) => {
+    const text = getTranscriptCopyText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback(kind);
+      setTimeout(() => setCopyFeedback(null), 2000);
+      showToast("복사됨 ✓");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopyFeedback(kind);
+      setTimeout(() => setCopyFeedback(null), 2000);
+      showToast("복사됨 ✓");
+    }
+  }, [getTranscriptCopyText, showToast]);
+
   const formatDateDivider = useCallback((ts) => {
     if (!ts) return "";
     const d = new Date(ts);
@@ -1507,6 +1569,22 @@ export default function ChatScreen() {
               </button>
               {roomMenuOpen ? (
                 <div className="absolute right-0 top-[44px] w-[176px] rounded-[8px] border border-[var(--color-border)] bg-white shadow-lg z-[70] overflow-hidden">
+                  {isHospitalMode && !isGuestMode && orgCopySettings && (orgCopySettings.emr_enabled || orgCopySettings.crm_enabled) && (
+                    <>
+                      {orgCopySettings.emr_enabled && (
+                        <button type="button" onClick={() => { setRoomMenuOpen(false); handleCopyForTool("emr"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)] flex items-center gap-2">
+                          <Copy size={14} />
+                          {copyFeedback === "emr" ? "복사됨 ✓" : `${orgCopySettings.emr_label || "EMR"}에 복사`}
+                        </button>
+                      )}
+                      {orgCopySettings.crm_enabled && (
+                        <button type="button" onClick={() => { setRoomMenuOpen(false); handleCopyForTool("crm"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)] flex items-center gap-2">
+                          <Copy size={14} />
+                          {copyFeedback === "crm" ? "복사됨 ✓" : `${orgCopySettings.crm_label || "CRM"}에 복사`}
+                        </button>
+                      )}
+                    </>
+                  )}
                   <button type="button" onClick={() => { setRoomMenuOpen(false); showToast(t("chat.notifSoon")); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)]">
                     🔔 {t("settings.notifications")}
                   </button>

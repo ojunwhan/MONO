@@ -128,6 +128,10 @@ export default function AdminOrgDetail() {
       plan: org.plan,
       trial_ends_at: org.trial_ends_at || "",
       is_active: org.is_active,
+      emr_enabled: org.emr_enabled ? 1 : 0,
+      crm_enabled: org.crm_enabled ? 1 : 0,
+      emr_label: org.emr_label ?? "",
+      crm_label: org.crm_label ?? "",
     });
     setEditing(true);
     setSaveMsg("");
@@ -445,6 +449,82 @@ export default function AdminOrgDetail() {
                   ? new Date(org.created_at).toLocaleString("ko-KR")
                   : "-"}
               </p>
+            </div>
+
+            {/* ── 통합 도구 설정 (EMR / CRM) ── */}
+            <div className="pt-4 border-t border-gray-800">
+              <span className={LABEL_CLS}>통합 도구 설정</span>
+              <p className="text-gray-500 text-xs mb-3">
+                직원 화면에서 통역 종료 후 표시할 복사 버튼 및 커스텀 이름
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  {editing ? (
+                    <>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!editForm.emr_enabled}
+                          onChange={(e) =>
+                            setEditForm((f) => ({ ...f, emr_enabled: e.target.checked ? 1 : 0 }))
+                          }
+                          className="rounded border-gray-600 bg-gray-800 text-indigo-500"
+                        />
+                        <span className="text-sm text-gray-300">EMR 사용</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.emr_label ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, emr_label: e.target.value }))
+                        }
+                        placeholder="예: EMR, 의무기록, 차트"
+                        className={`${INPUT_CLS} flex-1 max-w-[200px]`}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-gray-400">
+                        EMR: {org.emr_enabled ? "사용" : "미사용"}
+                        {org.emr_label ? ` (${org.emr_label})` : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {editing ? (
+                    <>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!editForm.crm_enabled}
+                          onChange={(e) =>
+                            setEditForm((f) => ({ ...f, crm_enabled: e.target.checked ? 1 : 0 }))
+                          }
+                          className="rounded border-gray-600 bg-gray-800 text-indigo-500"
+                        />
+                        <span className="text-sm text-gray-300">CRM 사용</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.crm_label ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, crm_label: e.target.value }))
+                        }
+                        placeholder="예: CRM, 고객관리"
+                        className={`${INPUT_CLS} flex-1 max-w-[200px]`}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-gray-400">
+                        CRM: {org.crm_enabled ? "사용" : "미사용"}
+                        {org.crm_label ? ` (${org.crm_label})` : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

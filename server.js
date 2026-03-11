@@ -4698,6 +4698,27 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
+    // organizations 테이블에 EMR/CRM 통합 도구 설정 컬럼 추가
+    try {
+      const orgCols = await dbAll("PRAGMA table_info(organizations)");
+      if (!orgCols.some(c => c.name === 'emr_enabled')) {
+        await dbRun("ALTER TABLE organizations ADD COLUMN emr_enabled INTEGER NOT NULL DEFAULT 0");
+        console.log('[admin] ✅ added organizations.emr_enabled');
+      }
+      if (!orgCols.some(c => c.name === 'crm_enabled')) {
+        await dbRun("ALTER TABLE organizations ADD COLUMN crm_enabled INTEGER NOT NULL DEFAULT 0");
+        console.log('[admin] ✅ added organizations.crm_enabled');
+      }
+      if (!orgCols.some(c => c.name === 'emr_label')) {
+        await dbRun("ALTER TABLE organizations ADD COLUMN emr_label TEXT");
+        console.log('[admin] ✅ added organizations.emr_label');
+      }
+      if (!orgCols.some(c => c.name === 'crm_label')) {
+        await dbRun("ALTER TABLE organizations ADD COLUMN crm_label TEXT");
+        console.log('[admin] ✅ added organizations.crm_label');
+      }
+    } catch (_) {}
+
     // 슈퍼관리자 초기값 삽입
     await dbRun(
       `INSERT OR IGNORE INTO admin_settings (key, value) VALUES ('admin_setup_done', 'false')`
@@ -4826,6 +4847,29 @@ app.get('/api/hospital/auth/me', requireHospitalAdminJwt, (req, res) => {
     email: req.hospitalAdminEmail,
     role: 'hospital_admin',
   });
+});
+
+// GET /api/hospital/org-settings — 직원/상담 화면용 EMR·CRM 버튼 설정 (org_code 기준, 인증 불필요)
+app.get('/api/hospital/org-settings', async (req, res) => {
+  try {
+    const orgCode = String(req.query.org_code || '').trim();
+    if (!orgCode) return res.json({ ok: true, emr_enabled: false, crm_enabled: false, emr_label: null, crm_label: null });
+    const row = await dbGet(
+      'SELECT emr_enabled, crm_enabled, emr_label, crm_label FROM organizations WHERE org_code = ? LIMIT 1',
+      [orgCode]
+    );
+    if (!row) return res.json({ ok: true, emr_enabled: false, crm_enabled: false, emr_label: null, crm_label: null });
+    res.json({
+      ok: true,
+      emr_enabled: !!row.emr_enabled,
+      crm_enabled: !!row.crm_enabled,
+      emr_label: row.emr_label || null,
+      crm_label: row.crm_label || null,
+    });
+  } catch (e) {
+    console.error('[hospital:org-settings]', e?.message);
+    res.status(500).json({ error: 'org_settings_failed' });
+  }
 });
 
 // POST /api/hospital/auth/logout — 병원 관리자 로그아웃 (쿠키 삭제)

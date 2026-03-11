@@ -172,7 +172,7 @@ router.patch('/orgs/:orgId', verifyAdmin, async (req, res) => {
     if (!org) return res.status(404).json({ error: 'not_found' });
 
     const updates = {};
-    const allowed = ['name', 'org_type', 'plan', 'trial_ends_at', 'logo_url', 'primary_color', 'welcome_msg', 'default_lang', 'is_active'];
+    const allowed = ['name', 'org_type', 'plan', 'trial_ends_at', 'logo_url', 'primary_color', 'welcome_msg', 'default_lang', 'is_active', 'emr_enabled', 'crm_enabled', 'emr_label', 'crm_label'];
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }

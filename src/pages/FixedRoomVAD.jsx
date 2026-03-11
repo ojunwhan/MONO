@@ -450,6 +450,21 @@ export default function FixedRoomVAD() {
     sessionIdRef.current = stateSessionId;
   }, [stateSessionId]);
 
+  // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 ──
+  const [orgCopySettings, setOrgCopySettings] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null); // 'emr' | 'crm' | null
+  useEffect(() => {
+    if (step !== "ended" || !isOwner || !orgCode) return;
+    let cancelled = false;
+    fetch(`/api/hospital/org-settings?org_code=${encodeURIComponent(orgCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.ok) setOrgCopySettings(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [step, isOwner, orgCode]);
+
   // ── 환자 이력 (직원 + patientToken 있을 때) ──
   const [patientHistory, setPatientHistory] = useState(null);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
@@ -792,13 +807,8 @@ export default function FixedRoomVAD() {
       (async () => {
         await doStopInterpreting();
         if (isOwner) {
-          if (returnToReceptionUrl) {
-            window.location.href = returnToReceptionUrl;
-            return;
-          }
-          const deptId = hospitalDept?.id || "reception";
-          const template = hospitalTemplate && (hospitalTemplate === "reception" || hospitalTemplate === "consultation") ? hospitalTemplate : "reception";
-          navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
+          // 직원: 종료 화면(ended)으로 전환 → EMR/CRM 복사 후 "대시보드로 돌아가기"
+          setStep("ended");
         } else {
           if (consultationKioskRoomId) {
             navigate(`/hospital?template=consultation&room=${encodeURIComponent(consultationKioskRoomId)}&kiosk=true`, { replace: true });
@@ -980,6 +990,66 @@ export default function FixedRoomVAD() {
     if (status === STATUS.LISTENING) return "#22c55e";
     return "#6b7280";
   }, [status]);
+
+  // ── 통역 종료 후 복사용 텍스트 생성 ──
+  const getTranscriptCopyText = useCallback(() => {
+    const dateStr = new Date().toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(/\//g, ".");
+    const staffLang = (() => {
+      const p = getLanguageProfileByCode(fromLang);
+      return p?.shortLabel || fromLang || "한국어";
+    })();
+    const patientLang = partnerLangDisplay || (() => {
+      const p = partnerInfo?.lang ? getLanguageProfileByCode(partnerInfo.lang) : (patientData?.language ? getLanguageProfileByCode(patientData.language) : null);
+      return p?.shortLabel || "영어";
+    })();
+    const lines = [
+      "[MONO 통역 기록]",
+      `날짜: ${dateStr}`,
+      `환자번호: ${roomId || ""}`,
+      "---",
+    ];
+    (messages || []).forEach((m) => {
+      const orig = (m.originalText || "").trim();
+      const trans = (m.translatedText || "").trim();
+      if (m.mine) {
+        if (orig) lines.push(`직원 (${staffLang}): ${orig}`);
+        if (trans) lines.push(`환자 (${patientLang}): ${trans}`);
+      } else {
+        if (orig) lines.push(`환자 (${patientLang}): ${orig}`);
+        if (trans) lines.push(`직원 (${staffLang}): ${trans}`);
+      }
+    });
+    lines.push("---", "Powered by MONO Medical Interpreter");
+    return lines.join("\n");
+  }, [messages, roomId, fromLang, partnerLangDisplay, partnerInfo, patientData]);
+
+  const handleCopyForTool = useCallback(async (kind) => {
+    const text = getTranscriptCopyText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback(kind);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopyFeedback(kind);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    }
+  }, [getTranscriptCopyText]);
+
+  const handleBackToDashboard = useCallback(() => {
+    if (returnToReceptionUrl) {
+      window.location.href = returnToReceptionUrl;
+      return;
+    }
+    const deptId = hospitalDept?.id || "reception";
+    const template = hospitalTemplate && (hospitalTemplate === "reception" || hospitalTemplate === "consultation") ? hospitalTemplate : "reception";
+    navigate(`/hospital?template=${template}&dept=${deptId}`, { replace: true });
+  }, [returnToReceptionUrl, hospitalDept, hospitalTemplate, navigate]);
 
   // ═════════════════════════════════════════
   // RENDER
@@ -1368,7 +1438,7 @@ export default function FixedRoomVAD() {
       )}
 
       {/* ═══════════════════════════════════════ */}
-      {/* STEP: ENDED (환자만) */}
+      {/* STEP: ENDED */}
       {/* ═══════════════════════════════════════ */}
       {step === "ended" && (
         <div style={{
@@ -1393,11 +1463,73 @@ export default function FixedRoomVAD() {
               통역이 종료되었습니다. 수고하셨습니다.
             </h2>
             <p style={{ fontSize: "14px", opacity: 0.6, marginTop: "8px" }}>
-              이 페이지를 닫아도 됩니다.
+              {isOwner ? "아래 버튼으로 기록을 복사한 뒤 EMR/CRM에 붙여넣을 수 있습니다." : "이 페이지를 닫아도 됩니다."}
             </p>
           </div>
 
-          {hospitalDept && (
+          {/* 직원 전용: EMR/CRM 복사 버튼 (병원 설정에 따라 표시) */}
+          {isOwner && orgCopySettings && (orgCopySettings.emr_enabled || orgCopySettings.crm_enabled) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", justifyContent: "center" }}>
+              {orgCopySettings.emr_enabled && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyForTool("emr")}
+                  style={{
+                    padding: "12px 20px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                    background: copyFeedback === "emr" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
+                    color: "white",
+                    fontSize: "15px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {copyFeedback === "emr" ? "복사됨 ✓" : `${orgCopySettings.emr_label || "EMR"}에 복사`}
+                </button>
+              )}
+              {orgCopySettings.crm_enabled && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyForTool("crm")}
+                  style={{
+                    padding: "12px 20px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                    background: copyFeedback === "crm" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
+                    color: "white",
+                    fontSize: "15px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {copyFeedback === "crm" ? "복사됨 ✓" : `${orgCopySettings.crm_label || "CRM"}에 복사`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 직원: 대시보드로 돌아가기 */}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={handleBackToDashboard}
+              style={{
+                padding: "14px 28px",
+                borderRadius: "12px",
+                border: "none",
+                background: "#3b82f6",
+                color: "white",
+                fontSize: "15px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              대시보드로 돌아가기
+            </button>
+          )}
+
+          {!isOwner && hospitalDept && (
             <div style={{
               textAlign: "center", padding: "12px 24px",
               background: "rgba(255,255,255,0.05)", borderRadius: "12px",

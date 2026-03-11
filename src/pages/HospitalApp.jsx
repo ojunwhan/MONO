@@ -361,6 +361,7 @@ export default function HospitalApp() {
         roomName={roomName}
         consultationRoomId={urlRoom || null}
         returnToReceptionUrl={returnToReceptionUrl}
+        orgCode={org}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
         showLangGrid={showLangGrid}
@@ -376,7 +377,7 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
+function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
   const [waitingPatients, setWaitingPatients] = useState([]);
   const [consultationRooms, setConsultationRooms] = useState([]);
   const [assignDropdownRoomId, setAssignDropdownRoomId] = useState(null);
@@ -560,6 +561,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         saveMode,
         patientToken: patient.patientToken ?? null,
         inputMode,
+        orgCode: orgCode || "",
+        deptCode: selectedDept?.id || "reception",
         ...(sessionId ? { sessionId } : {}),
         ...(returnToReceptionUrl ? { returnToReceptionUrl } : {}),
       },
