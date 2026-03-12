@@ -13,7 +13,7 @@ import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp } from "lucide-react";
-import { saveHospitalConversation } from "../db/hospitalConversations";
+import { saveHospitalConversation, getHospitalConversationsByRoom } from "../db/hospitalConversations";
 
 // ── PTT 전용: PCM16 전송 (VAD 미사용) ──
 const PTT_CHUNK_SIZE = 24000; // 1.5초 @16kHz, server와 동일
@@ -501,6 +501,8 @@ export default function FixedRoomVAD() {
   const messagesEndRef = useRef(null);
   const pendingMergedRef = useRef(false);
   const [textInputValue, setTextInputValue] = useState("");
+  const messagesRef = useRef([]);
+  const savedMessageIdsRef = useRef(new Set());
 
   // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 (step 선언 이후에 배치) ──
   const [orgCopySettings, setOrgCopySettings] = useState(null);
@@ -536,6 +538,28 @@ export default function FixedRoomVAD() {
 
   // ── 환자 폰: 병원 모드일 때 대화 내용 실시간 IndexedDB 저장 (PT-XXXXXX + 날짜) ──
   const isHospitalGuest = isGuest && (hospitalDept || String(siteContext || "").startsWith("hospital_"));
+  const loadedForRoomIdRef = useRef(null);
+  useEffect(() => {
+    if (!isHospitalGuest || !roomId) return;
+    if (loadedForRoomIdRef.current === roomId) return;
+    loadedForRoomIdRef.current = roomId;
+    const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    getHospitalConversationsByRoom(roomId)
+      .then((list) => {
+        const rec = (list || []).find((r) => r.dateStr === today);
+        if (rec?.messages?.length) {
+          setMessages(rec.messages.map((m) => ({
+            id: m.id || `idb_${m.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+            originalText: m.originalText ?? m.text ?? "",
+            translatedText: m.translatedText ?? "",
+            mine: !!m.mine,
+            senderId: m.mine ? participantId : "staff",
+            timestamp: m.timestamp || 0,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, [isHospitalGuest, roomId, participantId]);
   useEffect(() => {
     if (!isHospitalGuest || !roomId || messages.length === 0) return;
     const toSave = messages.map((m) => ({
@@ -547,6 +571,10 @@ export default function FixedRoomVAD() {
     }));
     saveHospitalConversation(roomId, toSave).catch(() => {});
   }, [isHospitalGuest, roomId, messages]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // PTT 모드일 때는 useVADPipeline을 호출하지 않음. VAD는 VADReadyButton / InterpretingVAD에서만 사용.
   const pauseVadRef = useRef(null);
@@ -574,7 +602,7 @@ export default function FixedRoomVAD() {
       .catch(() => setPatientHistory(null));
   }, [patientToken, isOwner]);
 
-  // ── 소켓: 방 입장 ──
+  // ── 소켓: 방 입장 (inputMode 변경 시에는 재입장하지 않음 — 로컬 UI만 변경) ──
   useEffect(() => {
     if (!roomId || !participantId) return;
 
@@ -600,7 +628,7 @@ export default function FixedRoomVAD() {
         reason: "fixed-room-vad-cleanup",
       });
     };
-  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly, inputMode]);
+  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly]);
 
   // ── 통역 시작 공통 로직 (VAD 시작은 InterpretingVAD에서 수행) ──
   const doStartInterpreting = useCallback(async () => {
@@ -760,6 +788,7 @@ export default function FixedRoomVAD() {
           senderLang: isMine ? fromLang : (partnerInfo?.lang || ""),
           translatedLang: isMine ? (partnerInfo?.lang || "") : fromLang,
         });
+        savedMessageIdsRef.current.add(id);
       }
 
       if (processingRef.current) {
@@ -833,6 +862,25 @@ export default function FixedRoomVAD() {
     const onRoomEnded = (payload) => {
       if (payload?.roomId !== roomId) return;
       if (!isOwner) return;
+      if (saveMessages && sessionIdRef.current && roomId) {
+        const current = messagesRef.current || [];
+        const saved = savedMessageIdsRef.current;
+        current.forEach((m) => {
+          if (!m.id || saved.has(m.id)) return;
+          try {
+            saveMessageToServer({
+              sessionId: sessionIdRef.current,
+              roomId,
+              patientToken: patientToken || undefined,
+              senderRole: m.mine ? roleHint : "guest",
+              originalText: m.originalText || "",
+              translatedText: m.translatedText || "",
+              senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
+              translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+            });
+          } catch (_) {}
+        });
+      }
       if (returnToReceptionUrl) {
         window.location.href = returnToReceptionUrl;
         return;
@@ -914,16 +962,35 @@ export default function FixedRoomVAD() {
     socket.emit("fixed-room:start", { roomId });
   }, [roomId]);
 
-  // ── 직원: 통역 종료 — 서버 세션 종료 API 호출 후 소켓으로 양쪽에 알림, 대화는 서버에 이미 저장됨 ──
+  // ── 직원: 통역 종료 — 미저장 메시지 먼저 서버에 저장 후 세션 종료 (저장 실패해도 통역 종료는 진행) ──
   const handleStopInterpreting = useCallback(async () => {
     const sid = stateSessionId || sessionIdRef.current;
+    if (saveMessages && sid && roomId && (hospitalDept || hospitalTemplate)) {
+      const current = messagesRef.current || [];
+      const saved = savedMessageIdsRef.current;
+      current.forEach((m) => {
+        if (!m.id || saved.has(m.id)) return;
+        try {
+          saveMessageToServer({
+            sessionId: sid,
+            roomId,
+            patientToken: patientToken || undefined,
+            senderRole: m.mine ? roleHint : (isOwner ? "guest" : "owner"),
+            originalText: m.originalText || "",
+            translatedText: m.translatedText || "",
+            senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
+            translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+          });
+        } catch (_) {}
+      });
+    }
     if (sid && (hospitalDept || hospitalTemplate)) {
       try {
         await fetch(`/api/hospital/session/${encodeURIComponent(sid)}/end`, { method: "POST", credentials: "include" });
       } catch (_) {}
     }
     socket.emit("fixed-room:end", { roomId });
-  }, [roomId, stateSessionId, hospitalDept, hospitalTemplate]);
+  }, [roomId, stateSessionId, hospitalDept, hospitalTemplate, saveMessages, patientToken, roleHint, isOwner, fromLang, partnerInfo]);
 
   // ── 텍스트 메시지 전송 (send-message) ──
   const sendTextMessage = useCallback(() => {
@@ -961,6 +1028,32 @@ export default function FixedRoomVAD() {
     }, 25000);
     return () => clearInterval(iv);
   }, [roomId]);
+
+  // ── 페이지 닫기/이탈 시 미저장 메시지 서버에 저장 시도 (저장 실패해도 무시) ──
+  useEffect(() => {
+    if (!saveMessages || !roomId || !(hospitalDept || hospitalTemplate)) return;
+    const sid = stateSessionId || sessionIdRef.current;
+    if (!sid) return;
+    const onBeforeUnload = () => {
+      const current = messagesRef.current || [];
+      const saved = savedMessageIdsRef.current;
+      current.forEach((m) => {
+        if (!m.id || saved.has(m.id)) return;
+        saveMessageToServer({
+          sessionId: sid,
+          roomId,
+          patientToken: patientToken || undefined,
+          senderRole: m.mine ? roleHint : (isOwner ? "guest" : "owner"),
+          originalText: m.originalText || "",
+          translatedText: m.translatedText || "",
+          senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
+          translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+        });
+      });
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saveMessages, roomId, hospitalDept, hospitalTemplate, stateSessionId, patientToken, roleHint, isOwner, fromLang, partnerInfo]);
 
   // ── 메시지 추가 시 자동 스크롤 ──
   useEffect(() => {
