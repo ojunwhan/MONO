@@ -3455,6 +3455,7 @@ io.on('connection', (socket) => {
             const isOwner = meta.ownerPid === participantId;
             const senderRole = isOwner ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
+            console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3791,6 +3792,7 @@ io.on('connection', (socket) => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
         console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken });
+        console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
         await dbRun(
           `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -3941,6 +3943,7 @@ io.on('connection', (socket) => {
             ).catch(() => null);
           }
           const isOwner2 = meta.ownerPid === participantId;
+          console.log('[DEBUG sender_role]', { senderRole: isOwner2 ? 'host' : 'guest', recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
           await dbRun(
             `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -5377,6 +5380,7 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
+    console.log('[DEBUG sender_role]', { senderRole: 'host', recRole: undefined, ownerPid: undefined, socketId: undefined });
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
@@ -5500,6 +5504,7 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
+    console.log('[DEBUG sender_role]', { senderRole: senderRole || 'guest', recRole: undefined, ownerPid: undefined, socketId: undefined });
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
