@@ -3728,7 +3728,8 @@ io.on('connection', (socket) => {
   });
 
   // --- send-message 핸들러 (room-type aware) ---
-  socket.on('send-message', async ({ roomId, message, participantId }, ack) => {
+  socket.on('send-message', async (data, ack) => {
+    const { roomId, message, participantId } = data || {};
     const ackReply = (payload) => {
       if (typeof ack === "function") {
         try { ack(payload); } catch {}
@@ -3788,8 +3789,8 @@ io.on('connection', (socket) => {
 
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
     if (meta.hospitalSessionId || meta.hospitalMode) {
-      const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
-      const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
+      const senderId = data?.participantId || data?.myUserId;
+      const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
@@ -3944,8 +3945,8 @@ io.on('connection', (socket) => {
               [roomId]
             ).catch(() => null);
           }
-          const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
-          const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
+          const senderId = data?.participantId || data?.myUserId;
+          const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
           console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
           await dbRun(
             `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
