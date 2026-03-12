@@ -693,14 +693,14 @@ function OverviewPanel({ authUser }) {
       >
         <button
           type="button"
-          onClick={() => setStartModal("choose")}
+          onClick={() => authUser?.org_code && navigate(`/hospital/staff-qr/${encodeURIComponent(authUser.org_code)}`)}
           className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
           style={{ backgroundColor: HOSPITAL_PRIMARY }}
         >
           <Activity size={24} />
           오늘 통역 시작하기
         </button>
-        <p className="mt-2 text-[13px] text-slate-600">접수처 또는 상담실 통역을 한 번에 시작합니다</p>
+        <p className="mt-2 text-[13px] text-slate-600">QR 화면에서 환자에게 스캔하게 하세요</p>
         {authUser?.org_code && (
           <a
             href={`/hospital/staff-qr/${encodeURIComponent(authUser.org_code)}`}
@@ -712,47 +712,6 @@ function OverviewPanel({ authUser }) {
           </a>
         )}
       </div>
-
-      {/* 모달: 통역 유형 선택 */}
-      {startModal === "choose" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">통역 시작</h3>
-              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => getOrCreateReceptionRoom()}
-                disabled={roomsLoading}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-colors hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
-                style={{ borderColor: receptionRoom ? HOSPITAL_PRIMARY : HOSPITAL_BORDER }}
-              >
-                <span className="text-3xl">🖥️</span>
-                <div className="flex-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">접수처 통역</span>
-                  <span className="text-[12px] text-slate-500">직원 PC + 환자 폰 1:1 탭하여 말하기</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStartModal("consultation-mode")}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
-              >
-                <span className="text-3xl">🩺</span>
-                <div className="flex-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">상담실 통역</span>
-                  <span className="text-[12px] text-slate-500">태블릿 고정, VAD 또는 탭하여 말하기</span>
-                </div>
-              </button>
-            </div>
-            {roomsLoading && <p className="text-center text-[13px] text-slate-500 mt-2">방 확인 중...</p>}
-          </div>
-        </div>
-      )}
 
       {/* 모달: 상담실 — VAD / PTT 선택 */}
       {startModal === "consultation-mode" && (
