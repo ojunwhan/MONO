@@ -178,8 +178,8 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
         </div>
 
         {/* International Patients Only — 3D marquee (two spans, seamless loop) */}
-        <div className="w-full overflow-hidden mb-4 sm:mb-6" style={{ perspective: "800px" }}>
-          <div className="relative" style={{ minHeight: "1.5em" }}>
+        <div className="w-full mb-4 sm:mb-6" style={{ perspective: "800px", overflowX: "hidden", overflowY: "visible" }}>
+          <div className="relative kiosk-marquee-container">
             <span
               className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
               style={{ color: "#F97316", transformStyle: "preserve-3d" }}
@@ -226,9 +226,15 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           top: 0;
           animation: kioskMarquee 14s ease-in-out infinite;
           backface-visibility: hidden;
+          line-height: 1.5;
         }
         .kiosk-marquee-2 {
           animation-delay: -7s;
+        }
+        .kiosk-marquee-container {
+          min-height: 2.75em;
+          padding: 0.35em 0;
+          overflow: visible;
         }
       `}</style>
     </div>
