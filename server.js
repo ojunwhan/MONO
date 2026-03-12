@@ -2329,7 +2329,7 @@ io.on('connection', (socket) => {
 
     const isOwner = roleHint === "owner"
       ? true
-      : (!meta.ownerPid && roleHint !== "guest");
+      : (meta.ownerPid === participantId ? true : (!meta.ownerPid && roleHint !== "guest"));
     if (isOwner) meta.ownerPid = participantId;
     const role = isOwner ? "owner" : "guest";
     const roleName = isOwner ? "Manager" : "Tech";
@@ -3196,8 +3196,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on("stt:segment_end", async ({ roomId, participantId }) => {
-    const tServer = Date.now(); // [PERF] T3: segment_end 수신 시점
-    console.log("[PERF] T3 segment_end received on server");
+    const tServer = Date.now();
     if (!consumeRate(socket.id, 'stt:segment_end', LIMITS.STT_SEGMENT_END_PER_30S, 30000)) {
       return;
     }
@@ -3236,8 +3235,6 @@ io.on('connection', (socket) => {
     let text = "";
     try {
       text = await transcribePcm16(pcm, session.lang, session.sampleRateHz, { hospitalMode: sttHospitalMode });
-      // [PERF] T4: STT 완료
-      console.log(`[PERF] T4 STT done | T3→T4: ${Date.now() - tServer}ms | text: ${(text || '').slice(0, 30)}`);
       text = normalizeRepeats(text);
       console.log(`[stt:segment] 🎙 STT result: "${text}"${sttHospitalMode ? ' [hospital]' : ''}`);
     } catch (e) {
@@ -3266,7 +3263,6 @@ io.on('connection', (socket) => {
 
     const emitTranslated = async (finalText) => {
       if (!finalText || isGarbageText(finalText)) return;
-      console.log('[DEBUG stt_ids]', { segPid: participantId, sttPid: socket._sttParticipantId, ownerPid: ROOMS.get(roomId)?.ownerPid, metaOwnerPid: meta?.ownerPid });
       const roomType = meta.roomType || "oneToOne";
       const msgId = uuidv4();
 
@@ -3332,8 +3328,6 @@ io.on('connection', (socket) => {
                   originalText: finalText,
                 });
               }
-              // [PERF] T5: fastTranslate 완료
-              console.log(`[PERF] T5 fastTranslate done | T3→T5: ${Date.now() - tServer}ms`);
               await consumeTranslationUsage(participantId);
               console.log(`[1:1:translate] ✅ "${(translated || '').slice(0, 60)}"`);
             }
@@ -3415,8 +3409,6 @@ io.on('connection', (socket) => {
         let finalizedForTts = translated;
         try {
           const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
-          // [PERF] T6: hqTranslate 완료
-          console.log(`[PERF] T6 hqTranslate done | T3→T6: ${Date.now() - tServer}ms`);
           if (!isGarbageText(hq) && otherP?.socketId) {
             finalizedForTts = hq;
             io.to(otherP.socketId).emit("revise-message", {
@@ -3441,7 +3433,6 @@ io.on('connection', (socket) => {
           try {
             const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
             const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
-            console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken });
             // Find active session for this room (try new patient_token-based first)
             let activeSession = null;
             if (pToken) {
@@ -3458,7 +3449,6 @@ io.on('connection', (socket) => {
             }
             const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
-            console.log('[DEBUG sender_role]', { senderRole, participantId, ownerPid: meta?.ownerPid, match: participantId === meta?.ownerPid });
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3637,10 +3627,6 @@ io.on('connection', (socket) => {
         emitTranslated(buf.text);
       }, 1200);
       STT_TEXT_BUFFER.set(key, { text: nextText, timer });
-      // 짧은 발화도 즉시 번역·전송 (이전에는 return만 해서 emitTranslated 미호출로 T5/T7 미출력됨)
-      STT_TEXT_BUFFER.delete(key);
-      clearTimeout(timer);
-      await emitTranslated(nextText);
       return;
     }
 
@@ -3796,8 +3782,6 @@ io.on('connection', (socket) => {
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
-        console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken });
-        console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
         await dbRun(
           `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -3933,7 +3917,6 @@ io.on('connection', (socket) => {
         try {
           const sessionRow2 = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
           const pToken2 = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow2?.patient_token ?? null;
-          console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken: pToken2 });
           let activeSession2 = null;
           if (pToken2) {
             activeSession2 = await dbGet(
@@ -3949,7 +3932,6 @@ io.on('connection', (socket) => {
           }
           const senderId = data?.participantId || data?.myUserId;
           const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
-          console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
           await dbRun(
             `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -5386,7 +5368,6 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
-    console.log('[DEBUG sender_role]', { senderRole: 'host', recRole: undefined, ownerPid: undefined, socketId: undefined });
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
@@ -5510,7 +5491,6 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
-    console.log('[DEBUG sender_role]', { senderRole: senderRole || 'guest', recRole: undefined, ownerPid: undefined, socketId: undefined });
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
