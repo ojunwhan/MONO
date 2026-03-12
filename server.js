@@ -2779,6 +2779,14 @@ io.on('connection', (socket) => {
       else meta.guestLang = langCode;
     }
 
+    // When staff (host) joins a hospital room, persist host_lang to hospital_sessions
+    if (serverRole === "owner" && String(meta.siteContext || "").startsWith("hospital_") && fromLang) {
+      const hostLangVal = mapLang(fromLang) || String(fromLang).trim() || null;
+      if (hostLangVal) {
+        dbRun("UPDATE hospital_sessions SET host_lang = ? WHERE room_id = ? AND status = ?", [hostLangVal, roomId, "active"]).catch(() => {});
+      }
+    }
+
     const existing = meta.participants[participantId];
     const pLang = langCode || existing?.lang || (serverRole === "owner" ? meta.ownerLang : meta.guestLang) || "auto";
     const peerLabelFromLang = (lang) => {
@@ -3277,11 +3285,16 @@ io.on('connection', (socket) => {
         // Resolve sender display name for receiver's language
         const senderP = meta.participants[participantId];
         let senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
-        // Hospital mode: host always sees guest as "환자"
+        // Hospital mode: host sees guest as "환자", guest sees host as "의료진"
         const isHospitalMsg = String(meta.siteContext || "").startsWith("hospital_");
-        if (isHospitalMsg && meta.ownerPid && otherPid === meta.ownerPid) {
-          // otherPid is host (receiver) and sender is guest → host sees "환자"
-          senderDisplayName = "환자";
+        if (isHospitalMsg && meta.ownerPid) {
+          if (otherPid === meta.ownerPid) {
+            // receiver is host, sender is guest → host sees "환자"
+            senderDisplayName = "환자";
+          } else if (participantId === meta.ownerPid) {
+            // sender is host, receiver is guest → guest sees "의료진"
+            senderDisplayName = "의료진";
+          }
         }
 
         let translated = finalText;
