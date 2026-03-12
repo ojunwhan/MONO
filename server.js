@@ -3452,7 +3452,9 @@ io.on('connection', (socket) => {
                 [roomId]
               ).catch(() => null);
             }
-            const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
+            const speakerPid = participantId;
+            const senderRole = (speakerPid === meta?.ownerPid) ? 'host' : 'guest';
+            console.log('[DEBUG sender_role_final]', { speakerPid, ownerPid: meta?.ownerPid, senderRole });
             // Save to hospital_messages with patient_token
             console.log('[DEBUG sender_role]', { senderRole, participantId, ownerPid: meta?.ownerPid, match: participantId === meta?.ownerPid });
             await dbRun(
