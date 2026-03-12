@@ -228,6 +228,7 @@ export default function HospitalApp() {
 
   const [authUser, setAuthUser] = useState(null);
   const [hospitalOrgCode, setHospitalOrgCode] = useState("");
+  const [hospitalAuthChecked, setHospitalAuthChecked] = useState(false);
   const [saveMode, setSaveMode] = useState(false);
   const [summaryMessages, setSummaryMessages] = useState([]);
   const [summaryDept, setSummaryDept] = useState(null);
@@ -280,9 +281,20 @@ export default function HospitalApp() {
   useEffect(() => {
     fetch("/api/hospital/auth/me", { credentials: "include" })
       .then((r) => r.json())
-      .then((data) => { if (data?.org_code) setHospitalOrgCode(data.org_code); })
-      .catch(() => {});
+      .then((data) => {
+        if (data?.org_code) setHospitalOrgCode(data.org_code);
+        setHospitalAuthChecked(true);
+      })
+      .catch(() => setHospitalAuthChecked(true));
   }, []);
+
+  useEffect(() => {
+    if (!hospitalAuthChecked) return;
+    const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
+    if (!isHospitalAdmin) {
+      navTo("/hospital-login", { replace: true });
+    }
+  }, [hospitalAuthChecked, hospitalOrgCode, authUser, navTo]);
 
   useEffect(() => {
     if (location.state?.returnFromSession) {
@@ -307,6 +319,9 @@ export default function HospitalApp() {
   }, [step, summaryMessages, summaryDept, staffDept, selectedLang]);
 
   if (shouldRedirect) return null;
+
+  const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
+  if (hospitalAuthChecked && !isHospitalAdmin) return null;
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital-dashboard", { replace: true }); };
