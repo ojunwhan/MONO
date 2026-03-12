@@ -106,6 +106,11 @@ const router = createBrowserRouter([
     element: <GuestJoinPage />,
   },
   {
+    path: "/hospital/join/:orgCode",
+    loader: () => null,
+    element: <HospitalPatientJoin />,
+  },
+  {
     path: "/room/:roomId",
     element: <ChatScreen />,
   },
@@ -128,10 +133,6 @@ const router = createBrowserRouter([
   {
     path: "/hospital/kiosk/:department",
     element: <HospitalKiosk />,
-  },
-  {
-    path: "/hospital/join/:orgCode",
-    element: <HospitalPatientJoin />,
   },
   {
     path: "/hospital/staff-qr/:orgCode",
