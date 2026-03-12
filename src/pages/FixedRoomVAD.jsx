@@ -286,7 +286,7 @@ function InterpretingVAD({
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
           <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
           <button type="button" onClick={() => setInputMode("vad")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #22c55e", background: "rgba(34,197,94,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>자동 감지 (VAD)</button>
-          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: "12px", cursor: "pointer" }}>버튼으로 말하기 (PTT)</button>
+          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: "12px", cursor: "pointer" }}>탭하여 말하기</button>
         </div>
         <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
           <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.2)", background: "#1e293b", color: "white", fontSize: "14px", outline: "none" }} />
@@ -396,7 +396,7 @@ function InterpretingPTT({
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
           <span style={{ fontSize: "11px", opacity: 0.7 }}>입력 방식:</span>
           <button type="button" onClick={() => setInputMode("vad")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: "12px", cursor: "pointer" }}>자동 감지 (VAD)</button>
-          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #3b82f6", background: "rgba(59,130,246,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>버튼으로 말하기 (PTT)</button>
+          <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #3b82f6", background: "rgba(59,130,246,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>탭하여 말하기</button>
         </div>
         <div style={{ marginBottom: "10px" }}>
           <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "#3b82f6", color: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>

@@ -191,7 +191,7 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
         <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6 space-y-2 sm:space-y-2.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
           <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">1️⃣ Scan the QR code with your phone</p>
           <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">2️⃣ Select your language</p>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3️⃣ Press 🎤 to speak — release when done</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3️⃣ Tap 🎤 to speak — tap again when done</p>
           <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mt-3">No app download needed. Just scan.</p>
         </div>
 

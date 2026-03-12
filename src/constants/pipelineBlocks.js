@@ -10,7 +10,7 @@ export const PIPELINE_LANES = [
 export const PIPELINE_BLOCKS = [
   // 입력
   { id: 'kiosk_qr',   lane: 'input',     label: '키오스크 QR',  icon: '🖥️',  color: '#6366F1' },
-  { id: 'staff_ptt',  lane: 'input',     label: '직원 PTT',     icon: '🎙️',  color: '#6366F1' },
+  { id: 'staff_ptt',  lane: 'input',     label: '직원 탭하여 말하기',     icon: '🎙️',  color: '#6366F1' },
   { id: 'text_input', lane: 'input',     label: '텍스트 입력',  icon: '⌨️',  color: '#6366F1' },
   // STT
   { id: 'groq_whisper', lane: 'stt',     label: 'Whisper',      icon: '⚡',  color: '#0EA5E9' },

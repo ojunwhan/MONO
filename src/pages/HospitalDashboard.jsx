@@ -481,7 +481,7 @@ function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
     }
   };
 
-  const templateLabel = room.template === "consultation" ? "상담 모드 (VAD)" : "접수 모드 (PTT)";
+  const templateLabel = room.template === "consultation" ? "상담 모드 (VAD)" : "접수 모드 (탭하여 말하기)";
 
   return (
     <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] flex flex-col items-center">
@@ -739,7 +739,7 @@ function OverviewPanel({ authUser }) {
                 <span className="text-3xl">🖥️</span>
                 <div className="flex-1">
                   <span className="font-semibold text-slate-800 dark:text-slate-100 block">접수처 통역</span>
-                  <span className="text-[12px] text-slate-500">직원 PC + 환자 폰 1:1 PTT</span>
+                  <span className="text-[12px] text-slate-500">직원 PC + 환자 폰 1:1 탭하여 말하기</span>
                 </div>
               </button>
               <button
@@ -750,7 +750,7 @@ function OverviewPanel({ authUser }) {
                 <span className="text-3xl">🩺</span>
                 <div className="flex-1">
                   <span className="font-semibold text-slate-800 dark:text-slate-100 block">상담실 통역</span>
-                  <span className="text-[12px] text-slate-500">태블릿 고정, VAD 또는 PTT</span>
+                  <span className="text-[12px] text-slate-500">태블릿 고정, VAD 또는 탭하여 말하기</span>
                 </div>
               </button>
             </div>
@@ -790,8 +790,8 @@ function OverviewPanel({ authUser }) {
               >
                 <MicOff size={24} style={{ color: HOSPITAL_PRIMARY }} />
                 <div className="flex-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">PTT (버튼식)</span>
-                  <span className="text-[12px] text-slate-500">버튼 눌러서 말하기</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">탭하여 말하기</span>
+                  <span className="text-[12px] text-slate-500">탭하면 말하기</span>
                 </div>
               </button>
             </div>
@@ -854,7 +854,7 @@ function OverviewPanel({ authUser }) {
             </div>
             <div className="space-y-4">
               <p className="text-[12px] text-slate-500">
-                {consultationInputMode === "vad" ? "VAD (자동 음성감지)" : "PTT (버튼식)"} · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
+                {consultationInputMode === "vad" ? "VAD (자동 음성감지)" : "탭하여 말하기"} · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
               </p>
               <button
                 type="button"

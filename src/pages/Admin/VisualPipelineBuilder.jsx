@@ -17,7 +17,7 @@ const CATEGORIES = [
     color: "#00c9a7",
     blocks: [
       { type: "vad", label: "VAD 음성감지", desc: "Silero VAD 자동 감지", singleton: true },
-      { type: "ptt", label: "PTT 버튼", desc: "Push-to-Talk 수동", singleton: true },
+      { type: "ptt", label: "탭하여 말하기", desc: "탭하여 말하기 (수동)", singleton: true },
       { type: "text_input", label: "텍스트 입력", desc: "키보드 직접 입력", singleton: true },
     ],
   },
