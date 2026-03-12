@@ -1,4 +1,5 @@
 // src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 입장 페이지 (접수처/상담실/이동통역 통일)
+// Public page: no authentication required. Patients must access without logging in.
 // QR 스캔 → 언어 선택 → "통역 시작" → 기존 PT 있으면 재사용, 없으면 새 PT 발급 → ChatScreen PTT 입장
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -159,13 +160,15 @@ export default function HospitalPatientJoin() {
     return (
       <div
         style={{
-          minHeight: "100dvh",
+          minHeight: "100vh",
           background: "#ffffff",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           padding: "32px 20px",
+          boxSizing: "border-box",
+          overflowY: "auto",
         }}
       >
         {/* Logo */}
@@ -330,13 +333,15 @@ export default function HospitalPatientJoin() {
     return (
       <div
         style={{
-          minHeight: "100dvh",
+          minHeight: "100vh",
           background: "#ffffff",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           padding: "32px 20px",
+          boxSizing: "border-box",
+          overflowY: "auto",
         }}
       >
         <MonoLogo />
@@ -363,13 +368,15 @@ export default function HospitalPatientJoin() {
   return (
     <div
       style={{
-        minHeight: "100dvh",
+        minHeight: "100vh",
         background: "#ffffff",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         padding: "32px 20px",
+        boxSizing: "border-box",
+        overflowY: "auto",
       }}
     >
       <MonoLogo />
