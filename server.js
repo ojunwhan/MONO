@@ -2766,13 +2766,11 @@ io.on('connection', (socket) => {
     socket.data.participantId = participantId;
     updateUserPresence(participantId, { activeRoomId: roomId, visibilityState: "visible", socketId: socket.id });
 
-    let serverRole = meta.ownerPid && meta.ownerPid === participantId ? "owner" : "guest";
-    if (roleHint === "owner") {
-      serverRole = "owner";
-      meta.ownerPid = participantId;
-    } else if (roleHint === "guest") {
-      serverRole = "guest";
-    }
+    const isOwner = roleHint === "owner"
+      ? true
+      : (meta.ownerPid === participantId ? true : (!meta.ownerPid && roleHint !== "guest"));
+    if (isOwner) meta.ownerPid = participantId;
+    const serverRole = isOwner ? "owner" : "guest";
     SOCKET_ROLES.set(socket.id, { role: serverRole });
 
     const langCode = fromLang ? mapLang(fromLang) : null;
