@@ -115,19 +115,20 @@ async function autoSaveFile(content, fileName) {
 }
 
 function KioskGuideText() {
-  const messages = ["QR을 스캔하세요", "Scan QR Code", "扫描二维码", "Quét mã QR", "QRコードをスキャン"];
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setIdx((prev) => (prev + 1) % messages.length), 3000);
-    return () => clearInterval(t);
-  }, []);
-  return <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center animate-pulse h-[28px]">{messages[idx]}</p>;
+  return <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center">Scan QR Code to Start</p>;
 }
 
 // 진료실 키오스크: QR 상시 표시 + patient-arrived 시 VAD 대화창으로 전환
 function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams, navTo }) {
   const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
   const isConsultation = template === "consultation";
+  const [qrSize, setQrSize] = useState(280);
+  useEffect(() => {
+    const update = () => setQrSize(Math.min(280, Math.min(window.innerWidth, window.innerHeight) * 0.45));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
   const qrUrl = isConsultation
     ? `${window.location.origin}/hospital/join/consultation?room=${encodeURIComponent(urlRoom)}${urlOrg ? `&org=${encodeURIComponent(urlOrg)}` : ""}`
     : `${window.location.origin}/hospital/join/reception${urlOrg ? `?org=${encodeURIComponent(urlOrg)}` : ""}`;
@@ -170,23 +171,53 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
   }, [isConsultation, urlRoom, navTo, staffDept]);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
-      <div className="mb-6"><MonoLogo /></div>
-      <div className="text-[11px] text-[var(--color-text-secondary)] text-center max-w-[260px] mb-4 space-y-1.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
-        <p className="leading-relaxed">1️⃣ Scan the QR code with your phone</p>
-        <p className="leading-relaxed">2️⃣ Select your language</p>
-        <p className="leading-relaxed">3️⃣ Press 🎤 to speak — release when done</p>
-        <p className="text-[10px] opacity-80 mt-2">No app download needed. Just scan.</p>
+    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border">
+      <div className="w-full max-w-[420px] flex flex-col items-center">
+        <div className="mb-4 sm:mb-6 w-full flex justify-center">
+          <MonoLogo />
+        </div>
+
+        {/* International Patients Only — 3D marquee */}
+        <div className="w-full overflow-hidden mb-4 sm:mb-6" style={{ perspective: "800px" }}>
+          <div
+            className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
+            style={{ color: "#F97316", transformStyle: "preserve-3d" }}
+          >
+            International Patients Only
+          </div>
+        </div>
+
+        {/* Guide steps — larger, no icon block */}
+        <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6 space-y-2 sm:space-y-2.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">1️⃣ Scan the QR code with your phone</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">2️⃣ Select your language</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3️⃣ Press 🎤 to speak — release when done</p>
+          <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mt-3">No app download needed. Just scan.</p>
+        </div>
+
+        {/* QR — responsive size */}
+        <div className="p-4 sm:p-6 rounded-[20px] bg-white dark:bg-[#1a1a1a] shadow-lg" style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+          <QRCode value={qrUrl} size={qrSize} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+        </div>
+
+        <KioskGuideText />
       </div>
-      <div className="text-center mb-4">
-        <span className="text-[64px] block mb-2">{staffDept.icon}</span>
-        <h2 className="text-[28px] font-bold">{displayName}</h2>
-        <p className="text-[14px] text-[var(--color-text-secondary)]">{staffDept.label}</p>
-      </div>
-      <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
-        <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-      </div>
-      <KioskGuideText />
+
+      <style>{`
+        @keyframes kioskMarquee {
+          0% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          62% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
+          75% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
+          76% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
+          88% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          100% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+        }
+        .kiosk-marquee {
+          animation: kioskMarquee 14s ease-in-out infinite;
+          display: inline-block;
+          backface-visibility: hidden;
+        }
+      `}</style>
     </div>
   );
 }
