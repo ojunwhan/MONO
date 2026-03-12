@@ -3779,6 +3779,7 @@ io.on('connection', (socket) => {
     if (meta.hospitalSessionId || meta.hospitalMode) {
       const senderId = data?.participantId || data?.myUserId;
       const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
+      console.log('[DEBUG send-msg]', { senderId: data?.participantId || data?.myUserId, ownerPid: meta?.ownerPid, senderRole });
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
