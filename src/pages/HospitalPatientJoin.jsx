@@ -64,8 +64,7 @@ export default function HospitalPatientJoin() {
     savedLang || detected?.code || "en"
   );
   const [showLangGrid, setShowLangGrid] = useState(true);
-  const isConsultationWithRoom = Boolean(department === "consultation" && urlRoom);
-  const [step, setStep] = useState(isConsultationWithRoom ? "connecting" : "language"); // 상담실+room이면 즉시 connecting 후 auto-join
+  const [step, setStep] = useState("language"); // 상담실 포함 모든 입장에서 반드시 언어 선택 화면 먼저 표시
   const [error, setError] = useState("");
   const [isExistingSession, setIsExistingSession] = useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
@@ -219,15 +218,7 @@ export default function HospitalPatientJoin() {
     }
   }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt, urlInputMode]);
 
-  // 상담실: QR 스캔 후 페이지 로드 시 즉시 join 호출 → 서버가 patient-arrived emit → 태블릿이 대화창으로 전환 (버튼 불필요)
-  const autoJoinAttempted = useRef(false);
-  useEffect(() => {
-    if (department !== "consultation" || !urlRoom || autoJoinAttempted.current) return;
-    autoJoinAttempted.current = true;
-    handleJoin();
-  }, [department, urlRoom, handleJoin]);
-
-  // ── Render: Language Selection ──
+  // 상담실: 언어 선택 후 "통역 시작" 클릭 시에만 handleJoin 호출 (자동 입장 제거 — 환자가 반드시 언어 선택 화면 거침)
   if (step === "language") {
     return (
       <div

@@ -128,22 +128,27 @@ function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, st
   );
 }
 
-// ── 서버 메시지 저장 헬퍼 (sessionId = hospital_sessions.id UUID, roomId = PT-XXXXXX) ──
+// ── 서버 메시지 저장 헬퍼 (sessionId = hospital_sessions.id UUID, roomId = PT-XXXXXX). 실패 시 1회 재시도. 통역 기능과 무관. ──
 function saveMessageToServer({ sessionId, roomId, patientToken, senderRole, originalText, translatedText, senderLang, translatedLang }) {
   if (!sessionId || !roomId) return;
-  fetch("/api/hospital/message", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId,
-      roomId,
-      senderRole: senderRole || "guest",
-      senderLang: senderLang || "",
-      originalText: originalText || "",
-      translatedText: translatedText || "",
-      translatedLang: translatedLang || "",
-    }),
-  }).catch(() => { /* 저장 실패 무시 — 통역에 영향 없음 */ });
+  const payload = {
+    sessionId,
+    roomId,
+    senderRole: senderRole || "guest",
+    senderLang: senderLang || "",
+    originalText: originalText || "",
+    translatedText: translatedText || "",
+    translatedLang: translatedLang || "",
+  };
+  const doSave = () =>
+    fetch("/api/hospital/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  doSave().catch(() => {
+    setTimeout(() => doSave().catch(() => {}), 1000);
+  });
 }
 
 // ── VAD 전용: ready 단계 "통역 시작" 버튼 (useVADPipeline은 이 컴포넌트에서만 호출) ──
@@ -601,6 +606,7 @@ export default function FixedRoomVAD() {
           senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
           translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
         });
+        saved.add(m.id);
       } catch (_) {}
     });
   }, [step, isOwner, saveMessages, roomId, patientToken, roleHint, fromLang, partnerInfo]);
@@ -739,25 +745,27 @@ export default function FixedRoomVAD() {
       const isMine = senderPid === participantId;
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
-        if (idx >= 0) {
-          return prev.map((m, i) =>
-            i === idx
-              ? { ...m, translatedText: (m.translatedText || "") + chunk, streaming: true }
-              : m
-          );
-        }
-        return [
-          ...prev,
-          {
-            id: messageId,
-            originalText: originalText || "",
-            translatedText: chunk,
-            mine: isMine,
-            senderId: senderPid,
-            timestamp: Date.now(),
-            streaming: true,
-          },
-        ];
+        const next =
+          idx >= 0
+            ? prev.map((m, i) =>
+                i === idx
+                  ? { ...m, translatedText: (m.translatedText || "") + chunk, streaming: true }
+                  : m
+              )
+            : [
+                ...prev,
+                {
+                  id: messageId,
+                  originalText: originalText || "",
+                  translatedText: chunk,
+                  mine: isMine,
+                  senderId: senderPid,
+                  timestamp: Date.now(),
+                  streaming: true,
+                },
+              ];
+        messagesRef.current = next;
+        return next;
       });
     };
 
@@ -770,6 +778,7 @@ export default function FixedRoomVAD() {
         const next = prev.map((m) =>
           m.id === messageId ? { ...m, translatedText: fullText ?? m.translatedText, streaming: false } : m
         );
+        messagesRef.current = next;
         if (msg && saveMessages && sessionIdRef.current && !savedMessageIdsRef.current.has(messageId)) {
           saveMessageToServer({
             sessionId: sessionIdRef.current,
@@ -799,26 +808,30 @@ export default function FixedRoomVAD() {
 
       setMessages((prev) => {
         const existingIdx = prev.findIndex((m) => m.id === id);
+        let next;
         if (existingIdx >= 0) {
-          return prev.map((m, i) =>
+          next = prev.map((m, i) =>
             i === existingIdx
               ? { ...m, translatedText: translatedText ?? m.translatedText, streaming: false }
               : m
           );
+        } else {
+          if (seenIdsRef.current.has(id)) return prev;
+          seenIdsRef.current.add(id);
+          next = [
+            ...prev,
+            {
+              id,
+              originalText: originalText || "",
+              translatedText: translatedText || "",
+              mine: isMine,
+              senderId: senderPid,
+              timestamp: eventTs,
+            },
+          ];
         }
-        if (seenIdsRef.current.has(id)) return prev;
-        seenIdsRef.current.add(id);
-        return [
-          ...prev,
-          {
-            id,
-            originalText: originalText || "",
-            translatedText: translatedText || "",
-            mine: isMine,
-            senderId: senderPid,
-            timestamp: eventTs,
-          },
-        ];
+        messagesRef.current = next;
+        return next;
       });
 
       if (saveMessages && sessionIdRef.current) {
@@ -845,11 +858,13 @@ export default function FixedRoomVAD() {
     const onReviseMessage = (payload) => {
       const { id, translatedText } = payload || {};
       if (!id || !translatedText) return;
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev) => {
+        const next = prev.map((m) =>
           m.id === id ? { ...m, translatedText, streaming: false } : m
-        )
-      );
+        );
+        messagesRef.current = next;
+        return next;
+      });
     };
 
     // STT 무음
@@ -922,6 +937,7 @@ export default function FixedRoomVAD() {
               senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
               translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
             });
+            saved.add(m.id);
           } catch (_) {}
         });
       }
@@ -1025,6 +1041,7 @@ export default function FixedRoomVAD() {
             senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
             translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
           });
+          saved.add(m.id);
         } catch (_) {}
       });
     }
@@ -1041,16 +1058,20 @@ export default function FixedRoomVAD() {
     const trimmed = (textInputValue || "").trim();
     if (!trimmed || !roomId || !participantId) return;
     const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: msgId,
-        originalText: trimmed,
-        translatedText: "",
-        mine: true,
-        timestamp: Date.now(),
-      },
-    ]);
+    setMessages((prev) => {
+      const next = [
+        ...prev,
+        {
+          id: msgId,
+          originalText: trimmed,
+          translatedText: "",
+          mine: true,
+          timestamp: Date.now(),
+        },
+      ];
+      messagesRef.current = next;
+      return next;
+    });
     setTextInputValue("");
     socket.emit("send-message", {
       roomId,
@@ -1093,6 +1114,7 @@ export default function FixedRoomVAD() {
           senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
           translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
         });
+        saved.add(m.id);
       });
     };
     window.addEventListener("beforeunload", onBeforeUnload);
