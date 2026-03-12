@@ -177,13 +177,21 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           <MonoLogo />
         </div>
 
-        {/* International Patients Only — 3D marquee */}
+        {/* International Patients Only — 3D marquee (two spans, seamless loop) */}
         <div className="w-full overflow-hidden mb-4 sm:mb-6" style={{ perspective: "800px" }}>
-          <div
-            className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
-            style={{ color: "#F97316", transformStyle: "preserve-3d" }}
-          >
-            International Patients Only
+          <div className="relative" style={{ minHeight: "1.5em" }}>
+            <span
+              className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
+              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
+            >
+              International Patients Only
+            </span>
+            <span
+              className="kiosk-marquee kiosk-marquee-2 text-2xl sm:text-3xl font-bold whitespace-nowrap"
+              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
+            >
+              International Patients Only
+            </span>
           </div>
         </div>
 
@@ -205,17 +213,22 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
 
       <style>{`
         @keyframes kioskMarquee {
-          0% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
-          62% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
-          75% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
-          76% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
-          77% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
-          100% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          0% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
+          45% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
+          50% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
+          51% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
+          53% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          100% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
         }
         .kiosk-marquee {
+          position: absolute;
+          left: 0;
+          top: 0;
           animation: kioskMarquee 14s ease-in-out infinite;
-          display: inline-block;
           backface-visibility: hidden;
+        }
+        .kiosk-marquee-2 {
+          animation-delay: -7s;
         }
       `}</style>
     </div>
