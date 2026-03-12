@@ -312,18 +312,12 @@ function RoomsPanel({ authUser }) {
     [authUser, origin]
   );
 
-  // 환자가 스캔할 QR용 URL: /hospital/join/reception 또는 /hospital/join/consultation?room=roomId
+  // 환자가 스캔할 QR용 URL: 병원당 하나 (orgCode만 포함)
   const buildPatientJoinUrl = useCallback(
     (room) => {
       if (!origin) return "";
-      const template = room.template || "reception";
-      const joinPath = `/hospital/join/${template}`;
-      const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-      const query =
-        template === "consultation"
-          ? `?room=${encodeURIComponent(room.id)}${orgSuffix}`
-          : orgSuffix ? `?${orgSuffix.slice(1)}` : "";
-      return `${origin}${joinPath}${query}`;
+      const org = authUser?.org_code || "reception";
+      return `${origin}/hospital/join/${encodeURIComponent(org)}`;
     },
     [authUser, origin]
   );
@@ -649,18 +643,9 @@ function OverviewPanel({ authUser }) {
   }, [authUser?.org_code, origin]);
 
   const buildPatientJoinUrl = useCallback((room, extraParams = {}) => {
-    if (!origin || !room) return "";
-    const template = room.template || "reception";
-    const joinPath = `/hospital/join/${template}`;
-    const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-    let query =
-      template === "consultation"
-        ? `?room=${encodeURIComponent(room.id)}${orgSuffix}`
-        : orgSuffix ? `?${orgSuffix.slice(1)}` : "";
-    if (template === "consultation" && extraParams.inputMode) {
-      query += (query.includes("?") ? "&" : "?") + `inputMode=${encodeURIComponent(extraParams.inputMode)}`;
-    }
-    return `${origin}${joinPath}${query}`;
+    if (!origin) return "";
+    const org = authUser?.org_code || "reception";
+    return `${origin}/hospital/join/${encodeURIComponent(org)}`;
   }, [authUser?.org_code, origin]);
 
   // All hooks MUST be called before any conditional returns
@@ -716,6 +701,16 @@ function OverviewPanel({ authUser }) {
           오늘 통역 시작하기
         </button>
         <p className="mt-2 text-[13px] text-slate-600">접수처 또는 상담실 통역을 한 번에 시작합니다</p>
+        {authUser?.org_code && (
+          <a
+            href={`/hospital/staff-qr/${encodeURIComponent(authUser.org_code)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 text-[13px] text-[var(--color-text-secondary)] underline hover:text-[#2563EB]"
+          >
+            스태프 폰용 QR 화면 열기
+          </a>
+        )}
       </div>
 
       {/* 모달: 통역 유형 선택 */}

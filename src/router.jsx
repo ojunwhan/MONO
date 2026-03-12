@@ -18,6 +18,7 @@ import HospitalDashboard from "./pages/HospitalDashboard";
 import HospitalLogin from "./pages/HospitalLogin";
 import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
+import HospitalStaffQr from "./pages/HospitalStaffQr";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
 import OrgSetup from "./pages/OrgSetup";
 import FixedRoom from "./pages/FixedRoom";
@@ -129,8 +130,12 @@ const router = createBrowserRouter([
     element: <HospitalKiosk />,
   },
   {
-    path: "/hospital/join/:department",
+    path: "/hospital/join/:orgCode",
     element: <HospitalPatientJoin />,
+  },
+  {
+    path: "/hospital/staff-qr/:orgCode",
+    element: <HospitalStaffQr />,
   },
   {
     path: "/hospital-login",

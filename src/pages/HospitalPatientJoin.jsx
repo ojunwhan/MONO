@@ -1,6 +1,5 @@
-// src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 입장 페이지
-// 접수처(reception): QR 스캔 → 언어 선택 → "통역 시작" → ChatScreen 진입
-// 상담실(consultation): QR 스캔 → 자동 join → PT 번호 발급 → 스캔 완료 화면만 (방 입장은 태블릿이 언어 선택 후 진행)
+// src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 입장 페이지 (접수처/상담실/이동통역 통일)
+// QR 스캔 → 언어 선택 → "통역 시작" → 기존 PT 있으면 재사용, 없으면 새 PT 발급 → ChatScreen PTT 입장
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -37,23 +36,20 @@ function getOrCreatePatientToken() {
 }
 
 export default function HospitalPatientJoin() {
-  const { department } = useParams();
+  const { orgCode } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const joinCalledRef = useRef(false);
   const urlToken = searchParams.get("token") || null;
   const urlOrg = searchParams.get("org") || null;
-  const urlRoom = searchParams.get("room") || null;
-  const urlPt = searchParams.get("pt") || null;
-  const urlInputMode = searchParams.get("inputMode") || null; // 'vad' | 'ptt' (상담실용)
 
   const dept = useMemo(() => {
-    const found = HOSPITAL_DEPARTMENTS.find((d) => d.id === department);
+    const found = HOSPITAL_DEPARTMENTS.find((d) => d.id === orgCode);
     if (found) return found;
-    if (department === "consultation")
+    if (orgCode === "consultation")
       return { id: "consultation", labelKo: "진료실", label: "Consultation", icon: "🩺" };
-    return null;
-  }, [department]);
+    return { id: orgCode || "general", labelKo: "병원 통역", label: "Hospital", icon: "🏥" };
+  }, [orgCode]);
 
   // Language
   const detected = useMemo(() => detectUserLanguage(), []);
@@ -65,18 +61,11 @@ export default function HospitalPatientJoin() {
     savedLang || detected?.code || "en"
   );
   const [showLangGrid, setShowLangGrid] = useState(true);
-  const isConsultationWithRoom = Boolean(department === "consultation" && urlRoom);
-  const [step, setStep] = useState(isConsultationWithRoom ? "connecting" : "language"); // 상담실: 환자 폰은 언어 선택 없이 PT 발급만. 접수처: 언어 선택 후 입장.
+  const [step, setStep] = useState("language");
   const [error, setError] = useState("");
   const [isExistingSession, setIsExistingSession] = useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
   const [localHistoryList, setLocalHistoryList] = useState([]);
-  const [patientWaitingRoomId, setPatientWaitingRoomId] = useState(null);
-  const [patientWaitingToken, setPatientWaitingToken] = useState(null);
-  const [patientWaitingSessionId, setPatientWaitingSessionId] = useState(null);
-  const [serverHistoryOpen, setServerHistoryOpen] = useState(false);
-  const [serverHistory, setServerHistory] = useState({ sessions: [] });
-  const [serverHistoryLoading, setServerHistoryLoading] = useState(false);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -84,7 +73,7 @@ export default function HospitalPatientJoin() {
     setShowLangGrid(false);
   }, []);
 
-  // ── 통역 시작: 새 roomId 생성 → 서버에 등록 → ChatScreen 입장 ──
+  // ── 통역 시작: 기존 PT 재사용 또는 새 roomId 발급 → ChatScreen PTT 입장 ──
   const handleJoin = useCallback(async () => {
     if (joinCalledRef.current) return;
     joinCalledRef.current = true;
@@ -95,27 +84,19 @@ export default function HospitalPatientJoin() {
       const patientToken = urlToken ? String(urlToken).trim() : getOrCreatePatientToken();
       if (urlToken) localStorage.setItem(PATIENT_TOKEN_KEY, patientToken);
       const lang = selectedLang;
-      const dept = department || "general";
 
-      // 1. 환자 등록/업데이트
       await fetch("/api/hospital/patient", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientToken, language: lang, department: dept }),
+        body: JSON.stringify({ patientToken, language: lang, department: "reception" }),
       });
 
-      // 2. 새 room 생성 또는 진료실 입장 (서버가 roomId 반환)
       const joinBody = {
-        department: department || dept?.id || "general",
+        department: "reception",
         patientToken,
         language: lang,
-        ...(urlOrg ? { org: urlOrg } : {}),
+        ...(urlOrg ? { org: urlOrg } : orgCode ? { org: orgCode } : {}),
       };
-      if ((department === "consultation" || dept?.id === "consultation") && urlRoom) {
-        joinBody.room = urlRoom;
-        const ptFromStorage = urlPt || (typeof localStorage !== "undefined" ? localStorage.getItem("mono_hospital_current_pt") : null);
-        if (ptFromStorage) joinBody.pt = ptFromStorage;
-      }
       const res = await fetch("/api/hospital/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,13 +112,9 @@ export default function HospitalPatientJoin() {
       const guestId = `guest_${uuidv4().slice(0, 8)}`;
       const cleanName = getPatientLabel(lang);
 
-      // 3. localStorage에 언어 저장 + 접수 시 현재 PT 저장 (진료실 QR 스캔 시 재사용)
       localStorage.setItem("myLang", lang);
       if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
 
-      const isConsultationJoin = department === "consultation" && urlRoom;
-
-      // 4. pending 메시지 조회 (직원이 보낸 오프라인 메시지)
       let pendingMessages = [];
       try {
         const pendingRes = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/pending-messages`);
@@ -145,47 +122,6 @@ export default function HospitalPatientJoin() {
         if (pendingData.ok && Array.isArray(pendingData.messages)) pendingMessages = pendingData.messages;
       } catch (_) {}
 
-      // 접수처(reception): 환자 폰 → /room/:roomId (ChatScreen, PTT). 상담실 로직과 분리해 항상 대화방 오픈.
-      if (department === "reception") {
-        sessionStorage.setItem(
-          "mono_guest",
-          JSON.stringify({
-            roomId,
-            lang,
-            name: cleanName,
-            guestId,
-            siteContext: "hospital_reception",
-            roomType: "oneToOne",
-            joinedAt: Date.now(),
-            patientToken,
-          })
-        );
-        navigate(`/room/${roomId}`, {
-          replace: true,
-          state: {
-            fromLang: lang,
-            localName: cleanName,
-            guestId,
-            siteContext: "hospital_reception",
-            roomType: "oneToOne",
-            patientToken,
-            pendingMessages,
-            ...(data.sessionId ? { sessionId: data.sessionId } : {}),
-          },
-        });
-        return;
-      }
-
-      if (isConsultationJoin) {
-        // 상담실: 환자 폰은 방에 참여하지 않음. PT-XXXXXX 발급 후 대기 화면만 표시. 대화는 태블릿↔의사 PC 간에만 진행.
-        setStep("patientWaiting");
-        setPatientWaitingRoomId(roomId);
-        setPatientWaitingToken(patientToken);
-        setPatientWaitingSessionId(data.sessionId || null);
-        return;
-      }
-
-      // 접수처(reception): 환자 폰 → /room/:roomId (ChatScreen, PTT) — 반드시 여기서 이동 후 종료
       sessionStorage.setItem(
         "mono_guest",
         JSON.stringify({
@@ -193,7 +129,7 @@ export default function HospitalPatientJoin() {
           lang,
           name: cleanName,
           guestId,
-          siteContext: `hospital_${dept}`,
+          siteContext: "hospital_reception",
           roomType: "oneToOne",
           joinedAt: Date.now(),
           patientToken,
@@ -205,30 +141,20 @@ export default function HospitalPatientJoin() {
           fromLang: lang,
           localName: cleanName,
           guestId,
-          siteContext: `hospital_${department}`,
+          siteContext: "hospital_reception",
           roomType: "oneToOne",
           patientToken,
           pendingMessages,
+          ...(data.sessionId ? { sessionId: data.sessionId } : {}),
         },
       });
-      return;
     } catch (e) {
       console.error("[hospital:patient-join] error:", e);
       setError(e?.message || "연결에 실패했습니다. 다시 시도해주세요.");
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt, urlInputMode]);
-
-  // 상담실 전용: 환자 폰에서 QR 스캔 시 언어 선택 없이 즉시 join 호출 → PT 번호 발급 → 스캔 완료 화면만 표시. 방 입장은 태블릿이 담당.
-  const autoJoinAttempted = useRef(false);
-  useEffect(() => {
-    if (department !== "consultation" || !urlRoom || autoJoinAttempted.current) return;
-    autoJoinAttempted.current = true;
-    handleJoin();
-  }, [department, urlRoom, handleJoin]);
-
-  // ── Render: Language Selection (접수처 등 상담실이 아닐 때만. 상담실 환자 폰은 이 단계 없음) ──
+  }, [orgCode, navigate, selectedLang, urlToken, urlOrg]);
   if (step === "language") {
     return (
       <div
@@ -426,124 +352,9 @@ export default function HospitalPatientJoin() {
           }}
         />
         <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-          {department === "consultation"
-            ? "진료실 입장 중…"
-            : isExistingSession
-              ? "이전 상담 채널에 다시 연결합니다"
-              : "통역을 시작합니다"}
+          {isExistingSession ? "이전 상담 채널에 다시 연결합니다" : "통역을 시작합니다"}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Render: 상담실 환자 대기 (방 참여 없음, PT 번호 + 통역 기록 보기) ──
-  if (step === "patientWaiting") {
-    const loadServerHistory = async () => {
-      const token = patientWaitingToken;
-      if (!token) return;
-      setServerHistoryLoading(true);
-      setServerHistoryOpen(true);
-      try {
-        const res = await fetch(`/api/hospital/patient/${encodeURIComponent(token)}/history`);
-        const data = await res.json().catch(() => ({}));
-        setServerHistory({ sessions: data.sessions || [], found: data.found });
-      } catch (_) {
-        setServerHistory({ sessions: [], found: false });
-      } finally {
-        setServerHistoryLoading(false);
-      }
-    };
-    const formatDate = (str) => {
-      if (!str) return "";
-      const d = new Date(str);
-      return d.toLocaleDateString("ko-KR", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    };
-    return (
-      <div style={{ minHeight: "100dvh", background: "#f8fafc", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
-        <MonoLogo />
-        <div style={{ marginTop: "24px", padding: "20px", background: "#fff", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
-          <p style={{ fontSize: "14px", color: "#22c55e", fontWeight: 600, margin: "0 0 12px" }}>스캔 완료</p>
-          <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 8px" }}>통역 번호</p>
-          <p style={{ fontSize: "22px", fontWeight: 700, color: "#0f172a", margin: 0, letterSpacing: "0.05em" }}>
-            {patientWaitingRoomId || "—"}
-          </p>
-          <p style={{ fontSize: "13px", color: "#64748b", marginTop: "12px" }}>
-            진료실에서 이 번호를 알려주시면 통역이 연결됩니다. 이 기기는 대기만 하시면 됩니다.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={loadServerHistory}
-          style={{
-            marginTop: "20px",
-            padding: "14px 20px",
-            borderRadius: "10px",
-            border: "1px solid #e2e8f0",
-            background: "#fff",
-            color: "#334155",
-            fontSize: "15px",
-            fontWeight: 500,
-            cursor: "pointer",
-            width: "100%",
-          }}
-        >
-          내 통역 기록 보기
-        </button>
-        {serverHistoryOpen && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.4)",
-              zIndex: 100,
-              display: "flex",
-              alignItems: "flex-end",
-              justifyContent: "center",
-            }}
-            onClick={() => setServerHistoryOpen(false)}
-          >
-            <div
-              style={{
-                background: "#fff",
-                width: "100%",
-                maxWidth: "480px",
-                maxHeight: "80dvh",
-                borderRadius: "16px 16px 0 0",
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ padding: "16px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "16px", fontWeight: 600 }}>통역 기록</span>
-                <button type="button" onClick={() => setServerHistoryOpen(false)} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#64748b" }}>×</button>
-              </div>
-              <div style={{ flex: 1, overflow: "auto", padding: "12px" }}>
-                {serverHistoryLoading ? (
-                  <p style={{ textAlign: "center", color: "#64748b", padding: "24px" }}>불러오는 중…</p>
-                ) : !serverHistory.sessions || serverHistory.sessions.length === 0 ? (
-                  <p style={{ textAlign: "center", color: "#64748b", padding: "24px" }}>저장된 통역 기록이 없습니다.</p>
-                ) : (
-                  serverHistory.sessions.map((sess) => (
-                    <div key={sess.id || sess.room_id} style={{ marginBottom: "20px" }}>
-                      <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "8px" }}>{formatDate(sess.started_at || sess.ended_at)} · {sess.room_id}</p>
-                      <div style={{ background: "#f1f5f9", borderRadius: "10px", padding: "12px" }}>
-                        {(sess.messages || []).map((msg) => (
-                          <div key={msg.id} style={{ marginBottom: "8px", fontSize: "14px" }}>
-                            <span style={{ color: "#64748b", marginRight: "6px" }}>{msg.sender_role === "host" ? "직원" : "환자"}:</span>
-                            <span>{msg.translated_text || msg.original_text || ""}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
