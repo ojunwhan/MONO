@@ -775,7 +775,12 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           </>
         )}
       </div>
-      <div className="flex-none py-3 text-center"><p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p></div>
+      <div className="flex-none py-3 text-center space-y-1">
+        <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
+        <button type="button" onClick={() => navTo("/hospital-dashboard")} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
+          대시보드로 이동
+        </button>
+      </div>
     </div>
   );
 }

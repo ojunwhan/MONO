@@ -89,11 +89,11 @@ export default function HospitalPatientJoin() {
       await fetch("/api/hospital/patient", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientToken, language: lang, department: "reception" }),
+        body: JSON.stringify({ patientToken, language: lang, department: orgCode }),
       });
 
       const joinBody = {
-        department: "reception",
+        department: orgCode,
         patientToken,
         language: lang,
         ...(urlOrg ? { org: urlOrg } : orgCode ? { org: orgCode } : {}),
