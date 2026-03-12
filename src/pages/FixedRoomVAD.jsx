@@ -12,6 +12,7 @@ import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
+import { getLanguageByCode } from "../constants/languages";
 import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp } from "lucide-react";
 import { saveHospitalConversation, getHospitalConversationsByRoom } from "../db/hospitalConversations";
 
@@ -1096,19 +1097,15 @@ export default function FixedRoomVAD() {
 
   // ── 통역 종료 후 복사용 텍스트 생성 ──
   const getTranscriptCopyText = useCallback(() => {
-    const dateStr = new Date().toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(/\//g, ".");
-    const staffLang = (() => {
-      const p = getLanguageProfileByCode(fromLang);
-      return p?.shortLabel || fromLang || "한국어";
-    })();
-    const patientLang = partnerLangDisplay || (() => {
-      const p = partnerInfo?.lang ? getLanguageProfileByCode(partnerInfo.lang) : (patientData?.language ? getLanguageProfileByCode(patientData.language) : null);
-      return p?.shortLabel || "영어";
-    })();
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const staffLang = getLanguageByCode(fromLang)?.name || "Korean";
+    const patientLang = getLanguageByCode(partnerInfo?.lang || patientData?.language)?.name || "English";
     const lines = [
       "[MONO 통역 기록]",
       `날짜: ${dateStr}`,
       `환자번호: ${roomId || ""}`,
+      `언어: ${patientLang} → ${staffLang}`,
       "---",
     ];
     (messages || []).forEach((m) => {
@@ -1124,7 +1121,7 @@ export default function FixedRoomVAD() {
     });
     lines.push("---", "Powered by MONO Medical Interpreter");
     return lines.join("\n");
-  }, [messages, roomId, fromLang, partnerLangDisplay, partnerInfo, patientData]);
+  }, [messages, roomId, fromLang, partnerInfo, patientData]);
 
   const handleCopyForTool = useCallback(async (kind) => {
     const text = getTranscriptCopyText();
@@ -1569,6 +1566,29 @@ export default function FixedRoomVAD() {
               {isOwner ? "아래 버튼으로 기록을 복사한 뒤 EMR/CRM에 붙여넣을 수 있습니다." : "이 페이지를 닫아도 됩니다."}
             </p>
           </div>
+
+          {/* 직원 전용: 대화 내용 복사 (공통) */}
+          {isOwner && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+              <button
+                type="button"
+                onClick={() => handleCopyForTool("copy")}
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  background: copyFeedback === "copy" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
+                  color: "white",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {copyFeedback === "copy" ? "복사됨 ✓" : "📋 대화 내용 복사"}
+              </button>
+              <span style={{ fontSize: "11px", opacity: 0.7 }}>EMR / CRM / 차트 어디든 붙여넣기 가능</span>
+            </div>
+          )}
 
           {/* 직원 전용: EMR/CRM 복사 버튼 (병원 설정에 따라 표시) */}
           {isOwner && orgCopySettings && (orgCopySettings.emr_enabled || orgCopySettings.crm_enabled) && (

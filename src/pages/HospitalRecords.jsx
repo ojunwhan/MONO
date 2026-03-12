@@ -3,6 +3,27 @@ import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import { ChevronLeft, Search, FileText, Clock, Globe, ChevronDown, ChevronUp, MessageSquare, Link2 } from "lucide-react";
+import { getLanguageByCode } from "../constants/languages";
+import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
+
+const DEPT_MAP = {};
+HOSPITAL_DEPARTMENTS.forEach((d) => { DEPT_MAP[d.id] = d; });
+function getDeptLabel(id) {
+  if (id == null || id === "") return "미지정";
+  return DEPT_MAP[id]?.labelKo || id || "미지정";
+}
+function formatChartNumber(v) {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  if (/^PT-[A-Z0-9]{6}$/i.test(s)) return s.toUpperCase();
+  const alnum = s.replace(/[^A-Za-z0-9]/g, "");
+  const last6 = alnum.slice(-6).toUpperCase().padStart(6, "0").slice(-6);
+  return last6 ? "PT-" + last6 : "";
+}
+function getLangDisplay(code) {
+  const L = getLanguageByCode(code);
+  return L ? `${L.flag} ${L.name}` : (code ? String(code).toUpperCase() : "-");
+}
 
 export default function HospitalRecords() {
   const navigate = useNavigate();
@@ -15,6 +36,41 @@ export default function HospitalRecords() {
   const [messageText, setMessageText] = useState("");
   const [messageSending, setMessageSending] = useState(false);
   const [toast, setToast] = useState("");
+  const [copyDoneSessionId, setCopyDoneSessionId] = useState(null);
+
+  const buildSessionCopyText = useCallback((session, messagesList) => {
+    const d = session.created_at ? new Date(session.created_at) : new Date();
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const patientNum = session.room_id || formatChartNumber(session.chart_number) || "";
+    const guestLang = getLanguageByCode(session.guest_lang)?.name || session.guest_lang || "English";
+    const hostLang = getLanguageByCode(session.host_lang)?.name || session.host_lang || "Korean";
+    const lines = [
+      "[MONO 통역 기록]",
+      `날짜: ${dateStr}`,
+      `환자번호: ${patientNum}`,
+      `언어: ${guestLang} → ${hostLang}`,
+      "---",
+    ];
+    (messagesList || []).forEach((msg) => {
+      if (msg.sender_role === "host") {
+        if (msg.original_text) lines.push(`직원 (${hostLang}): ${msg.original_text}`);
+        if (msg.translated_text) lines.push(`환자 (${guestLang}): ${msg.translated_text}`);
+      } else {
+        if (msg.original_text) lines.push(`환자 (${guestLang}): ${msg.original_text}`);
+        if (msg.translated_text) lines.push(`직원 (${hostLang}): ${msg.translated_text}`);
+      }
+    });
+    lines.push("---", "Powered by MONO Medical Interpreter");
+    return lines.join("\n");
+  }, []);
+
+  const handleCopySession = useCallback((session, messagesList) => {
+    const text = buildSessionCopyText(session, messagesList);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyDoneSessionId(session.id);
+      setTimeout(() => setCopyDoneSessionId(null), 2000);
+    }).catch(() => {});
+  }, [buildSessionCopyText]);
 
   const handleSearch = useCallback(async () => {
     if (!chartQuery.trim()) return;
@@ -173,12 +229,10 @@ export default function HospitalRecords() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[12px]">
-                  {result.patient?.chart_number && (
-                    <div>
-                      <span className="text-[var(--color-text-secondary)]">차트번호: </span>
-                      <span className="font-medium">{result.patient.chart_number}</span>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-[var(--color-text-secondary)]">차트번호: </span>
+                    <span className="font-medium font-mono">{result.sessions?.[0]?.room_id || formatChartNumber(result.patient?.chart_number) || "-"}</span>
+                  </div>
                   {patientToken && (
                     <div>
                       <span className="text-[var(--color-text-secondary)]">환자토큰: </span>
@@ -187,7 +241,11 @@ export default function HospitalRecords() {
                   )}
                   <div>
                     <span className="text-[var(--color-text-secondary)]">언어: </span>
-                    <span className="font-medium">{(result.patient?.language || result.sessions?.[0]?.guest_lang)?.toUpperCase() || "-"}</span>
+                    <span className="font-medium">{getLangDisplay(result.patient?.language || result.sessions?.[0]?.guest_lang)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--color-text-secondary)]">진료과: </span>
+                    <span className="font-medium">{getDeptLabel(result.sessions?.[0]?.dept || result.patient?.dept)}</span>
                   </div>
                   {result.patient?.name && (
                     <div>
@@ -245,12 +303,10 @@ export default function HospitalRecords() {
                             </span>
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-[var(--color-text-secondary)]">
-                            {session.department && (
-                              <span>🏥 {session.department}</span>
-                            )}
+                            <span>🏥 {getDeptLabel(session.department)}</span>
                             <span className="flex items-center gap-1">
                               <Globe size={10} />
-                              {session.host_lang?.toUpperCase() || "?"} ↔ {session.guest_lang?.toUpperCase() || "?"}
+                              {getLangDisplay(session.guest_lang)} → {getLangDisplay(session.host_lang)}
                             </span>
                             <span>
                               💬 {session.messages?.length || 0}건
@@ -263,6 +319,16 @@ export default function HospitalRecords() {
                       {/* Messages (expanded) */}
                       {expandedSession === session.id && session.messages && (
                         <div className="border-t border-[var(--color-border)] p-3 max-h-[400px] overflow-y-auto space-y-2">
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span className="text-[11px] text-[var(--color-text-secondary)]">EMR / CRM / 차트 어디든 붙여넣기 가능</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopySession(session, session.messages)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[12px] font-medium hover:bg-[#2563EB]"
+                            >
+                              {copyDoneSessionId === session.id ? "복사됨 ✓" : "📋 대화 내용 복사"}
+                            </button>
+                          </div>
                           {session.messages.length === 0 ? (
                             <p className="text-[12px] text-[var(--color-text-secondary)] text-center py-3">
                               대화 내용이 없습니다.

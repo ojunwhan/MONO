@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
+import { getLanguageByCode } from "../constants/languages";
 import {
   BarChart3,
   Users,
@@ -83,12 +84,27 @@ function getLangLabel(code) {
   return LANG_LABELS[code?.toLowerCase()] || code?.toUpperCase() || "-";
 }
 
+function getLangDisplay(code) {
+  const L = getLanguageByCode(code);
+  return L ? `${L.flag} ${L.name}` : (code ? String(code).toUpperCase() : "-");
+}
+
+function formatChartNumber(v) {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  if (/^PT-[A-Z0-9]{6}$/i.test(s)) return s.toUpperCase();
+  const alnum = s.replace(/[^A-Za-z0-9]/g, "");
+  const last6 = alnum.slice(-6).toUpperCase().padStart(6, "0").slice(-6);
+  return last6 ? "PT-" + last6 : "";
+}
+
 function getLanguageNameKo(code) {
   return LANG_NAMES_KO[code?.toLowerCase()] || code?.toUpperCase() || "-";
 }
 
 function getDeptLabel(id) {
-  return DEPT_MAP[id]?.labelKo || id || "-";
+  if (id == null || id === "") return "미지정";
+  return DEPT_MAP[id]?.labelKo || id || "미지정";
 }
 
 function getDeptIcon(id) {
@@ -1196,7 +1212,7 @@ function HistoryPanel() {
                       {formatDate(s.created_at)}
                     </td>
                     <td className="px-4 py-3 text-[12px] font-mono text-[var(--color-text)]">
-                      {s.chart_number || "-"}
+                      {s.room_id || formatChartNumber(s.chart_number) || "-"}
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       <span className="flex items-center gap-1.5">
@@ -1207,7 +1223,7 @@ function HistoryPanel() {
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       <span className="flex items-center gap-1">
                         <Globe size={12} className="text-[var(--color-text-secondary)]" />
-                        {getLangLabel(s.host_lang)} → {getLangLabel(s.guest_lang)}
+                        {getLangDisplay(s.guest_lang)} → {getLangDisplay(s.host_lang)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
@@ -1538,6 +1554,42 @@ function ReportsPanel() {
 // SESSION DETAIL MODAL
 // ═══════════════════════════════════════════
 function SessionDetailModal({ session, messages, loading, onClose, onPrint }) {
+  const [copyDone, setCopyDone] = useState(false);
+
+  const getCopyText = useCallback(() => {
+    const d = session.created_at ? new Date(session.created_at) : new Date();
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const patientNum = session.room_id || formatChartNumber(session.chart_number) || "";
+    const guestLang = getLanguageByCode(session.guest_lang)?.name || session.guest_lang || "English";
+    const hostLang = getLanguageByCode(session.host_lang)?.name || session.host_lang || "Korean";
+    const lines = [
+      "[MONO 통역 기록]",
+      `날짜: ${dateStr}`,
+      `환자번호: ${patientNum}`,
+      `언어: ${guestLang} → ${hostLang}`,
+      "---",
+    ];
+    (messages || []).forEach((msg) => {
+      if (msg.sender_role === "host") {
+        if (msg.original_text) lines.push(`직원 (${hostLang}): ${msg.original_text}`);
+        if (msg.translated_text) lines.push(`환자 (${guestLang}): ${msg.translated_text}`);
+      } else {
+        if (msg.original_text) lines.push(`환자 (${guestLang}): ${msg.original_text}`);
+        if (msg.translated_text) lines.push(`직원 (${hostLang}): ${msg.translated_text}`);
+      }
+    });
+    lines.push("---", "Powered by MONO Medical Interpreter");
+    return lines.join("\n");
+  }, [session, messages]);
+
+  const handleCopy = useCallback(() => {
+    const text = getCopyText();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+    }).catch(() => {});
+  }, [getCopyText]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-[640px] max-h-[85vh] bg-[var(--color-bg)] rounded-[20px] border border-[var(--color-border)] shadow-2xl flex flex-col overflow-hidden">
@@ -1549,11 +1601,21 @@ function SessionDetailModal({ session, messages, loading, onClose, onPrint }) {
             </h2>
             <div className="flex items-center gap-3 mt-1 text-[11px] text-[var(--color-text-secondary)]">
               <span>{getDeptIcon(session.department)} {getDeptLabel(session.department)}</span>
-              <span>차트: {session.chart_number || "-"}</span>
+              <span>차트: {session.room_id || formatChartNumber(session.chart_number) || "-"}</span>
               <span>{formatDate(session.created_at)}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-2 px-3 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-medium hover:bg-[#2563EB] transition-colors"
+              >
+                {copyDone ? "복사됨 ✓" : "📋 대화 내용 복사"}
+              </button>
+              <span className="text-[9px] text-[var(--color-text-secondary)] mt-0.5">EMR / CRM / 차트 어디든 붙여넣기 가능</span>
+            </div>
             <button
               type="button"
               onClick={onPrint}
@@ -1576,7 +1638,7 @@ function SessionDetailModal({ session, messages, loading, onClose, onPrint }) {
         <div className="px-5 py-3 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] flex items-center gap-4 text-[11px] text-[var(--color-text-secondary)]">
           <span className="flex items-center gap-1">
             <Globe size={12} />
-            {getLangLabel(session.host_lang)} ↔ {getLangLabel(session.guest_lang)}
+            {getLangDisplay(session.guest_lang)} → {getLangDisplay(session.host_lang)}
           </span>
           <span className="flex items-center gap-1">
             <Clock size={12} />
