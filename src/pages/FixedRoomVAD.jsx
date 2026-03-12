@@ -543,12 +543,13 @@ export default function FixedRoomVAD() {
     ]);
   }, [pendingMessages]);
 
-  // ── 환자 폰: 병원 모드일 때 대화 내용 실시간 IndexedDB 저장 (PT-XXXXXX + 날짜) ──
+  // ── 환자 폰: 병원 모드일 때 대화 내용 실시간 IndexedDB 저장 (PT-XXXXXX + 날짜). 상담실 태블릿(sessionId로 입장)은 새 세션이므로 IndexedDB 로드 생략(귀신 메시지 방지). ──
   const isHospitalGuest = isGuest && (hospitalDept || String(siteContext || "").startsWith("hospital_"));
   const loadedForRoomIdRef = useRef(null);
   useEffect(() => {
     if (!isHospitalGuest || !roomId) return;
     if (loadedForRoomIdRef.current === roomId) return;
+    if (state.sessionId && siteContext === "hospital_consultation") return;
     loadedForRoomIdRef.current = roomId;
     const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
     getHospitalConversationsByRoom(roomId)
@@ -566,7 +567,7 @@ export default function FixedRoomVAD() {
         }
       })
       .catch(() => {});
-  }, [isHospitalGuest, roomId, participantId]);
+  }, [isHospitalGuest, roomId, participantId, state.sessionId, siteContext]);
   useEffect(() => {
     if (!isHospitalGuest || !roomId || messages.length === 0) return;
     const toSave = messages.map((m) => ({
@@ -637,24 +638,41 @@ export default function FixedRoomVAD() {
       .catch(() => setPatientHistory(null));
   }, [patientToken, isOwner]);
 
-  // ── 소켓: 방 입장 (inputMode 변경 시에는 재입장하지 않음 — 로컬 UI만 변경) ──
+  // ── 소켓: 방 입장 (연결 완료 후 join 발생. 재연결 시에도 재 join) ──
   useEffect(() => {
     if (!roomId || !participantId) return;
 
-    socket.emit("join", {
-      roomId,
-      fromLang,
-      participantId,
-      role: isGuest ? "Patient" : "Doctor",
-      localName: isGuest ? (state.localName || "") : "",
-      roleHint,
-      siteContext,
-      isCreator,
-      ...(state.guestId ? { guestId: state.guestId } : {}),
-      saveMessages,
-      summaryOnly,
-      inputMode,
-    });
+    const doJoin = () => {
+      socket.emit("join", {
+        roomId,
+        fromLang,
+        participantId,
+        role: isGuest ? "Patient" : "Doctor",
+        localName: isGuest ? (state.localName || "") : "",
+        roleHint,
+        siteContext,
+        isCreator,
+        ...(state.guestId ? { guestId: state.guestId } : {}),
+        saveMessages,
+        summaryOnly,
+        inputMode,
+      });
+    };
+
+    if (socket.connected) {
+      doJoin();
+    } else {
+      const onConnect = () => doJoin();
+      socket.once("connect", onConnect);
+      return () => {
+        socket.off("connect", onConnect);
+        socket.emit("leave-room", {
+          roomId,
+          participantId,
+          reason: "fixed-room-vad-cleanup",
+        });
+      };
+    }
 
     return () => {
       socket.emit("leave-room", {
