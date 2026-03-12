@@ -3105,6 +3105,7 @@ io.on('connection', (socket) => {
   // --- STT streaming (AudioWorklet + VAD) ---
   socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000 }) => {
     if (!roomId || !participantId) return;
+    socket._sttParticipantId = participantId;
     // ROOMS-DB 동기화: ROOMS에 없고 PT- 방이면 hospital_sessions에서 조회 후 ROOMS 재생성 후 인증 통과
     if (!ROOMS.has(roomId) && String(roomId).startsWith('PT-')) {
       try {
@@ -3452,9 +3453,7 @@ io.on('connection', (socket) => {
                 [roomId]
               ).catch(() => null);
             }
-            const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
-            const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
-            console.log('[DEBUG sender_role_final]', { socketId: socket?.id, ownerSocketId, senderRole });
+            const senderRole = (socket._sttParticipantId === meta?.ownerPid) ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
             console.log('[DEBUG sender_role]', { senderRole, participantId, ownerPid: meta?.ownerPid, match: participantId === meta?.ownerPid });
             await dbRun(
