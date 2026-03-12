@@ -1,5 +1,6 @@
 // src/pages/HospitalPatientJoin.jsx — 환자 QR 스캔 후 입장 페이지
-// 환자가 QR 스캔 → 언어 선택 → "통역 시작" 클릭 → 새 roomId 생성 → ChatScreen 진입
+// 접수처(reception): QR 스캔 → 언어 선택 → "통역 시작" → ChatScreen 진입
+// 상담실(consultation): QR 스캔 → 자동 join → PT 번호 발급 → 스캔 완료 화면만 (방 입장은 태블릿이 언어 선택 후 진행)
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -64,7 +65,8 @@ export default function HospitalPatientJoin() {
     savedLang || detected?.code || "en"
   );
   const [showLangGrid, setShowLangGrid] = useState(true);
-  const [step, setStep] = useState("language"); // 상담실 포함 모든 입장에서 반드시 언어 선택 화면 먼저 표시
+  const isConsultationWithRoom = Boolean(department === "consultation" && urlRoom);
+  const [step, setStep] = useState(isConsultationWithRoom ? "connecting" : "language"); // 상담실: 환자 폰은 언어 선택 없이 PT 발급만. 접수처: 언어 선택 후 입장.
   const [error, setError] = useState("");
   const [isExistingSession, setIsExistingSession] = useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
@@ -218,7 +220,15 @@ export default function HospitalPatientJoin() {
     }
   }, [department, navigate, selectedLang, urlToken, urlOrg, urlRoom, urlPt, urlInputMode]);
 
-  // 상담실: 언어 선택 후 "통역 시작" 클릭 시에만 handleJoin 호출 (자동 입장 제거 — 환자가 반드시 언어 선택 화면 거침)
+  // 상담실 전용: 환자 폰에서 QR 스캔 시 언어 선택 없이 즉시 join 호출 → PT 번호 발급 → 스캔 완료 화면만 표시. 방 입장은 태블릿이 담당.
+  const autoJoinAttempted = useRef(false);
+  useEffect(() => {
+    if (department !== "consultation" || !urlRoom || autoJoinAttempted.current) return;
+    autoJoinAttempted.current = true;
+    handleJoin();
+  }, [department, urlRoom, handleJoin]);
+
+  // ── Render: Language Selection (접수처 등 상담실이 아닐 때만. 상담실 환자 폰은 이 단계 없음) ──
   if (step === "language") {
     return (
       <div
@@ -453,6 +463,7 @@ export default function HospitalPatientJoin() {
       <div style={{ minHeight: "100dvh", background: "#f8fafc", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
         <MonoLogo />
         <div style={{ marginTop: "24px", padding: "20px", background: "#fff", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+          <p style={{ fontSize: "14px", color: "#22c55e", fontWeight: 600, margin: "0 0 12px" }}>스캔 완료</p>
           <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 8px" }}>통역 번호</p>
           <p style={{ fontSize: "22px", fontWeight: 700, color: "#0f172a", margin: 0, letterSpacing: "0.05em" }}>
             {patientWaitingRoomId || "—"}

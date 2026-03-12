@@ -118,11 +118,18 @@ function KioskGuideText() {
   return <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center">Scan QR Code to Start</p>;
 }
 
-// 진료실 키오스크: QR 상시 표시 + patient-arrived 시 VAD 대화창으로 전환
+// 진료실 키오스크: QR 상시 표시 → patient-arrived 시 언어 선택 화면 → 통역 시작 클릭 시 방 입장
 function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams, navTo }) {
   const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
   const isConsultation = template === "consultation";
   const [qrSize, setQrSize] = useState(280);
+  const [kioskStep, setKioskStep] = useState("qr"); // "qr" | "language"
+  const [arrivedPayload, setArrivedPayload] = useState(null); // { roomId, patientToken, sessionId } when patient-arrived
+  const savedKioskLang = useMemo(() => getLanguageByCode(localStorage.getItem("myLang"))?.code || "", []);
+  const detectedKiosk = useMemo(() => detectUserLanguage(), []);
+  const [kioskLang, setKioskLang] = useState(savedKioskLang || detectedKiosk?.code || "en");
+  const [showKioskLangGrid, setShowKioskLangGrid] = useState(true);
+
   useEffect(() => {
     const update = () => setQrSize(Math.min(280, Math.min(window.innerWidth, window.innerHeight) * 0.45));
     update();
@@ -139,27 +146,9 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
     socket.emit("hospital:consultation:watch", { consultationRoomId: urlRoom });
     const onArrived = (payload) => {
       if (payload?.consultationRoomId !== urlRoom || !payload?.roomId) return;
-      const ptRoomId = payload.roomId;
-      const fromLang = localStorage.getItem("myLang") || "ko";
-      navTo(`/fixed-room/${ptRoomId}`, {
-        replace: false,
-        state: {
-          fromLang,
-          localName: "",
-          isGuest: true,
-          isCreator: false,
-          roleHint: "guest",
-          siteContext: "hospital_consultation",
-          roomType: "oneToOne",
-          hospitalDept: staffDept,
-          hospitalTemplate: "consultation",
-          saveMode: false,
-          patientToken: payload.patientToken ?? null,
-          sessionId: payload.sessionId ?? null,
-          inputMode: "vad",
-          consultationKioskRoomId: urlRoom,
-        },
-      });
+      setArrivedPayload({ roomId: payload.roomId, patientToken: payload.patientToken ?? null, sessionId: payload.sessionId ?? null });
+      setKioskStep("language");
+      playNotificationSound();
     };
     socket.on("hospital:patient-arrived", onArrived);
     socket.on("hospital:switch-to-chat", onArrived);
@@ -168,7 +157,70 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       socket.off("hospital:switch-to-chat", onArrived);
       socket.emit("hospital:consultation:unwatch", { consultationRoomId: urlRoom });
     };
-  }, [isConsultation, urlRoom, navTo, staffDept]);
+  }, [isConsultation, urlRoom, staffDept]);
+
+  const handleKioskLangSelect = (code) => {
+    setKioskLang(code);
+    localStorage.setItem("myLang", code);
+    setShowKioskLangGrid(false);
+  };
+
+  const handleKioskStartInterpreting = () => {
+    if (!arrivedPayload?.roomId) return;
+    const ptRoomId = arrivedPayload.roomId;
+    navTo(`/fixed-room/${ptRoomId}`, {
+      replace: false,
+      state: {
+        fromLang: kioskLang,
+        localName: "",
+        isGuest: true,
+        isCreator: false,
+        roleHint: "guest",
+        siteContext: "hospital_consultation",
+        roomType: "oneToOne",
+        hospitalDept: staffDept,
+        hospitalTemplate: "consultation",
+        saveMode: false,
+        patientToken: arrivedPayload.patientToken ?? null,
+        sessionId: arrivedPayload.sessionId ?? null,
+        inputMode: "vad",
+        consultationKioskRoomId: urlRoom,
+      },
+    });
+  };
+
+  // 환자 스캔 감지 후: 태블릿 언어 선택 화면
+  if (isConsultation && kioskStep === "language") {
+    return (
+      <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border">
+        <div className="w-full max-w-[420px] flex flex-col items-center">
+          <div className="mb-6 w-full flex justify-center">
+            <MonoLogo />
+          </div>
+          <p className="text-[15px] text-[var(--color-text)] text-center mb-4 font-medium">
+            환자가 스캔했습니다. 통역에 사용할 언어를 선택하세요.
+          </p>
+          <div className="w-full max-w-[400px] mb-6">
+            <LanguageFlagPicker
+              selectedLang={kioskLang}
+              showGrid={showKioskLangGrid}
+              onToggleGrid={() => setShowKioskLangGrid((p) => !p)}
+              onSelect={handleKioskLangSelect}
+            />
+          </div>
+          {!showKioskLangGrid && (
+            <button
+              type="button"
+              onClick={handleKioskStartInterpreting}
+              className="w-full max-w-[400px] h-14 rounded-[14px] border-0 bg-[#2563EB] text-white text-base font-semibold cursor-pointer hover:bg-[#1d4ed8] transition-colors"
+            >
+              통역 시작 / Start Interpretation
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border">
