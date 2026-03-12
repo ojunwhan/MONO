@@ -237,7 +237,7 @@ export default function HospitalApp() {
   const autoSaveTriggered = useRef(false);
 
   const staffDept = useMemo(
-    () => (template === "reception" ? { id: "reception", labelKo: "접수", label: "Reception", icon: "🖥️" } : { id: "consultation", labelKo: "진료실", label: "Consultation", icon: "🩺" }),
+    () => (template === "reception" ? { id: "reception", labelKo: "통역 대기", label: "Interpretation Standby", icon: "🖥️" } : { id: "consultation", labelKo: "진료실", label: "Consultation", icon: "🩺" }),
     [template]
   );
 
@@ -365,7 +365,7 @@ export default function HospitalApp() {
   }
 
   if (hasStaffParams) {
-    const org = searchParams.get("org") || "";
+    const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || "";
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const returnToReceptionUrl =
       template === "reception" && urlRoom
@@ -595,9 +595,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       <div className="flex-none px-6 py-4 border-b border-[var(--color-border)]">
         <div className="flex items-center justify-between max-w-[600px] mx-auto">
           <HospitalLogo />
-          <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
-            <Monitor size={12} className="inline mr-1" /> {template === "reception" ? "접수 모드" : "상담 모드"}
-          </span>
+          {template !== "reception" && (
+            <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
+              <Monitor size={12} className="inline mr-1" /> 상담 모드
+            </span>
+          )}
         </div>
       </div>
       <div className="flex-1 flex flex-col items-center px-6 py-6 max-w-[600px] mx-auto w-full">
@@ -708,6 +710,14 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                 <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">태블릿 QR을 환자가 스캔하면 여기에 표시됩니다</p>
               </div>
             )}
+            <style>{`@media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
+            <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-4 p-6 rounded-[16px] border border-[var(--color-border)] flex flex-col items-center gap-4">
+              <p className="text-[14px] font-semibold text-[var(--color-text)]">환자 QR 스캔</p>
+              <QRCode value={`https://lingora.chat/hospital/join/${orgCode || ""}`} size={200} bgColor="#FFFFFF" fgColor="#000000" level="M" />
+              <button type="button" onClick={() => window.print()} className="px-4 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-medium hover:bg-[#2563EB]">
+                PDF로 출력
+              </button>
+            </div>
             <button type="button" onClick={onBack} className="mt-4 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">← 대시보드로 돌아가기</button>
           </>
         )}
