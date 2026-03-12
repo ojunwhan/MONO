@@ -3452,9 +3452,9 @@ io.on('connection', (socket) => {
                 [roomId]
               ).catch(() => null);
             }
-            const speakerPid = participantId;
-            const senderRole = (speakerPid === meta?.ownerPid) ? 'host' : 'guest';
-            console.log('[DEBUG sender_role_final]', { speakerPid, ownerPid: meta?.ownerPid, senderRole });
+            const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
+            const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
+            console.log('[DEBUG sender_role_final]', { socketId: socket?.id, ownerSocketId, senderRole });
             // Save to hospital_messages with patient_token
             console.log('[DEBUG sender_role]', { senderRole, participantId, ownerPid: meta?.ownerPid, match: participantId === meta?.ownerPid });
             await dbRun(
@@ -3788,7 +3788,8 @@ io.on('connection', (socket) => {
 
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
     if (meta.hospitalSessionId || meta.hospitalMode) {
-      const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
+      const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
+      const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
@@ -3943,7 +3944,8 @@ io.on('connection', (socket) => {
               [roomId]
             ).catch(() => null);
           }
-          const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
+          const ownerSocketId = meta?.participants?.[meta?.ownerPid]?.socketId;
+          const senderRole = (socket.id === ownerSocketId) ? 'host' : 'guest';
           console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
           await dbRun(
             `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
