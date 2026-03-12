@@ -432,8 +432,9 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       };
     } else {
       if (!selectedDept) return;
+      const department = isReception && orgCode ? orgCode : selectedDept.id;
       const doWatch = () => {
-        socket.emit("hospital:watch", { department: selectedDept.id });
+        socket.emit("hospital:watch", { department });
         setStaffJoined(true);
       };
       if (socket.connected) doWatch();
@@ -442,11 +443,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       socket.on("connect", onConnect);
       return () => {
         socket.off("connect", onConnect);
-        if (socket.connected && selectedDept) socket.emit("hospital:unwatch", { department: selectedDept.id });
+        if (socket.connected && selectedDept) socket.emit("hospital:unwatch", { department });
         joinedRef.current = false;
       };
     }
-  }, [selectedDept, isConsultationRoom, consultationRoomId]);
+  }, [selectedDept, isConsultationRoom, consultationRoomId, isReception, orgCode]);
 
   useEffect(() => {
     if (!isConsultationRoom) return;
