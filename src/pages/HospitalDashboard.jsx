@@ -683,7 +683,7 @@ function OverviewPanel({ authUser }) {
 
   return (
     <div className="space-y-6">
-      {/* 오늘 통역 시작하기 — 원클릭 */}
+      {/* 통역 시작하기 */}
       <div
         className="p-6 rounded-[20px] border-2 flex flex-col items-center justify-center text-center min-h-[140px]"
         style={{
@@ -693,12 +693,15 @@ function OverviewPanel({ authUser }) {
       >
         <button
           type="button"
-          onClick={() => authUser?.org_code && navigate(`/hospital/staff-qr/${encodeURIComponent(authUser.org_code)}`)}
+          onClick={() => {
+            const orgCode = authUser?.org_code || authUser?.orgCode || "";
+            navigate(`/hospital/staff-qr/${encodeURIComponent(orgCode)}`);
+          }}
           className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
           style={{ backgroundColor: HOSPITAL_PRIMARY }}
         >
           <Activity size={24} />
-          오늘 통역 시작하기
+          통역 시작하기
         </button>
         <p className="mt-2 text-[13px] text-slate-600">QR 화면에서 환자에게 스캔하게 하세요</p>
         {authUser?.org_code && (
