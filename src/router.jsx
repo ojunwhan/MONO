@@ -107,7 +107,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/hospital/join/:orgCode",
-    loader: () => null,
+    loader: () => null, // bypass root auth; public patient entry
     element: <HospitalPatientJoin />,
   },
   {
