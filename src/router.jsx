@@ -68,6 +68,11 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
+    path: "/hospital/join/:orgCode",
+    loader: () => null,
+    element: <HospitalPatientJoin />,
+  },
+  {
     path: "/org-setup",
     element: <OrgSetup />,
   },
@@ -104,11 +109,6 @@ const router = createBrowserRouter([
   {
     path: "/join/:roomId",
     element: <GuestJoinPage />,
-  },
-  {
-    path: "/hospital/join/:orgCode",
-    loader: () => null, // bypass root auth; public patient entry
-    element: <HospitalPatientJoin />,
   },
   {
     path: "/room/:roomId",
