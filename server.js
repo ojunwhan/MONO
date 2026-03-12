@@ -3454,7 +3454,7 @@ io.on('connection', (socket) => {
             }
             const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
-            console.log('[DEBUG sender_role]', { senderRole, recRole: rec?.role, ownerPid: meta?.ownerPid, socketId: socket?.id });
+            console.log('[DEBUG sender_role]', { senderRole, participantId, ownerPid: meta?.ownerPid, match: participantId === meta?.ownerPid });
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
