@@ -3435,7 +3435,9 @@ io.on('connection', (socket) => {
         const shouldSaveMessages = !meta.hospitalEndedSession && (meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg));
         if (shouldSaveMessages && roomId) {
           try {
-            const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? null;
+            const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
+            const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
+            console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken });
             // Find active session for this room (try new patient_token-based first)
             let activeSession = null;
             if (pToken) {
@@ -3785,12 +3787,16 @@ io.on('connection', (socket) => {
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
     if (meta.hospitalSessionId || meta.hospitalMode) {
       const senderRole = (rec.role === 'owner' || meta.ownerPid === participantId) ? 'host' : 'guest';
-      const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? null;
-      dbRun(
-        `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, meta.hospitalSessionId || null, roomId, senderRole, senderP?.lang || '', trimmedText, pToken]
-      ).catch(e => { console.warn('[hospital] msg save error:', e?.message); trackUsageError(e, { source: 'hospital:msg-save' }); });
+      (async () => {
+        const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
+        const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
+        console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken });
+        await dbRun(
+          `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [id, meta.hospitalSessionId || null, roomId, senderRole, senderP?.lang || '', trimmedText, pToken]
+        );
+      })().catch(e => { console.warn('[hospital] msg save error:', e?.message); trackUsageError(e, { source: 'hospital:msg-save' }); });
     }
 
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
@@ -3918,7 +3924,9 @@ io.on('connection', (socket) => {
       // ── Hospital mode: auto-save message to DB ──
       if (isHospitalMsg2 && roomId) {
         try {
-          const pToken2 = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? null;
+          const sessionRow2 = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
+          const pToken2 = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow2?.patient_token ?? null;
+          console.log('[DEBUG hospital_messages]', { roomId, metaToken: meta?.patientToken, roomToken: ROOMS.get(roomId)?.patientToken, pToken: pToken2 });
           let activeSession2 = null;
           if (pToken2) {
             activeSession2 = await dbGet(
