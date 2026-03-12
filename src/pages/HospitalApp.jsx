@@ -624,12 +624,16 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                     <div key={patient.roomId || idx} className="flex flex-col p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-[28px]">🧑‍⚕️</span>
+                          <span className="text-[28px]" title="환자">🧑</span>
                           <div className="min-w-0">
                             <p className="text-[14px] font-semibold font-mono">{patient.roomId}</p>
+                            {langInfo && (
+                              <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                                {langInfo.flag} {langInfo.name}
+                              </p>
+                            )}
                             <p className="text-[11px] text-[var(--color-text-secondary)]">
                               입장 {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                              {!isConsultationRoom && langInfo && ` · ${langInfo.name}`}
                               {!isConsultationRoom && waitSec > 0 && ` · 대기 ${waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}`}
                               {(patient.visitCount ?? 0) > 1 && (
                                 <span className="ml-1 px-1.5 py-0.5 rounded bg-[#2563EB]/15 text-[#2563EB] text-[10px] font-medium">
