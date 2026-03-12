@@ -227,6 +227,7 @@ export default function HospitalApp() {
   const [step, setStep] = useState("choose");
 
   const [authUser, setAuthUser] = useState(null);
+  const [hospitalOrgCode, setHospitalOrgCode] = useState("");
   const [saveMode, setSaveMode] = useState(false);
   const [summaryMessages, setSummaryMessages] = useState([]);
   const [summaryDept, setSummaryDept] = useState(null);
@@ -273,6 +274,13 @@ export default function HospitalApp() {
     fetch("/api/auth/me", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => { if (data?.user) setAuthUser(data.user); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/hospital/auth/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => { if (data?.org_code) setHospitalOrgCode(data.org_code); })
       .catch(() => {});
   }, []);
 
@@ -365,7 +373,7 @@ export default function HospitalApp() {
   }
 
   if (hasStaffParams) {
-    const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || "";
+    const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || hospitalOrgCode || "";
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const returnToReceptionUrl =
       template === "reception" && urlRoom
