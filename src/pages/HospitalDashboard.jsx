@@ -253,6 +253,13 @@ export default function HospitalDashboard() {
           <h1 className="text-[16px] font-semibold text-[var(--color-text)]">
             {MENU_ITEMS.find((m) => m.id === activeMenu)?.label || "대시보드"}
           </h1>
+          <button
+            type="button"
+            onClick={() => navigate("/hospital")}
+            className="ml-auto text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
+          >
+            ← 통역 화면
+          </button>
         </header>
 
         {/* Content */}
@@ -683,36 +690,6 @@ function OverviewPanel({ authUser }) {
 
   return (
     <div className="space-y-6">
-      {/* 통역 시작하기 */}
-      <div
-        className="p-6 rounded-[20px] border-2 flex flex-col items-center justify-center text-center min-h-[140px]"
-        style={{
-          background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
-          borderColor: HOSPITAL_PRIMARY,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => navigate('/hospital')}
-          className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
-          style={{ backgroundColor: HOSPITAL_PRIMARY }}
-        >
-          <Activity size={24} />
-          통역 시작하기
-        </button>
-        <p className="mt-2 text-[13px] text-slate-600">QR 화면에서 환자에게 스캔하게 하세요</p>
-        {authUser?.org_code && (
-          <a
-            href={`/hospital/staff-qr/${encodeURIComponent(authUser.org_code)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 text-[13px] text-[var(--color-text-secondary)] underline hover:text-[#2563EB]"
-          >
-            스태프 폰용 QR 화면 열기
-          </a>
-        )}
-      </div>
-
       {/* 모달: 상담실 — VAD / PTT 선택 */}
       {startModal === "consultation-mode" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
