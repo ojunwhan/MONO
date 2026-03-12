@@ -693,14 +693,7 @@ function OverviewPanel({ authUser }) {
       >
         <button
           type="button"
-          onClick={() => {
-            console.log("authUser:", authUser);
-            const orgCode = authUser?.org_code || authUser?.orgCode || authUser?.organization?.org_code || "";
-            if (!orgCode) {
-              alert("org_code를 찾을 수 없습니다: " + JSON.stringify(authUser));
-            }
-            navigate(`/hospital/staff-qr/${encodeURIComponent(orgCode)}`);
-          }}
+          onClick={() => navigate("/hospital")}
           className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
           style={{ backgroundColor: HOSPITAL_PRIMARY }}
         >
