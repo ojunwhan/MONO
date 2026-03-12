@@ -3264,6 +3264,7 @@ io.on('connection', (socket) => {
 
     const emitTranslated = async (finalText) => {
       if (!finalText || isGarbageText(finalText)) return;
+      console.log('[DEBUG stt_ids]', { segPid: participantId, sttPid: socket._sttParticipantId, ownerPid: ROOMS.get(roomId)?.ownerPid, metaOwnerPid: meta?.ownerPid });
       const roomType = meta.roomType || "oneToOne";
       const msgId = uuidv4();
 
