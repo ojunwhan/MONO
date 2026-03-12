@@ -722,12 +722,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             <style>{`@media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
             <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-4 p-6 rounded-[16px] border border-[var(--color-border)] flex flex-col items-center gap-4">
               <p className="text-[14px] font-semibold text-[var(--color-text)]">환자 QR 스캔</p>
-              <div className="text-center text-[12px] text-[var(--color-text)] space-y-1">
-                <p>스캔하여 통역 서비스를 시작하세요</p>
-                <p>Scan to start interpretation</p>
-                <p>翻訳サービスを開始するにはスキャン</p>
-                <p>扫描开始翻译服务</p>
-              </div>
+              <p className="text-center text-[12px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
               <QRCode value={`https://lingora.chat/hospital/join/${orgCode || ""}`} size={200} bgColor="#FFFFFF" fgColor="#000000" level="M" />
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => { const qrUrl = `https://lingora.chat/hospital/join/${orgCode || ""}`; navigator.clipboard?.writeText(qrUrl).then(() => { setQrLinkCopied(true); setTimeout(() => setQrLinkCopied(false), 2000); }); }} className="px-4 py-2 rounded-[10px] border border-[var(--color-border)] text-[13px] font-medium hover:bg-[var(--color-bg-secondary)]">
