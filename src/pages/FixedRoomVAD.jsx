@@ -450,21 +450,6 @@ export default function FixedRoomVAD() {
     sessionIdRef.current = stateSessionId;
   }, [stateSessionId]);
 
-  // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 ──
-  const [orgCopySettings, setOrgCopySettings] = useState(null);
-  const [copyFeedback, setCopyFeedback] = useState(null); // 'emr' | 'crm' | null
-  useEffect(() => {
-    if (step !== "ended" || !isOwner || !orgCode) return;
-    let cancelled = false;
-    fetch(`/api/hospital/org-settings?org_code=${encodeURIComponent(orgCode)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled && data?.ok) setOrgCopySettings(data);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [step, isOwner, orgCode]);
-
   // ── 환자 이력 (직원 + patientToken 있을 때) ──
   const [patientHistory, setPatientHistory] = useState(null);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
@@ -506,6 +491,21 @@ export default function FixedRoomVAD() {
   const messagesEndRef = useRef(null);
   const pendingMergedRef = useRef(false);
   const [textInputValue, setTextInputValue] = useState("");
+
+  // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 (step 선언 이후에 배치) ──
+  const [orgCopySettings, setOrgCopySettings] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null); // 'emr' | 'crm' | null
+  useEffect(() => {
+    if (step !== "ended" || !isOwner || !orgCode) return;
+    let cancelled = false;
+    fetch(`/api/hospital/org-settings?org_code=${encodeURIComponent(orgCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.ok) setOrgCopySettings(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [step, isOwner, orgCode]);
 
   // ── 입장 시 pending 메시지(직원이 보낸 오프라인 메시지)를 목록에 반영 ──
   useEffect(() => {
