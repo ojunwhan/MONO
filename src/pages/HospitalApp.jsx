@@ -22,6 +22,7 @@ import {
   Bell,
   Users,
   FolderOpen,
+  LogOut,
 } from "lucide-react";
 
 function HospitalLogo() {
@@ -620,11 +621,24 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       <div className="flex-none px-6 py-4 border-b border-[var(--color-border)]">
         <div className="flex items-center justify-between max-w-[600px] mx-auto">
           <HospitalLogo />
-          {template !== "reception" && (
-            <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
-              <Monitor size={12} className="inline mr-1" /> 상담 모드
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {template !== "reception" && (
+              <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
+                <Monitor size={12} className="inline mr-1" /> 상담 모드
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch("/api/hospital/logout", { method: "POST", credentials: "include" });
+                navTo("/hospital-login");
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
+              aria-label="로그아웃"
+            >
+              <LogOut size={14} /> 로그아웃
+            </button>
+          </div>
         </div>
       </div>
       <div className="flex-1 flex flex-col items-center px-6 py-6 max-w-[600px] mx-auto w-full">
