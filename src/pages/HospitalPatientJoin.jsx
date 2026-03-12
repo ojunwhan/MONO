@@ -144,6 +144,37 @@ export default function HospitalPatientJoin() {
         if (pendingData.ok && Array.isArray(pendingData.messages)) pendingMessages = pendingData.messages;
       } catch (_) {}
 
+      // 접수처(reception): 환자 폰 → /room/:roomId (ChatScreen, PTT). 상담실 로직과 분리해 항상 대화방 오픈.
+      if (department === "reception") {
+        sessionStorage.setItem(
+          "mono_guest",
+          JSON.stringify({
+            roomId,
+            lang,
+            name: cleanName,
+            guestId,
+            siteContext: "hospital_reception",
+            roomType: "oneToOne",
+            joinedAt: Date.now(),
+            patientToken,
+          })
+        );
+        navigate(`/room/${roomId}`, {
+          replace: true,
+          state: {
+            fromLang: lang,
+            localName: cleanName,
+            guestId,
+            siteContext: "hospital_reception",
+            roomType: "oneToOne",
+            patientToken,
+            pendingMessages,
+            ...(data.sessionId ? { sessionId: data.sessionId } : {}),
+          },
+        });
+        return;
+      }
+
       if (isConsultationJoin) {
         // 상담실: 환자 폰은 방에 참여하지 않음. PT-XXXXXX 발급 후 대기 화면만 표시. 대화는 태블릿↔의사 PC 간에만 진행.
         setStep("patientWaiting");
