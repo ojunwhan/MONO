@@ -206,7 +206,7 @@ export default function HospitalApp() {
   const navTo = useNav();
   const [searchParams] = useSearchParams();
 
-  const template = searchParams.get("template") || "";
+  const template = searchParams.get("template") || "reception";
   const kiosk = searchParams.get("kiosk") === "true";
   const urlRoom = searchParams.get("room") || "";
 
