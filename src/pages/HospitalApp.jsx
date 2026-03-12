@@ -648,7 +648,15 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                   const accepted = isConsultationRoom && acceptedRoomIds.has(patient.roomId);
                   const showAssignDropdown = isReception && assignDropdownRoomId === patient.roomId;
                   return (
-                    <div key={patient.roomId || idx} className="flex flex-col p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
+                    <div key={patient.roomId || idx} className="relative flex flex-col p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
+                      <button
+                        type="button"
+                        onClick={() => setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId))}
+                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-red-500 text-white text-[14px] leading-none hover:bg-red-600 transition-colors"
+                        aria-label="목록에서 제거"
+                      >
+                        ✕
+                      </button>
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-[28px]" title="환자">🧑</span>
