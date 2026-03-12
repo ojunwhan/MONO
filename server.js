@@ -2302,7 +2302,7 @@ io.on('connection', (socket) => {
   });
 
   // Atomic global join: avoid race between room ensure and join/auth checks.
-  socket.on("join-global", ({ roomId, participantId, fromLang, localName } = {}, ack) => {
+  socket.on("join-global", ({ roomId, participantId, fromLang, localName, roleHint } = {}, ack) => {
     const ackReply = (payload) => {
       if (typeof ack === "function") {
         try { ack(payload); } catch {}
@@ -2327,7 +2327,9 @@ io.on('connection', (socket) => {
       };
     }
 
-    const isOwner = !meta.ownerPid || meta.ownerPid === participantId;
+    const isOwner = roleHint === "owner"
+      ? true
+      : (!meta.ownerPid && roleHint !== "guest");
     if (isOwner) meta.ownerPid = participantId;
     const role = isOwner ? "owner" : "guest";
     const roleName = isOwner ? "Manager" : "Tech";
