@@ -504,6 +504,7 @@ export default function FixedRoomVAD() {
   const [textInputValue, setTextInputValue] = useState("");
   const messagesRef = useRef([]);
   const savedMessageIdsRef = useRef(new Set());
+  const endedFlushDoneRef = useRef(false);
 
   // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 (step 선언 이후에 배치) ──
   const [orgCopySettings, setOrgCopySettings] = useState(null);
@@ -576,6 +577,33 @@ export default function FixedRoomVAD() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // ── step이 ended로 바뀐 직후 한 번 더 미저장 메시지 flush (누락 방지) ──
+  useEffect(() => {
+    if (step !== "ended" || !isOwner || !saveMessages || !sessionIdRef.current || !roomId) {
+      if (step !== "ended") endedFlushDoneRef.current = false;
+      return;
+    }
+    if (endedFlushDoneRef.current) return;
+    endedFlushDoneRef.current = true;
+    const current = messagesRef.current || [];
+    const saved = savedMessageIdsRef.current;
+    current.forEach((m) => {
+      if (!m.id || saved.has(m.id)) return;
+      try {
+        saveMessageToServer({
+          sessionId: sessionIdRef.current,
+          roomId,
+          patientToken: patientToken || undefined,
+          senderRole: m.mine ? roleHint : "guest",
+          originalText: m.originalText || "",
+          translatedText: m.translatedText || "",
+          senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
+          translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+        });
+      } catch (_) {}
+    });
+  }, [step, isOwner, saveMessages, roomId, patientToken, roleHint, fromLang, partnerInfo]);
 
   // PTT 모드일 때는 useVADPipeline을 호출하지 않음. VAD는 VADReadyButton / InterpretingVAD에서만 사용.
   const pauseVadRef = useRef(null);
@@ -733,15 +761,30 @@ export default function FixedRoomVAD() {
       });
     };
 
-    // 스트리밍 종료 (최종 텍스트 반영, 커서 제거)
+    // 스트리밍 종료 (최종 텍스트 반영, 커서 제거) — 스트림으로만 온 메시지도 즉시 서버에 저장
     const onReceiveMessageStreamEnd = (payload) => {
       const { roomId: incomingRoomId, messageId, fullText } = payload || {};
       if (!messageId || (incomingRoomId && incomingRoomId !== roomId)) return;
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev) => {
+        const msg = prev.find((m) => m.id === messageId);
+        const next = prev.map((m) =>
           m.id === messageId ? { ...m, translatedText: fullText ?? m.translatedText, streaming: false } : m
-        )
-      );
+        );
+        if (msg && saveMessages && sessionIdRef.current && !savedMessageIdsRef.current.has(messageId)) {
+          saveMessageToServer({
+            sessionId: sessionIdRef.current,
+            roomId,
+            patientToken,
+            senderRole: msg.mine ? roleHint : (isOwner ? "guest" : "owner"),
+            originalText: msg.originalText || "",
+            translatedText: fullText ?? msg.translatedText ?? "",
+            senderLang: msg.mine ? fromLang : (partnerInfo?.lang || ""),
+            translatedLang: msg.mine ? (partnerInfo?.lang || "") : fromLang,
+          });
+          savedMessageIdsRef.current.add(messageId);
+        }
+        return next;
+      });
     };
 
     // 메시지 수신 + 서버 기록 저장 (HQ 덮어쓰기 또는 신규)

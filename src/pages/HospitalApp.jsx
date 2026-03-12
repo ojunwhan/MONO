@@ -172,6 +172,12 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
   return (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)]" style={{ padding: "2rem" }}>
       <div className="mb-6"><MonoLogo /></div>
+      <div className="text-[11px] text-[var(--color-text-secondary)] text-center max-w-[260px] mb-4 space-y-1.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+        <p className="leading-relaxed">1️⃣ Scan the QR code with your phone</p>
+        <p className="leading-relaxed">2️⃣ Select your language</p>
+        <p className="leading-relaxed">3️⃣ Press 🎤 to speak — release when done</p>
+        <p className="text-[10px] opacity-80 mt-2">No app download needed. Just scan.</p>
+      </div>
       <div className="text-center mb-4">
         <span className="text-[64px] block mb-2">{staffDept.icon}</span>
         <h2 className="text-[28px] font-bold">{displayName}</h2>
@@ -179,11 +185,6 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       </div>
       <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
         <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-      </div>
-      <div className="mt-6 text-left max-w-[280px] mx-auto" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
-        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed mb-2"><span className="font-semibold text-[#3B82F6] mr-2">1.</span>Scan the QR code with your phone</p>
-        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed mb-2"><span className="font-semibold text-[#3B82F6] mr-2">2.</span>Select your language</p>
-        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed"><span className="font-semibold text-[#3B82F6] mr-2">3.</span>Start your consultation</p>
       </div>
       <KioskGuideText />
     </div>
