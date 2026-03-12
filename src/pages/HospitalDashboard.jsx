@@ -693,7 +693,7 @@ function OverviewPanel({ authUser }) {
       >
         <button
           type="button"
-          onClick={(e) => { e.preventDefault(); navigate("/hospital"); }}
+          onClick={() => navigate('/hospital')}
           className="px-8 py-4 rounded-[16px] text-white font-bold text-[18px] shadow-lg hover:opacity-95 transition-opacity flex items-center gap-3"
           style={{ backgroundColor: HOSPITAL_PRIMARY }}
         >
