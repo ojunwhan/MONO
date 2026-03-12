@@ -398,10 +398,20 @@ function InterpretingPTT({
           <button type="button" onClick={() => setInputMode("ptt")} style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "2px solid #3b82f6", background: "rgba(59,130,246,0.2)", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>버튼으로 말하기 (PTT)</button>
         </div>
         <div style={{ marginBottom: "10px" }}>
-          <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: recording ? "#dc2626" : "#3b82f6", color: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", animation: recording ? "pulse 1s ease-in-out infinite" : "none" }}>
-            <Mic size={18} /> {recording ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
+          <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "#3b82f6", color: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+            <span className={recording ? "ptt-mic-glow" : ""} style={{ display: "inline-flex", alignItems: "center" }}>
+              <Mic size={18} />
+            </span>
+            {recording ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
           </button>
         </div>
+        <style>{`
+          @keyframes pttGlow {
+            0%, 100% { filter: drop-shadow(0 0 6px rgba(255,255,255,0.5)) drop-shadow(0 0 10px rgba(147,197,253,0.4)); }
+            50% { filter: drop-shadow(0 0 12px rgba(255,255,255,0.8)) drop-shadow(0 0 20px rgba(147,197,253,0.7)); }
+          }
+          .ptt-mic-glow { animation: pttGlow 1.5s ease-in-out infinite; }
+        `}</style>
         <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
           <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.2)", background: "#1e293b", color: "white", fontSize: "14px", outline: "none" }} />
           <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "10px 16px", borderRadius: "10px", border: "none", background: textInputValue?.trim() ? "#3b82f6" : "#4b5563", color: "white", fontSize: "13px", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>

@@ -180,6 +180,11 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       <div className="p-6 rounded-[20px]" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
         <QRCode value={qrUrl} size={280} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
       </div>
+      <div className="mt-6 text-left max-w-[280px] mx-auto" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed mb-2"><span className="font-semibold text-[#3B82F6] mr-2">1.</span>Scan the QR code with your phone</p>
+        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed mb-2"><span className="font-semibold text-[#3B82F6] mr-2">2.</span>Select your language</p>
+        <p className="text-[15px] text-[var(--color-text)] font-medium leading-relaxed"><span className="font-semibold text-[#3B82F6] mr-2">3.</span>Start your consultation</p>
+      </div>
       <KioskGuideText />
     </div>
   );
