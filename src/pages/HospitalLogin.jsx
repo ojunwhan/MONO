@@ -5,7 +5,7 @@ import MonoLogo from "../components/MonoLogo";
 export default function HospitalLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/hospital-dashboard";
+  const redirectTo = searchParams.get("redirect") || "/hospital";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
