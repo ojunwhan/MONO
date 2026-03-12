@@ -111,10 +111,20 @@ function getDeptIcon(id) {
   return DEPT_MAP[id]?.icon || "🏥";
 }
 
+function parseAsUTC(dateStr) {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  if (/Z|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  return new Date(s + "Z");
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return "-";
   try {
-    return new Date(dateStr).toLocaleString("ko-KR", {
+    const d = parseAsUTC(dateStr);
+    if (!d || isNaN(d.getTime())) return "-";
+    return d.toLocaleString("ko-KR", {
+      timeZone: "Asia/Seoul",
       year: "numeric", month: "2-digit", day: "2-digit",
       hour: "2-digit", minute: "2-digit",
     });
@@ -124,7 +134,10 @@ function formatDate(dateStr) {
 function formatDateShort(dateStr) {
   if (!dateStr) return "-";
   try {
-    return new Date(dateStr).toLocaleDateString("ko-KR", {
+    const d = parseAsUTC(dateStr);
+    if (!d || isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("ko-KR", {
+      timeZone: "Asia/Seoul",
       month: "2-digit", day: "2-digit",
     });
   } catch { return dateStr; }
@@ -133,7 +146,10 @@ function formatDateShort(dateStr) {
 function formatTime(dateStr) {
   if (!dateStr) return "";
   try {
-    return new Date(dateStr).toLocaleTimeString("ko-KR", {
+    const d = parseAsUTC(dateStr);
+    if (!d || isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("ko-KR", {
+      timeZone: "Asia/Seoul",
       hour: "2-digit", minute: "2-digit", second: "2-digit",
     });
   } catch { return ""; }
@@ -1372,7 +1388,7 @@ function ReportsPanel() {
       const header = "날짜,차트번호,진료과,호스트언어,환자언어,통역시간(분),메시지수,상태\n";
       const rows = data.sessions.map((s) => {
         return [
-          s.created_at || "",
+          formatDate(s.created_at),
           s.chart_number || "",
           getDeptLabel(s.department),
           getLangLabel(s.host_lang),
@@ -1488,8 +1504,8 @@ function SessionDetailModal({ session, messages, loading, onClose, onPrint }) {
   const [copyDone, setCopyDone] = useState(false);
 
   const getCopyText = useCallback(() => {
-    const d = session.created_at ? new Date(session.created_at) : new Date();
-    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const d = session.created_at ? parseAsUTC(session.created_at) : new Date();
+    const dateStr = d && !isNaN(d.getTime()) ? d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
     const patientNum = session.room_id || formatChartNumber(session.chart_number) || "";
     const guestLang = getLanguageByCode(session.guest_lang)?.name || session.guest_lang || "English";
     const hostLang = getLanguageByCode(session.host_lang)?.name || session.host_lang || "Korean";
@@ -1661,7 +1677,7 @@ function printConversation(session, messages) {
       <p>Medical Interpretation Record</p>
     </div>
     <div class="info">
-      <span>📅 ${session.created_at || "-"}</span>
+      <span>📅 ${formatDate(session.created_at)}</span>
       <span>🏥 ${getDeptLabel(session.department)}</span>
       <span>📋 차트: ${session.chart_number || "-"}</span>
       <span>🌐 ${getLangLabel(session.host_lang)} ↔ ${getLangLabel(session.guest_lang)}</span>
@@ -1724,7 +1740,7 @@ function printReport(stats, sessions, startDate, endDate) {
         <thead><tr><th>날짜</th><th>차트번호</th><th>진료과</th><th>언어</th><th>시간</th><th>메시지</th><th>상태</th></tr></thead>
         <tbody>
           ${sessions.map((s) => `<tr>
-            <td>${s.created_at || "-"}</td>
+            <td>${formatDate(s.created_at)}</td>
             <td>${s.chart_number || "-"}</td>
             <td>${getDeptLabel(s.department)}</td>
             <td>${getLangLabel(s.host_lang)} → ${getLangLabel(s.guest_lang)}</td>
