@@ -209,7 +209,7 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           62% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
           75% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
           76% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
-          88% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          77% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
           100% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
         }
         .kiosk-marquee {
