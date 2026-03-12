@@ -3777,9 +3777,7 @@ io.on('connection', (socket) => {
 
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
     if (meta.hospitalSessionId || meta.hospitalMode) {
-      const senderId = data?.participantId || data?.myUserId;
-      const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
-      console.log('[DEBUG send-msg]', { senderId: data?.participantId || data?.myUserId, ownerPid: meta?.ownerPid, senderRole });
+      const senderRole = rec.role === 'owner' ? 'host' : 'guest';
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
         const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
@@ -3931,8 +3929,7 @@ io.on('connection', (socket) => {
               [roomId]
             ).catch(() => null);
           }
-          const senderId = data?.participantId || data?.myUserId;
-          const senderRole = (senderId && meta?.ownerPid && senderId === meta.ownerPid) ? 'host' : 'guest';
+          const senderRole = rec.role === 'owner' ? 'host' : 'guest';
           await dbRun(
             `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
