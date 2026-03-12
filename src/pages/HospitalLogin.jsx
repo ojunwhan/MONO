@@ -68,7 +68,7 @@ export default function HospitalLogin() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="비밀번호"
-            autoComplete="current-password"
+            autoComplete="new-password"
             className="w-full h-12 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
           />
 
