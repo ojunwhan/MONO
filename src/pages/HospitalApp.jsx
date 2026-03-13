@@ -253,6 +253,7 @@ export default function HospitalApp() {
   // (??: 768px ???? join?? ??????? ?? ?? ? ???? QR ?? ?? ???? ???? ?? ??)
 
   useEffect(() => {
+    if (kiosk) return;
     if ((hasStaffParams || hasKioskParams) && urlRoom) {
       fetch("/api/hospital/rooms", { credentials: "include" })
         .then((r) => r.json())
@@ -264,20 +265,22 @@ export default function HospitalApp() {
         })
         .catch(() => {});
     }
-  }, [hasStaffParams, hasKioskParams, urlRoom]);
+  }, [hasStaffParams, hasKioskParams, urlRoom, kiosk]);
 
   useEffect(() => {
     loadDirHandle().then((h) => { if (h) { setHasSaveDir(true); setSaveDirName(h.name || ""); } });
   }, []);
 
   useEffect(() => {
+    if (kiosk) return;
     fetch("/api/auth/me", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => { if (data?.user) setAuthUser(data.user); })
       .catch(() => {});
-  }, []);
+  }, [kiosk]);
 
   useEffect(() => {
+    if (kiosk) { setHospitalAuthChecked(true); return; }
     fetch("/api/hospital/auth/me", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
@@ -285,7 +288,7 @@ export default function HospitalApp() {
         setHospitalAuthChecked(true);
       })
       .catch(() => setHospitalAuthChecked(true));
-  }, []);
+  }, [kiosk]);
 
   useEffect(() => {
     if (location.state?.returnFromSession) {
@@ -528,7 +531,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   }, [isConsultationRoom]);
 
   useEffect(() => {
-    if (!isReception) return;
+    if (!isReception || kiosk) return;
     fetch("/api/hospital/rooms", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
@@ -537,7 +540,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         }
       })
       .catch(() => {});
-  }, [isReception]);
+  }, [isReception, kiosk]);
 
   const handleAssignRoom = async (patient, room) => {
     try {
