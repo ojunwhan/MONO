@@ -112,6 +112,32 @@ function resetDailyStats() {
   }
 }
 
+// ── 병원 세션 실시간 로그 (파일) ──
+const LOGS_SESSIONS_DIR = path.join(__dirname, 'logs', 'sessions');
+const LOGS_RECORDS_DIR = path.join(__dirname, 'logs', 'records');
+
+function appendHospitalSessionLog(roomId, roleLabel, originalText, translatedText) {
+  try {
+    if (!fs.existsSync(LOGS_SESSIONS_DIR)) fs.mkdirSync(LOGS_SESSIONS_DIR, { recursive: true });
+    const filePath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0, 8);
+    const line = `[${timeStr}] ${roleLabel}: ${(originalText || '').replace(/\n/g, ' ')} → ${(translatedText || '').replace(/\n/g, ' ')}\n`;
+    fs.appendFileSync(filePath, line);
+  } catch (e) { console.warn('[session-log] append failed:', e?.message); }
+}
+
+function archiveHospitalSessionLog(roomId, patientToken) {
+  try {
+    if (!fs.existsSync(LOGS_RECORDS_DIR)) fs.mkdirSync(LOGS_RECORDS_DIR, { recursive: true });
+    const src = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+    if (!fs.existsSync(src)) return;
+    const base = patientToken ? `${patientToken}_${roomId}` : roomId;
+    const dest = path.join(LOGS_RECORDS_DIR, `${base}.txt`);
+    fs.copyFileSync(src, dest);
+  } catch (e) { console.warn('[session-log] archive failed:', e?.message); }
+}
+
 // ── API 사용량 DB 영속화 (dbRun/dbGet = async sqlite3 wrapper) ──
 function persistUsageStats(dateOverride) {
   const date = dateOverride || usageStats.date;
@@ -2071,6 +2097,9 @@ io.on('connection', (socket) => {
   // ── fixed-room:end — 직원이 통역 종료 → 양쪽 모두 종료 ──
   socket.on("fixed-room:end", ({ roomId } = {}) => {
     if (!roomId) return;
+    const meta = ROOMS.get(roomId);
+    const patientToken = meta?.patientToken ?? null;
+    archiveHospitalSessionLog(roomId, patientToken);
     io.to(roomId).emit("fixed-room:end", { roomId });
   });
 
@@ -3103,7 +3132,7 @@ io.on('connection', (socket) => {
   });
 
   // --- STT streaming (AudioWorklet + VAD) ---
-  socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000 }) => {
+  socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000, roleHint }) => {
     if (!roomId || !participantId) return;
     socket._sttParticipantId = participantId;
     // ROOMS-DB 동기화: ROOMS에 없고 PT- 방이면 hospital_sessions에서 조회 후 ROOMS 재생성 후 인증 통과
@@ -3144,7 +3173,13 @@ io.on('connection', (socket) => {
     }
     const meta = ensureRoomMeta(roomId);
     if (!SOCKET_ROLES.get(socket.id)) {
-      const role = meta.ownerPid && meta.ownerPid === participantId ? "owner" : "guest";
+      const isHospitalRoom = String(roomId).startsWith('PT-') || String(meta.siteContext || '').startsWith('hospital_');
+      let role = meta.ownerPid && meta.ownerPid === participantId ? "owner" : "guest";
+      if (isHospitalRoom && roleHint === "owner") {
+        role = "owner";
+        meta.ownerPid = participantId;
+        ROOMS.set(roomId, meta);
+      }
       SOCKET_ROLES.set(socket.id, { role });
     }
     const role = SOCKET_ROLES.get(socket.id)?.role;
@@ -3414,6 +3449,10 @@ io.on('connection', (socket) => {
             });
           }
         } catch (e) { console.warn("[hq]:", e?.message); }
+        if (isHospital1to1) {
+          const roleLabel = rec.role === 'owner' ? '직원' : '환자';
+          appendHospitalSessionLog(roomId, roleLabel, finalText, finalizedForTts);
+        }
         try {
           const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
           if (ttsBuffer && otherP?.socketId) {
@@ -3445,7 +3484,7 @@ io.on('connection', (socket) => {
                 [roomId]
               ).catch(() => null);
             }
-            const senderRole = (participantId === meta?.ownerPid) ? 'host' : 'guest';
+            const senderRole = rec.role === 'owner' ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
@@ -3707,6 +3746,43 @@ io.on('connection', (socket) => {
     if (normalized.length <= 2) {
       ackReply({ ok: true, text: "" });
       return;
+    }
+
+    // 병원 모드 + 미디어레코드(마이크 눌렀다 뗐을 때) 경로: hospital_messages 저장 (send-message와 동일하게 SOCKET_ROLES로 sender_role 결정)
+    if (whisperHospitalMode && roomId) {
+      try {
+        const meta = ensureRoomMeta(roomId);
+        const isHospital1to1 = meta.roomType === "oneToOne" && String(meta.siteContext || "").startsWith("hospital_");
+        if (isHospital1to1 && !meta.hospitalEndedSession) {
+          const rec = SOCKET_ROLES.get(socket.id) || {};
+          const senderRole = rec.role === "owner" ? "host" : "guest";
+          const fromLang = mapLang(lang || "en");
+          const sessionRow = await dbGet("SELECT patient_token FROM hospital_sessions WHERE room_id = ?", [roomId]).catch(() => null);
+          const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
+          let activeSession = null;
+          if (pToken) {
+            activeSession = await dbGet(
+              "SELECT id FROM hospital_sessions WHERE room_id = ? ORDER BY started_at DESC LIMIT 1",
+              [roomId]
+            ).catch(() => null);
+          }
+          if (!activeSession) {
+            activeSession = await dbGet(
+              "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+              [roomId]
+            ).catch(() => null);
+          }
+          const msgId = uuidv4();
+          await dbRun(
+            `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, "", "", pToken]
+          );
+        }
+      } catch (dbErr) {
+        console.warn("[stt:whisper][hospital:msg-save]", dbErr?.message);
+        trackUsageError(dbErr, { source: "hospital:msg-save-whisper" });
+      }
     }
 
     socket.emit("stt:result", { roomId, participantId, text: normalized, final: true });
@@ -4121,6 +4197,9 @@ io.on('connection', (socket) => {
         const room = io.sockets.adapter.rooms.get(capturedRoomId);
         if (!room || room.size === 0) {
           // ── Hospital: 세션 자동 종료 ──
+          if (String(metaBefore?.siteContext || '').startsWith('hospital_')) {
+            archiveHospitalSessionLog(capturedRoomId, metaBefore?.patientToken ?? null);
+          }
           try {
             const activeSess = await dbGet(
               `SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1`,
@@ -4156,6 +4235,7 @@ io.on('connection', (socket) => {
         // ── Hospital: 호스트가 떠나면 즉시 세션 종료 ──
         const isHospitalDisc = String(metaBefore?.siteContext || "").startsWith("hospital_");
         if (isHospitalDisc) {
+          archiveHospitalSessionLog(roomId, metaBefore?.patientToken ?? null);
           (async () => {
             try {
               const activeSessHost = await dbGet(
@@ -5315,6 +5395,21 @@ app.post('/api/hospital/assign-room', optionalHospitalOrg, async (req, res) => {
   } catch (e) {
     console.error('[hospital:assign-room] error:', e?.message);
     res.status(500).json({ error: 'assign_failed' });
+  }
+});
+
+// GET /api/hospital/session-log/:roomId — 해당 방 실시간 세션 로그 파일 내용 (plain text)
+app.get('/api/hospital/session-log/:roomId', (req, res) => {
+  const roomId = String(req.params.roomId || '').trim();
+  if (!roomId) return res.status(400).send('roomId required');
+  const filePath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+  try {
+    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+    const content = fs.readFileSync(filePath, 'utf8');
+    res.type('text/plain').send(content);
+  } catch (e) {
+    console.warn('[session-log] read failed:', e?.message);
+    res.status(500).send('Error reading log');
   }
 });
 
