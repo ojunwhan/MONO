@@ -5854,6 +5854,40 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
   }
 });
 
+// DELETE /api/hospital/sessions/:sessionId — 세션 삭제 (DB + 로그 파일), org 소유만
+app.delete('/api/hospital/sessions/:sessionId', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const { sessionId } = req.params;
+    const session = await dbGet(
+      "SELECT id, room_id, patient_token FROM hospital_sessions WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?) LIMIT 1",
+      [sessionId, orgCode]
+    );
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
+    const roomId = session.room_id || null;
+    const patientToken = session.patient_token || null;
+
+    await dbRun('DELETE FROM hospital_sessions WHERE id = ?', [sessionId]);
+
+    if (roomId) {
+      const sessionPath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+      const archiveBase = patientToken ? `${patientToken}_${roomId}` : roomId;
+      const archivePath = path.join(LOGS_RECORDS_DIR, `${archiveBase}.txt`);
+      try {
+        if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath);
+      } catch (_) {}
+      try {
+        if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
+      } catch (_) {}
+    }
+
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('[hospital:delete-session]', e?.message);
+    res.status(500).json({ error: 'delete_failed' });
+  }
+});
+
 // GET /api/hospital/rooms — 병원별 방 목록 (JWT org_code로 필터)
 app.get('/api/hospital/rooms', requireHospitalAdminJwt, async (req, res) => {
   try {

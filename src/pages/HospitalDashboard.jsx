@@ -1014,6 +1014,20 @@ function HistoryPanel() {
 
   useEffect(() => { fetchSessions(1); }, [fetchSessions]);
 
+  const handleDeleteSession = useCallback(async (session) => {
+    if (!window.confirm("이 기록을 삭제하시겠습니까?")) return;
+    try {
+      const r = await fetch(`/api/hospital/sessions/${session.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await r.json();
+      if (data.success) fetchSessions(page);
+    } catch (e) {
+      console.error("session delete failed:", e);
+    }
+  }, [page, fetchSessions]);
+
   const openDetail = async (session) => {
     setSelectedSession(session);
     setModalLoading(true);
@@ -1153,7 +1167,7 @@ function HistoryPanel() {
                 {sessions.map((s) => (
                   <tr
                     key={s.id}
-                    className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                    className="group border-b border-[var(--color-border)] hover:bg-[var(--color-bg-secondary)] transition-colors"
                   >
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       {formatDate(s.created_at)}
@@ -1183,7 +1197,7 @@ function HistoryPanel() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 justify-end">
                         <button
                           type="button"
                           onClick={() => openDetail(s)}
@@ -1191,6 +1205,15 @@ function HistoryPanel() {
                         >
                           <Eye size={12} />
                           상세
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSession(s); }}
+                          className="session-row-delete flex items-center justify-center w-8 h-8 rounded-[8px] text-[var(--color-text-secondary)] hover:bg-red-500/10 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                          title="삭제"
+                          aria-label="삭제"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
