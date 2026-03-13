@@ -12,8 +12,6 @@ import QRCode from "react-qr-code";
 import socket from "../socket";
 import { playNotificationSound } from "../audio/notificationSound";
 import {
-  Shield,
-  ShieldOff,
   Copy,
   Download,
   RotateCcw,
@@ -617,8 +615,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const displayTitle = roomName || selectedDept.labelKo;
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
-      <div className="flex-none px-6 py-4 border-b border-[var(--color-border)]">
+    <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
+      <div className="flex-none px-4 py-2 border-b border-[var(--color-border)]">
         <div className="flex items-center justify-between max-w-[600px] mx-auto">
           <HospitalLogo />
           <div className="flex items-center gap-2">
@@ -647,27 +645,21 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           <h2 className="text-[22px] font-bold mb-1">{displayTitle}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
-        <div className="w-full max-w-[360px] mb-4">
+        <div className="w-full max-w-[360px] mb-2">
           <LanguageFlagPicker selectedLang={selectedLang} showGrid={showLangGrid} onToggleGrid={() => setShowLangGrid((p) => !p)}
             onSelect={(code) => { setSelectedLang(code); localStorage.setItem("myLang", code); setShowLangGrid(false); }} />
         </div>
-        <div className="w-full max-w-[360px] mb-4 flex items-center gap-3">
-          <button type="button" onClick={() => setSaveMode(!saveMode)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium ${saveMode ? "bg-[#DBEAFE] text-[#1D4ED8] border border-[#3B82F6]" : "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"}`}>
-            {saveMode ? <Shield size={14} /> : <ShieldOff size={14} />}{saveMode ? "대화 저장 ON" : "무기록 모드"}
-          </button>
-        </div>
         {!showLangGrid && (
           <>
-            <div className={`w-full max-w-[400px] mb-4 flex items-center gap-2 px-4 py-2 rounded-[10px] text-[12px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
-              <span className={`w-2 h-2 rounded-full ${staffJoined ? "bg-green-500 animate-pulse" : "bg-yellow-500"}`} />
+            <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-[11px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${staffJoined ? "bg-green-500 animate-pulse" : "bg-yellow-500"}`} />
               {staffJoined ? "대기 중 — 환자 QR 스캔을 기다리고 있습니다" : "연결 중..."}
             </div>
             {waitingPatients.length > 0 && (
-              <div className="w-full max-w-[400px] mb-4 space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Bell size={16} className="text-[#F59E0B] animate-bounce" />
-                  <span className="text-[14px] font-semibold">
+              <div className="w-full max-w-[400px] mb-2 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <Bell size={14} className="text-[#F59E0B] animate-bounce" />
+                  <span className="text-[12px] font-semibold">
                     {isConsultationRoom ? "대기 환자 (진료실 배정됨)" : "대기 중인 환자"} ({waitingPatients.length}명)
                   </span>
                 </div>
@@ -677,26 +669,26 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                   const accepted = isConsultationRoom && acceptedRoomIds.has(patient.roomId);
                   const showAssignDropdown = isReception && assignDropdownRoomId === patient.roomId;
                   return (
-                    <div key={patient.roomId || idx} className="relative flex flex-col p-4 rounded-[14px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
+                    <div key={patient.roomId || idx} className="relative flex flex-col p-2.5 rounded-[10px] border-2 border-[#F59E0B] bg-[#FFFBEB] dark:bg-[#422006]">
                       <button
                         type="button"
                         onClick={() => setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId))}
-                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-red-500 text-white text-[14px] leading-none hover:bg-red-600 transition-colors"
+                        className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[12px] leading-none hover:bg-red-600 transition-colors"
                         aria-label="목록에서 제거"
                       >
                         ✕
                       </button>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-[28px]" title="환자">🧑</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[22px]" title="환자">🧑</span>
                           <div className="min-w-0">
-                            <p className="text-[14px] font-semibold font-mono">{patient.roomId}</p>
+                            <p className="text-[12px] font-semibold font-mono">{patient.roomId}</p>
                             {langInfo && (
-                              <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                              <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">
                                 {langInfo.flag} {langInfo.name}
                               </p>
                             )}
-                            <p className="text-[11px] text-[var(--color-text-secondary)]">
+                            <p className="text-[10px] text-[var(--color-text-secondary)]">
                               입장 {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
                               {!isConsultationRoom && waitSec > 0 && ` · 대기 ${waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}`}
                               {(patient.visitCount ?? 0) > 1 && (
@@ -705,31 +697,31 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                                 </span>
                               )}
                             </p>
-                            {accepted && <p className="text-[11px] text-green-600 dark:text-green-400 font-medium mt-0.5">✓ 진료실 입장 수락됨</p>}
+                            {accepted && <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">✓ 진료실 입장 수락됨</p>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
                           {isReception && (
                             <>
                               <button type="button" onClick={() => setAssignDropdownRoomId(showAssignDropdown ? null : patient.roomId)}
-                                className="px-3 py-2 rounded-[10px] bg-amber-500 text-white text-[12px] font-medium hover:bg-amber-600">
+                                className="px-2 py-1.5 rounded-[8px] bg-amber-500 text-white text-[11px] font-medium hover:bg-amber-600">
                                 진료실 배정
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
-                                className="px-4 py-2 rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
-                                <Monitor size={14} /> 통역 시작
+                                className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
+                                <Monitor size={12} /> 통역 시작
                               </button>
                             </>
                           )}
                           {isConsultationRoom && (
                             <>
                               <button type="button" onClick={() => handleRequestEntry(patient, patient.consultationRoomName)}
-                                className="px-3 py-2 rounded-[10px] border border-[var(--color-border)] text-[12px] font-medium hover:bg-[var(--color-bg-secondary)]">
+                                className="px-2 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
                                 입장 요청
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
-                                className="px-4 py-2 rounded-[12px] bg-[#3B82F6] text-white text-[13px] font-semibold hover:bg-[#2563EB] flex items-center gap-2">
-                                <Monitor size={14} /> 통역 시작
+                                className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
+                                <Monitor size={12} /> 통역 시작
                               </button>
                             </>
                           )}
@@ -751,31 +743,30 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               </div>
             )}
             {waitingPatients.length === 0 && (
-              <div className="w-full max-w-[400px] mb-4 p-6 rounded-[16px] border border-dashed border-[var(--color-border)] text-center">
-                <Users size={32} className="mx-auto mb-3 text-[var(--color-text-secondary)] opacity-40" />
-                <p className="text-[14px] text-[var(--color-text-secondary)]">대기 중인 환자가 없습니다</p>
-                <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">태블릿 QR을 환자가 스캔하면 여기에 표시됩니다</p>
+              <div className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-dashed border-[var(--color-border)] text-center">
+                <Users size={24} className="mx-auto mb-1.5 text-[var(--color-text-secondary)] opacity-40" />
+                <p className="text-[12px] text-[var(--color-text-secondary)]">대기 중인 환자가 없습니다</p>
+                <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">태블릿 QR을 환자가 스캔하면 여기에 표시됩니다</p>
               </div>
             )}
             <style>{`@media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
-            <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-4 p-6 rounded-[16px] border border-[var(--color-border)] flex flex-col items-center gap-4">
-              <p className="text-[14px] font-semibold text-[var(--color-text)]">환자 QR 스캔</p>
-              <p className="text-center text-[12px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
-              <QRCode value={`https://lingora.chat/hospital/join/${orgCode || ""}`} size={200} bgColor="#FFFFFF" fgColor="#000000" level="M" />
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => { const qrUrl = `https://lingora.chat/hospital/join/${orgCode || ""}`; navigator.clipboard?.writeText(qrUrl).then(() => { setQrLinkCopied(true); setTimeout(() => setQrLinkCopied(false), 2000); }); }} className="px-4 py-2 rounded-[10px] border border-[var(--color-border)] text-[13px] font-medium hover:bg-[var(--color-bg-secondary)]">
+            <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-[var(--color-border)] flex flex-col items-center gap-2">
+              <p className="text-[12px] font-semibold text-[var(--color-text)]">환자 QR 스캔</p>
+              <p className="text-center text-[11px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
+              <QRCode value={`https://lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" />
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => { const qrUrl = `https://lingora.chat/hospital/join/${orgCode || ""}`; navigator.clipboard?.writeText(qrUrl).then(() => { setQrLinkCopied(true); setTimeout(() => setQrLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
                   {qrLinkCopied ? "복사됨!" : "링크 복사"}
                 </button>
-                <button type="button" onClick={() => window.print()} className="px-4 py-2 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-medium hover:bg-[#2563EB]">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[11px] font-medium hover:bg-[#2563EB]">
                   PDF로 출력
                 </button>
               </div>
             </div>
-            <button type="button" onClick={onBack} className="mt-4 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">← 대시보드로 돌아가기</button>
-          </>
+                      </>
         )}
       </div>
-      <div className="flex-none py-3 text-center space-y-1">
+      <div className="flex-none py-2 text-center space-y-1">
         <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
         <button type="button" onClick={() => navTo("/hospital-dashboard")} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
           대시보드로 이동
