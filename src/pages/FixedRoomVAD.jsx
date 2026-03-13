@@ -1657,74 +1657,9 @@ export default function FixedRoomVAD() {
               통역이 종료되었습니다. 수고하셨습니다.
             </h2>
             <p style={{ fontSize: "14px", opacity: 0.6, marginTop: "8px" }}>
-              {isOwner ? "아래 버튼으로 기록을 복사한 뒤 EMR/CRM에 붙여넣을 수 있습니다." : "이 페이지를 닫아도 됩니다."}
+              {isOwner ? "아래 버튼으로 통역 대기 화면으로 돌아가세요." : "이 페이지를 닫아도 됩니다."}
             </p>
           </div>
-
-          {/* 직원 전용: 대화 내용 복사 (공통) */}
-          {isOwner && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-              <button
-                type="button"
-                onClick={() => handleCopyForTool("copy")}
-                style={{
-                  padding: "12px 24px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(255,255,255,0.3)",
-                  background: copyFeedback === "copy" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
-                  color: "white",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                {copyFeedback === "copy" ? "복사됨 ✓" : "📋 대화 내용 복사"}
-              </button>
-              <span style={{ fontSize: "11px", opacity: 0.7 }}>EMR / CRM / 차트 어디든 붙여넣기 가능</span>
-            </div>
-          )}
-
-          {/* 직원 전용: EMR/CRM 복사 버튼 (병원 설정에 따라 표시) */}
-          {isOwner && orgCopySettings && (orgCopySettings.emr_enabled || orgCopySettings.crm_enabled) && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", justifyContent: "center" }}>
-              {orgCopySettings.emr_enabled && (
-                <button
-                  type="button"
-                  onClick={() => handleCopyForTool("emr")}
-                  style={{
-                    padding: "12px 20px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,255,255,0.3)",
-                    background: copyFeedback === "emr" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
-                    color: "white",
-                    fontSize: "15px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {copyFeedback === "emr" ? "복사됨 ✓" : `${orgCopySettings.emr_label || "EMR"}에 복사`}
-                </button>
-              )}
-              {orgCopySettings.crm_enabled && (
-                <button
-                  type="button"
-                  onClick={() => handleCopyForTool("crm")}
-                  style={{
-                    padding: "12px 20px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,255,255,0.3)",
-                    background: copyFeedback === "crm" ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.08)",
-                    color: "white",
-                    fontSize: "15px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {copyFeedback === "crm" ? "복사됨 ✓" : `${orgCopySettings.crm_label || "CRM"}에 복사`}
-                </button>
-              )}
-            </div>
-          )}
 
           {/* 직원: 통역 대기로 돌아가기 */}
           {isOwner && (
