@@ -138,6 +138,36 @@ function archiveHospitalSessionLog(roomId, patientToken) {
   } catch (e) { console.warn('[session-log] archive failed:', e?.message); }
 }
 
+/** Parse session log file into messages array. Line format: [HH:MM:SS] 직원: original → translated */
+function parseSessionLogFile(content, session, msgIdPrefix) {
+  const messages = [];
+  const sessionDate = (session.started_at || session.created_at || '').toString().trim();
+  const datePart = sessionDate ? sessionDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const lines = (content || '').split(/\r?\n/).filter((l) => l.trim());
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const timeMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*(직원|환자):\s*(.+)$/);
+    if (!timeMatch) continue;
+    const [, timeStr, roleLabel, rest] = timeMatch;
+    const sep = ' → ';
+    const lastSep = rest.lastIndexOf(sep);
+    const original = (lastSep >= 0 ? rest.slice(0, lastSep) : rest).trim();
+    const translated = (lastSep >= 0 ? rest.slice(lastSep + sep.length) : '').trim();
+    const sender_role = roleLabel === '직원' ? 'host' : 'guest';
+    const sender_lang = sender_role === 'host' ? (session.host_lang || null) : (session.guest_lang || null);
+    const created_at = `${datePart}T${timeStr}.000Z`;
+    messages.push({
+      id: msgIdPrefix ? `${msgIdPrefix}-${i}` : `log-${i}`,
+      sender_role,
+      sender_lang,
+      created_at,
+      original_text: original,
+      translated_text: translated || '',
+    });
+  }
+  return messages;
+}
+
 // ── API 사용량 DB 영속화 (dbRun/dbGet = async sqlite3 wrapper) ──
 function persistUsageStats(dateOverride) {
   const date = dateOverride || usageStats.date;
@@ -5775,7 +5805,7 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
   }
 });
 
-// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (org 소유만)
+// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (로그 파일에서 읽음, org 소유만)
 app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, async (req, res) => {
   try {
     const orgCode = req.hospitalOrgCode || 'UNKNOWN';
@@ -5785,10 +5815,20 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
       [sessionId, orgCode]
     );
     if (!session) return res.status(404).json({ error: 'session_not_found' });
-    const messages = await dbAll(
-      'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
-      [sessionId]
-    );
+    const roomId = session.room_id || null;
+    const patientToken = session.patient_token || null;
+    let content = null;
+    if (roomId) {
+      const archiveBase = patientToken ? `${patientToken}_${roomId}` : roomId;
+      const archivePath = path.join(LOGS_RECORDS_DIR, `${archiveBase}.txt`);
+      const sessionPath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+      if (fs.existsSync(archivePath)) {
+        content = fs.readFileSync(archivePath, 'utf8');
+      } else if (fs.existsSync(sessionPath)) {
+        content = fs.readFileSync(sessionPath, 'utf8');
+      }
+    }
+    const messages = content ? parseSessionLogFile(content, session, sessionId) : [];
     res.json({ success: true, session, messages });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
