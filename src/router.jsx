@@ -35,12 +35,16 @@ import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
 async function rootRedirectLoader({ request }) {
   const url = new URL(request.url);
+  const pathname = url.pathname || "/";
   const roomId = url.searchParams.get("roomId");
   if (roomId) {
     const siteContext = url.searchParams.get("siteContext") || "general";
     const roomType = url.searchParams.get("roomType") || "oneToOne";
     return redirect(`/join/${encodeURIComponent(roomId)}?siteContext=${encodeURIComponent(siteContext)}&roomType=${encodeURIComponent(roomType)}`);
   }
+
+  // Only run auth redirect for exact root "/". Other paths (e.g. /hospital-login) are public — no redirect.
+  if (pathname !== "/") return null;
 
   const me = await fetchAuthMe();
   if (me.authenticated) {
