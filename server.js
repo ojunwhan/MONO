@@ -2004,6 +2004,30 @@ io.on('connection', (socket) => {
   }
   console.log('🟢 New client connected:', socket.id);
 
+  // ── Hospital: staff watches department for incoming patients (regular socket) ──
+  socket.on('hospital:watch', ({ department }) => {
+    if (!department) return;
+    const channel = `hospital:watch:${department}`;
+    socket.join(channel);
+    console.log(`[hospital:watch] Staff watching dept=${department} (socket=${socket.id})`);
+
+    if (department === '__all__') {
+      for (const [d, list] of HOSPITAL_WAITING.entries()) {
+        list.forEach(w => { socket.emit('hospital:patient-waiting', w); });
+      }
+    } else {
+      const waiting = HOSPITAL_WAITING.get(department) || [];
+      waiting.forEach(w => { socket.emit('hospital:patient-waiting', w); });
+    }
+  });
+
+  socket.on('hospital:unwatch', ({ department }) => {
+    if (!department) return;
+    const channel = `hospital:watch:${department}`;
+    socket.leave(channel);
+    console.log(`[hospital:unwatch] Staff unwatching dept=${department} (socket=${socket.id})`);
+  });
+
   // ── Admin 실시간 에러 모니터링 구독 ──
   socket.on('admin:subscribe-errors', (data) => {
     const key = data?.key || '';

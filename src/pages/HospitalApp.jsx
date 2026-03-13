@@ -445,7 +445,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         joinedRef.current = false;
       };
     } else {
-      if (!selectedDept) return;
+      if (!selectedDept && !orgCode) return;
       const department = orgCode || selectedDept?.id || "";
       const doWatch = () => {
         socket.emit("hospital:watch", { department });
