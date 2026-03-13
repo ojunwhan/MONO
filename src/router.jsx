@@ -124,6 +124,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/hospital",
+    loader: () => null,
     element: <HospitalApp />,
   },
   {

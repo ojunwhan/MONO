@@ -211,7 +211,7 @@ export default function HospitalApp() {
 
   const hasStaffParams = template === "reception" || searchParams.get("room") !== null;
   const hasKioskParams = template && urlRoom && kiosk;
-  const shouldRedirect = !hasStaffParams && !hasKioskParams;
+  const shouldRedirect = !hasStaffParams && !hasKioskParams && !kiosk;
 
   const [roomName, setRoomName] = useState(null);
   const detected = useMemo(() => detectUserLanguage(), []);
