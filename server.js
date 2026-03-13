@@ -3813,10 +3813,25 @@ io.on('connection', (socket) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, "", "", pToken]
           );
+          const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
+          const otherP = otherPid ? meta.participants[otherPid] : null;
+          const toLang = otherP?.lang || "en";
+          const siteCtx = meta.siteContext || "general";
+          const roomContext = getRoomContext(roomId);
+          addToRoomContext(roomId, { text: normalized, lang: fromLang, role: 'user' });
+          let translatedText = normalized;
+          if (fromLang !== toLang) {
+            try {
+              if (await canTranslateForUser(socket, participantId)) {
+                translatedText = await fastTranslate(normalized, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+                await consumeTranslationUsage(participantId);
+              }
+            } catch (e) { console.warn("[stt:whisper][translate]:", e?.message); }
+          }
           const senderSocketId = socket.id;
           const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
           const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
-          appendHospitalSessionLog(roomId, roleLabel, normalized, "");
+          appendHospitalSessionLog(roomId, roleLabel, normalized, translatedText);
         }
       } catch (dbErr) {
         console.warn("[stt:whisper][hospital:msg-save]", dbErr?.message);
