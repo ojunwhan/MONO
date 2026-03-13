@@ -289,11 +289,12 @@ export default function HospitalApp() {
 
   useEffect(() => {
     if (!hospitalAuthChecked) return;
+    if (kiosk) return;
     const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
     if (!isHospitalAdmin) {
       navTo("/hospital-login", { replace: true });
     }
-  }, [hospitalAuthChecked, hospitalOrgCode, authUser, navTo]);
+  }, [hospitalAuthChecked, hospitalOrgCode, authUser, navTo, kiosk]);
 
   useEffect(() => {
     if (location.state?.returnFromSession) {
