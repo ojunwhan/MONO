@@ -45,11 +45,11 @@ function resampleTo16k(float32, fromSampleRate) {
   }
   return out;
 }
-function sendPTTAudioToServer({ roomId, participantId, lang, audioFloat32, sampleRate }) {
+function sendPTTAudioToServer({ roomId, participantId, lang, audioFloat32, sampleRate, roleHint }) {
   if (!roomId || !participantId || !lang || !audioFloat32?.length) return;
   const at16k = sampleRate === 16000 ? audioFloat32 : resampleTo16k(audioFloat32, sampleRate);
   const int16 = float32ToInt16PTT(at16k);
-  socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000 });
+  socket.emit("stt:open", { roomId, participantId, lang, sampleRateHz: 16000, ...(roleHint ? { roleHint } : {}) });
   for (let offset = 0; offset < int16.length; offset += PTT_CHUNK_SIZE) {
     const chunk = int16.slice(offset, offset + PTT_CHUNK_SIZE);
     socket.emit("stt:audio", { roomId, participantId, lang, audio: int16ToBase64PTT(chunk), sampleRateHz: 16000 });
@@ -311,7 +311,7 @@ function InterpretingVAD({
 
 // ── PTT 전용: interpreting 단계 (VAD 미사용, MediaRecorder로 녹음 → PCM16 전송) ──
 function InterpretingPTT({
-  roomId, participantId, fromLang, pauseVadRef,
+  roomId, participantId, fromLang, roleHint, pauseVadRef,
   messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
   isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
   textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
@@ -348,7 +348,7 @@ function InterpretingPTT({
           const buffer = await ctx.decodeAudioData(arrayBuffer);
           const float32 = buffer.getChannelData(0);
           const sr = buffer.sampleRate;
-          sendPTTAudioToServer({ roomId, participantId, lang: fromLang, audioFloat32: float32, sampleRate: sr });
+          sendPTTAudioToServer({ roomId, participantId, lang: fromLang, audioFloat32: float32, sampleRate: sr, roleHint });
         } catch (err) {
           console.warn("[PTT] decode/send failed", err);
         }
@@ -359,7 +359,7 @@ function InterpretingPTT({
     } catch (err) {
       console.warn("[PTT] getUserMedia failed", err);
     }
-  }, [recording, roomId, participantId, fromLang]);
+  }, [recording, roomId, participantId, fromLang, roleHint]);
 
   const displayStatus = recording ? "🎤 녹음 중" : status;
   const headerBg = recording ? "#7f1d1d" : "#1e293b";
@@ -713,7 +713,12 @@ export default function FixedRoomVAD() {
         langLabel: profile?.shortLabel || payload?.peerLang || "",
       });
       if (step === "waiting") {
-        setStep("ready");
+        if (isOwner) {
+          socket.emit("fixed-room:start", { roomId });
+          doStartInterpreting();
+        } else {
+          setStep("ready");
+        }
       }
       if (isOwner && patientToken) fetchVisitHistory();
     };
@@ -732,7 +737,12 @@ export default function FixedRoomVAD() {
           langLabel: profile?.shortLabel || peer.lang || "",
         });
         if (step === "waiting") {
-          setStep("ready");
+          if (isOwner) {
+            socket.emit("fixed-room:start", { roomId });
+            doStartInterpreting();
+          } else {
+            setStep("ready");
+          }
         }
       }
     };
@@ -1594,6 +1604,7 @@ export default function FixedRoomVAD() {
           roomId={roomId}
           participantId={participantId}
           fromLang={fromLang}
+          roleHint={roleHint}
           pauseVadRef={pauseVadRef}
           messages={messages}
           messagesEndRef={messagesEndRef}
@@ -1715,7 +1726,7 @@ export default function FixedRoomVAD() {
             </div>
           )}
 
-          {/* 직원: 대시보드로 돌아가기 */}
+          {/* 직원: 통역 대기로 돌아가기 */}
           {isOwner && (
             <button
               type="button"
@@ -1731,7 +1742,7 @@ export default function FixedRoomVAD() {
                 cursor: "pointer",
               }}
             >
-              대시보드로 돌아가기
+              통역 대기로 돌아가기
             </button>
           )}
 
