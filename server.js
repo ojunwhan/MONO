@@ -3293,6 +3293,7 @@ io.on('connection', (socket) => {
     }
     const siteCtx = meta.siteContext || "general";
     const senderCallSign = senderParticipant?.callSign || "";
+    const senderSocketId = socket.id; // stt:segment_end emitter = sender; use this for session log role, not receiver
 
     const emitTranslated = async (finalText) => {
       if (!finalText || isGarbageText(finalText)) return;
@@ -3449,16 +3450,10 @@ io.on('connection', (socket) => {
                 id: msgId, senderPid: participantId, translatedText: hq, isDraft: false,
               });
             }
-            // Session log: append ONLY after hqTranslate completes (never after fastTranslate only)
+            // Session log: append ONLY after hqTranslate completes; use SENDER's role (stt:segment_end emitter), not receiver's
             if (isHospital1to1) {
-              const roomSockets = io.sockets.adapter.rooms.get(roomId);
-              if (roomSockets) {
-                for (const sid of roomSockets) {
-                  const r = SOCKET_ROLES.get(sid) || {};
-                  console.log('[SESSION-LOG] role:', r?.role, 'socketId:', sid);
-                }
-              }
-              const roleLabel = rec.role === 'owner' ? '직원' : '환자';
+              const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
+              const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
               appendHospitalSessionLog(roomId, roleLabel, finalText, finalizedForTts);
             }
           }
