@@ -315,7 +315,7 @@ export default function HospitalApp() {
   if (shouldRedirect) return null;
 
   const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
-  if (hospitalAuthChecked && !isHospitalAdmin) return null;
+  if (!kiosk && hospitalAuthChecked && !isHospitalAdmin) return null;
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital-dashboard", { replace: true }); };
