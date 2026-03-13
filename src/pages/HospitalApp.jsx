@@ -446,7 +446,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       };
     } else {
       if (!selectedDept) return;
-      const department = isReception && orgCode ? orgCode : selectedDept.id;
+      const department = orgCode || selectedDept?.id || "";
       const doWatch = () => {
         socket.emit("hospital:watch", { department });
         setStaffJoined(true);
