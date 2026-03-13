@@ -3442,17 +3442,27 @@ io.on('connection', (socket) => {
         let finalizedForTts = translated;
         try {
           const hq = await hqTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
-          if (!isGarbageText(hq) && otherP?.socketId) {
+          if (!isGarbageText(hq)) {
             finalizedForTts = hq;
-            io.to(otherP.socketId).emit("revise-message", {
-              id: msgId, senderPid: participantId, translatedText: hq, isDraft: false,
-            });
+            if (otherP?.socketId) {
+              io.to(otherP.socketId).emit("revise-message", {
+                id: msgId, senderPid: participantId, translatedText: hq, isDraft: false,
+              });
+            }
+            // Session log: append ONLY after hqTranslate completes (never after fastTranslate only)
+            if (isHospital1to1) {
+              const roomSockets = io.sockets.adapter.rooms.get(roomId);
+              if (roomSockets) {
+                for (const sid of roomSockets) {
+                  const r = SOCKET_ROLES.get(sid) || {};
+                  console.log('[SESSION-LOG] role:', r?.role, 'socketId:', sid);
+                }
+              }
+              const roleLabel = rec.role === 'owner' ? '직원' : '환자';
+              appendHospitalSessionLog(roomId, roleLabel, finalText, finalizedForTts);
+            }
           }
         } catch (e) { console.warn("[hq]:", e?.message); }
-        if (isHospital1to1) {
-          const roleLabel = rec.role === 'owner' ? '직원' : '환자';
-          appendHospitalSessionLog(roomId, roleLabel, finalText, finalizedForTts);
-        }
         try {
           const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
           if (ttsBuffer && otherP?.socketId) {
