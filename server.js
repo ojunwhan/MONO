@@ -3813,6 +3813,10 @@ io.on('connection', (socket) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, "", "", pToken]
           );
+          const senderSocketId = socket.id;
+          const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
+          const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
+          appendHospitalSessionLog(roomId, roleLabel, normalized, "");
         }
       } catch (dbErr) {
         console.warn("[stt:whisper][hospital:msg-save]", dbErr?.message);
