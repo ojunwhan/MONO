@@ -710,7 +710,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           <div className="flex items-center gap-2">
             {template !== "reception" && (
               <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
-                <Monitor size={12} className="inline mr-1" /> ?? ??
+                <Monitor size={12} className="inline mr-1" /> {"\uC0C1\uB2F4 \uBAA8\uB4DC"}
               </span>
             )}
             <button
@@ -729,8 +729,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-1 flex flex-col items-center px-6 py-6 max-w-[600px] mx-auto w-full">
         <div className="text-center mb-6">
-          <span className="block mb-2"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
-          <h2 className="text-[22px] font-bold mb-1">{displayTitle}</h2>
+          <span className="block mb-2"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14"/><path d="M3 21h18"/><path d="M9 21V12h6v9"/><path d="M12 7v4M10 9h4"/></svg></span>
+          <h2 className="text-[22px] font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%"}}>{displayTitle}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
         <div className="w-full max-w-[360px] mb-2">
@@ -739,9 +739,6 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         </div>
         {!showLangGrid && (
           <>
-            <div className="w-full max-w-[400px] mb-4 flex flex-col items-center gap-3">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            </div>
             <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[12px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
               <span className={`inline-block rounded-full ${staffJoined ? "bg-green-500" : "bg-yellow-500"}`} style={staffJoined ? {width:"10px",height:"10px",animation:"pulse-dot 1.5s infinite",boxShadow:"0 0 0 3px rgba(34,197,94,0.3)"} : {width:"6px",height:"6px"}} />
               {staffJoined ? "Waiting \u2014 Ready for patient QR scan" : "Connecting..."}
@@ -751,7 +748,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                 <div className="flex items-center gap-2 mb-1">
                   <Bell size={14} className="text-[#F59E0B] animate-bounce" />
                   <span className="text-[12px] font-semibold">
-                    {isConsultationRoom ? "?? ?? (??? ????)" : "?? ?? ??"} ({waitingPatients.length}?)
+                    {isConsultationRoom ? "\uB300\uAE30 \uD658\uC790 (\uC0C1\uB2F4\uC2E4 \uBC30\uC815\uB300\uAE30)" : "\uB300\uAE30 \uC911\uC778 \uD658\uC790"} ({waitingPatients.length}{"\uBA85"})
                   </span>
                 </div>
                 {waitingPatients.map((patient, idx) => {
@@ -765,13 +762,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                         type="button"
                         onClick={() => setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId))}
                         className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[12px] leading-none hover:bg-red-600 transition-colors"
-                        aria-label="???? ??"
+                        aria-label={"\uB300\uAE30\uBAA9\uB85D \uC81C\uAC70"}
                       >
-                        ?
+                        {"\u00D7"}
                       </button>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[22px]" title="??">??</span>
+                          <span className="text-[22px]" title={"\uD658\uC790"}>{"\uD83D\uDC64"}</span>
                           <div className="min-w-0">
                             <p className="text-[12px] font-semibold font-mono">{patient.roomId}</p>
                             {langInfo && (
@@ -780,15 +777,15 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                               </p>
                             )}
                             <p className="text-[10px] text-[var(--color-text-secondary)]">
-                              ?? {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                              {!isConsultationRoom && waitSec > 0 && ` ? ?? ${waitSec < 60 ? `${waitSec}?` : `${Math.floor(waitSec / 60)}?`}`}
+                              {"\uC785\uC7A5"} {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                              {!isConsultationRoom && waitSec > 0 && ` \u00B7 \uB300\uAE30 ${waitSec < 60 ? `${waitSec}\uCD08` : `${Math.floor(waitSec / 60)}\uBD84`}`}
                               {(patient.visitCount ?? 0) > 1 && (
                                 <span className="ml-1 px-1.5 py-0.5 rounded bg-[#2563EB]/15 text-[#2563EB] text-[10px] font-medium">
-                                  ??? ?? ? {(patient.visitCount ?? 0)}? ??
+                                  {"\uC7AC\uBC29\uBB38 \uD658\uC790 \u00B7"} {(patient.visitCount ?? 0)}{"\uD68C \uBC29\uBB38"}
                                 </span>
                               )}
                             </p>
-                            {accepted && <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">? ??? ???????</p>}
+                            {accepted && <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">{"\u2705 \uC0C1\uB2F4\uC2E4 \uBC30\uC815\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4"}</p>}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -796,11 +793,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                             <>
                               <button type="button" onClick={() => setAssignDropdownRoomId(showAssignDropdown ? null : patient.roomId)}
                                 className="px-2 py-1.5 rounded-[8px] bg-amber-500 text-white text-[11px] font-medium hover:bg-amber-600">
-                                ??? ??
+                                {"\uC0C1\uB2F4\uC2E4 \uBC30\uC815"}
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
                                 className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
-                                <Monitor size={12} /> ?? ??
+                                <Monitor size={12} /> {"\uD1B5\uC5ED \uC2DC\uC791"}
                               </button>
                             </>
                           )}
@@ -808,11 +805,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                             <>
                               <button type="button" onClick={() => handleRequestEntry(patient, patient.consultationRoomName)}
                                 className="px-2 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
-                                ?? ??
+                                {"\uC785\uC7A5 \uC694\uCCAD"}
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
                                 className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
-                                <Monitor size={12} /> ?? ??
+                                <Monitor size={12} /> {"\uD1B5\uC5ED \uC2DC\uC791"}
                               </button>
                             </>
                           )}
