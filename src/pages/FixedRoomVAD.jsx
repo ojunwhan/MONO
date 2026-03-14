@@ -66,8 +66,11 @@ const STATUS = {
   ERROR: "오류 발생",
 };
 
+const LANG_TO_FLAG = { ko:"🇰🇷", en:"🇺🇸", vi:"🇻🇳", zh:"🇨🇳", ja:"🇯🇵", th:"🇹🇭", km:"🇰🇭", my:"🇲🇲", id:"🇮🇩", ms:"🇲🇾", tl:"🇵🇭", ne:"🇳🇵", ru:"🇷🇺", ar:"🇸🇦", es:"🇪🇸", fr:"🇫🇷", de:"🇩🇪", pt:"🇵🇹", it:"🇮🇹", hi:"🇮🇳", mn:"🇲🇳", uz:"🇺🇿", bn:"🇧🇩", tr:"🇹🇷", uk:"🇺🇦", pl:"🇵🇱" };
+function langFlag(code) { return LANG_TO_FLAG[String(code||"").toLowerCase().split("-")[0]] || "🏳️"; }
+
 // ── 채팅 말풍선 컴포넌트 ──
-function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, streaming }) {
+function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, streaming, timestamp }) {
   const displayText = (translatedText || originalText) + (streaming ? "▋" : "");
   return (
     <div style={{
@@ -124,6 +127,9 @@ function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, st
               {originalText}
             </p>
           )}
+        </div>
+        <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px", textAlign: mine ? "right" : "left" }}>
+          {(() => { try { return new Date(timestamp || Date.now()).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } })()}
         </div>
       </div>
     </div>
@@ -242,7 +248,7 @@ function InterpretingVAD({
   return (
     <>
       <div style={{
-        padding: "10px 16px",
+        padding: "10px 16px", minHeight: "56px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         background: vad.userSpeaking ? "#fef2f2" : "#ffffff",
         borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease",
@@ -252,9 +258,8 @@ function InterpretingVAD({
           <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
             <ArrowLeft size={18} />
           </button>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "#1f2937" }}>{hospitalDept?.labelKo || "병원 통역"}</span>
           {partnerInfo && (
-            <span style={{ fontSize: "11px", color: "#9ca3af" }}>{myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}</span>
+            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} → {langFlag(partnerInfo?.lang)}</span>
           )}
           {isOwner && patientHistory?.sessions?.length > 0 && (
             <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
@@ -289,18 +294,18 @@ function InterpretingVAD({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af", fontSize: "0.95rem" }}>말하면 자동으로 감지됩니다</div>
         ) : (
           messages.map((msg) => (
-            <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} />
+            <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
       <div style={{ padding: "12px 16px", background: "#ffffff", borderTop: "1px solid #f3f4f6", flexShrink: 0 }}>
         <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
-          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "24px", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#1f2937", fontSize: "14px", outline: "none" }} />
-          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "10px 16px", borderRadius: "24px", border: "none", background: textInputValue?.trim() ? "linear-gradient(135deg, #7C6FEB, #a78bfa)" : "#d1d5db", color: "white", fontSize: "13px", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
+          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "24px", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#1f2937", fontSize: "clamp(13px, 2.5vw, 14px)", outline: "none" }} />
+          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: textInputValue?.trim() ? "#f3f4f6" : "#e5e7eb", color: "#1f2937", fontSize: "clamp(13px, 2.5vw, 14px)", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
         </div>
         {isOwner ? (
-          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "16px", border: "none", background: "linear-gradient(135deg, #f87171, #fb923c)", color: "white", fontSize: "15px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(248,113,113,0.3)" }}>
+          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "16px", border: "none", background: "linear-gradient(135deg, #f87171, #fb923c)", color: "white", fontSize: "clamp(14px, 2.5vw, 15px)", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(248,113,113,0.3)", minHeight: "52px" }}>
             <PhoneOff size={18} /> 통역 종료
           </button>
         ) : (
@@ -367,11 +372,10 @@ function InterpretingPTT({
 
   return (
     <>
-      <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: recording ? "#fef2f2" : "#ffffff", borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+      <div style={{ padding: "10px 16px", minHeight: "56px", display: "flex", alignItems: "center", justifyContent: "space-between", background: recording ? "#fef2f2" : "#ffffff", borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
           <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}><ArrowLeft size={18} /></button>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "#1f2937" }}>{hospitalDept?.labelKo || "병원 통역"}</span>
-          {partnerInfo && <span style={{ fontSize: "11px", color: "#9ca3af" }}>{myProfile?.shortLabel || fromLang} ↔ {partnerLangDisplay}</span>}
+          {partnerInfo && <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} → {langFlag(partnerInfo?.lang)}</span>}
           {isOwner && patientHistory?.sessions?.length > 0 && (
             <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
               <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -398,32 +402,32 @@ function InterpretingPTT({
       )}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 0", background: "#fafafa" }}>
         {messages.length === 0 ? <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af", fontSize: "0.95rem" }}>말하기 버튼을 누르고 말한 뒤 다시 클릭하면 전송됩니다</div> : messages.map((msg) => (
-          <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} />
+          <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
         ))}
         <div ref={messagesEndRef} />
       </div>
       <div style={{ padding: "12px 16px", background: "#ffffff", borderTop: "1px solid #f3f4f6", flexShrink: 0 }}>
         <div style={{ marginBottom: "10px" }}>
-          <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "16px", borderRadius: "16px", border: "none", background: recording ? "linear-gradient(135deg, #ef4444, #f97316)" : "linear-gradient(135deg, #7C6FEB, #F472B6)", color: "white", fontSize: "16px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(124,111,235,0.4)", transition: "all 0.2s ease" }}>
-            <span className={recording ? "ptt-mic-glow" : ""} style={{ display: "inline-flex", alignItems: "center" }}>
+          <button type="button" onClick={handlePTTClick} style={{ width: "100%", padding: "16px", borderRadius: "16px", border: "none", background: "linear-gradient(135deg, #7C6FEB, #F472B6)", color: "white", fontSize: "clamp(14px, 2.5vw, 16px)", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(124,111,235,0.4)", transition: "all 0.2s ease", minHeight: "52px" }}>
+            <span className={recording ? "ptt-mic-pulse" : ""} style={{ display: "inline-flex", alignItems: "center" }}>
               <Mic size={18} />
             </span>
             {recording ? "녹음 중… (다시 클릭하면 전송)" : "말하기"}
           </button>
         </div>
         <style>{`
-          @keyframes pttGlow {
-            0%, 100% { filter: drop-shadow(0 0 6px rgba(124,111,235,0.5)) drop-shadow(0 0 10px rgba(244,114,182,0.4)); }
-            50% { filter: drop-shadow(0 0 12px rgba(124,111,235,0.8)) drop-shadow(0 0 20px rgba(244,114,182,0.7)); }
+          @keyframes pttMicPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
           }
-          .ptt-mic-glow { animation: pttGlow 1.5s ease-in-out infinite; }
+          .ptt-mic-pulse { animation: pttMicPulse 1s ease-in-out infinite; }
         `}</style>
         <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
-          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "24px", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#1f2937", fontSize: "14px", outline: "none" }} />
-          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "10px 16px", borderRadius: "24px", border: "none", background: textInputValue?.trim() ? "linear-gradient(135deg, #7C6FEB, #a78bfa)" : "#d1d5db", color: "white", fontSize: "13px", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
+          <input type="text" value={textInputValue} onChange={(e) => setTextInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }} placeholder="텍스트 입력 후 Enter 또는 전송" style={{ flex: 1, padding: "10px 14px", borderRadius: "24px", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#1f2937", fontSize: "clamp(13px, 2.5vw, 14px)", outline: "none" }} />
+          <button type="button" onClick={sendTextMessage} disabled={!textInputValue?.trim()} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: textInputValue?.trim() ? "#f3f4f6" : "#e5e7eb", color: "#1f2937", fontSize: "clamp(13px, 2.5vw, 14px)", fontWeight: 600, cursor: textInputValue?.trim() ? "pointer" : "not-allowed" }}>전송</button>
         </div>
         {isOwner ? (
-          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "16px", border: "none", background: "linear-gradient(135deg, #f87171, #fb923c)", color: "white", fontSize: "15px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(248,113,113,0.3)" }}><PhoneOff size={18} /> 통역 종료</button>
+          <button onClick={() => { pauseVadRef.current?.(); handleStopInterpreting(); }} style={{ width: "100%", padding: "14px", borderRadius: "16px", border: "none", background: "linear-gradient(135deg, #f87171, #fb923c)", color: "white", fontSize: "clamp(14px, 2.5vw, 15px)", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 15px rgba(248,113,113,0.3)", minHeight: "52px" }}><PhoneOff size={18} /> 통역 종료</button>
         ) : (
           <div style={{ textAlign: "center", padding: "10px", color: "#6b7280", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}><Mic size={14} /> 통역 진행 중 — 말하기 버튼으로 녹음 후 전송</div>
         )}
@@ -1252,6 +1256,7 @@ export default function FixedRoomVAD() {
       display: "flex",
       flexDirection: "column",
       height: "100dvh",
+      maxWidth: "100%",
       background: "#ffffff",
       color: "#1f2937",
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -1346,7 +1351,7 @@ export default function FixedRoomVAD() {
         <>
           {/* 헤더 */}
           <div style={{
-            padding: "12px 16px",
+            padding: "12px 16px", minHeight: "56px",
             display: "flex",
             alignItems: "center",
             gap: "8px",
@@ -1357,8 +1362,8 @@ export default function FixedRoomVAD() {
             <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
               <ArrowLeft size={18} />
             </button>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#1f2937" }}>
-              {hospitalDept?.labelKo || "병원 통역"}
+            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", fontWeight: 600, color: "#1f2937" }}>
+              {hospitalDept?.label || "Interpretation"}
             </span>
           </div>
 
@@ -1432,7 +1437,7 @@ export default function FixedRoomVAD() {
       {step === "ready" && (
         <>
           <div style={{
-            padding: "12px 16px",
+            padding: "12px 16px", minHeight: "56px",
             display: "flex",
             alignItems: "center",
             gap: "8px",
@@ -1443,8 +1448,8 @@ export default function FixedRoomVAD() {
             <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
               <ArrowLeft size={18} />
             </button>
-            <span style={{ fontSize: "13px", fontWeight: 600, flex: 1, color: "#1f2937" }}>
-              {hospitalDept?.labelKo || "병원 통역"}
+            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", fontWeight: 600, flex: 1, color: "#1f2937" }}>
+              {hospitalDept?.label || "Interpretation"}
             </span>
             {isOwner && patientHistory?.sessions?.length > 0 && (
               <button
