@@ -66,7 +66,7 @@ const STATUS = {
   ERROR: "오류 발생",
 };
 
-const LANG_TO_FLAG = { ko:"🇰🇷", en:"🇺🇸", vi:"🇻🇳", zh:"🇨🇳", ja:"🇯🇵", th:"🇹🇭", km:"🇰🇭", my:"🇲🇲", id:"🇮🇩", ms:"🇲🇾", tl:"🇵🇭", ne:"🇳🇵", ru:"🇷🇺", ar:"🇸🇦", es:"🇪🇸", fr:"🇫🇷", de:"🇩🇪", pt:"🇵🇹", it:"🇮🇹", hi:"🇮🇳", mn:"🇲🇳", uz:"🇺🇿", bn:"🇧🇩", tr:"🇹🇷", uk:"🇺🇦", pl:"🇵🇱" };
+const LANG_TO_FLAG = { ko:"🇰🇷", en:"🇺🇸", vi:"🇻🇳", zh:"🇨🇳", ja:"🇯🇵", th:"🇹🇭", km:"🇰🇭", my:"🇲🇲", id:"🇮🇩", ms:"🇲🇾", tl:"🇵🇭", ne:"🇳🇵", ru:"🇷🇺", ar:"🇸🇦", es:"🇪🇸", fr:"🇫🇷", de:"🇩🇪", pt:"🇵🇹", it:"🇮🇹", hi:"🇮🇳", mn:"🇲🇳", uz:"🇺🇿", bn:"🇧🇩", tr:"🇹🇷", uk:"🇺🇦", pl:"🇵🇱", kor:"🇰🇷", eng:"🇺🇸", jpn:"🇯🇵", chn:"🇨🇳", vie:"🇻🇳", tha:"🇹🇭", rus:"🇷🇺", spa:"🇪🇸", fra:"🇫🇷", deu:"🇩🇪", por:"🇵🇹", ita:"🇮🇹", hin:"🇮🇳", nep:"🇳🇵", ara:"🇸🇦", tur:"🇹🇷", ukr:"🇺🇦", pol:"🇵🇱", mon:"🇲🇳", uzb:"🇺🇿", ben:"🇧🇩", khm:"🇰🇭", mya:"🇲🇲", ind:"🇮🇩", msa:"🇲🇾", fil:"🇵🇭" };
 function langFlag(code) { return LANG_TO_FLAG[String(code||"").toLowerCase().split("-")[0]] || "🏳️"; }
 
 // ── 채팅 말풍선 컴포넌트 ──
@@ -248,32 +248,32 @@ function InterpretingVAD({
   return (
     <>
       <div style={{
-        padding: "10px 16px", minHeight: "56px",
+        padding: "0 16px", height: "56px", minHeight: "56px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         background: vad.userSpeaking ? "#fef2f2" : "#ffffff",
         borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease",
         boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-          <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
-            <ArrowLeft size={18} />
-          </button>
+        {/* LEFT: status */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px" }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: statusColor, boxShadow: status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none", transition: "all 0.3s ease", animation: status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none", flexShrink: 0 }} />
+          <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap" }}>{status}</span>
+        </div>
+        {/* CENTER: language pair */}
+        <div style={{ flex: 1, textAlign: "center" }}>
           {partnerInfo && (
-            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>
-          )}
-          {isOwner && patientHistory?.sessions?.length > 0 && (
-            <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
-              <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
+            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <select value="vad" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 10px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "12px", color: "#374151", cursor: "pointer", outline: "none" }}>
-            <option value="ptt">탭하여 말하기</option>
-            <option value="vad">자동 감지 (VAD)</option>
+        {/* RIGHT: mode + exit */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "80px", justifyContent: "flex-end" }}>
+          <select value="vad" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 8px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "11px", color: "#374151", cursor: "pointer", outline: "none" }}>
+            <option value="ptt">PTT</option>
+            <option value="vad">VAD</option>
           </select>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: statusColor, boxShadow: status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none", transition: "all 0.3s ease", animation: status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none" }} />
-          <span style={{ fontSize: "11px", color: "#6b7280" }}>{status}</span>
+          <button onClick={handleBack} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", padding: "6px 12px", display: "flex", alignItems: "center", gap: "4px", fontSize: "13px" }}>
+            <ArrowLeft size={16} />
+          </button>
         </div>
       </div>
       {isOwner && historyPanelOpen && patientHistory?.sessions && (
@@ -372,23 +372,25 @@ function InterpretingPTT({
 
   return (
     <>
-      <div style={{ padding: "10px 16px", minHeight: "56px", display: "flex", alignItems: "center", justifyContent: "space-between", background: recording ? "#fef2f2" : "#ffffff", borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-          <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}><ArrowLeft size={18} /></button>
-          {partnerInfo && <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>}
-          {isOwner && patientHistory?.sessions?.length > 0 && (
-            <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
-              <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-          )}
+      <div style={{ padding: "0 16px", height: "56px", minHeight: "56px", display: "flex", alignItems: "center", justifyContent: "space-between", background: recording ? "#fef2f2" : "#ffffff", borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        {/* LEFT: status */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px" }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: recording ? "#ef4444" : statusColor, boxShadow: recording ? "0 0 8px #ef4444" : (status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none"), transition: "all 0.3s ease", animation: recording ? "pulse 1s ease-in-out infinite" : (status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none"), flexShrink: 0 }} />
+          <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap" }}>{displayStatus}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <select value="ptt" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 10px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "12px", color: "#374151", cursor: "pointer", outline: "none" }}>
-            <option value="ptt">탭하여 말하기</option>
-            <option value="vad">자동 감지 (VAD)</option>
+        {/* CENTER: language pair */}
+        <div style={{ flex: 1, textAlign: "center" }}>
+          {partnerInfo && <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>}
+        </div>
+        {/* RIGHT: mode + exit */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "80px", justifyContent: "flex-end" }}>
+          <select value="ptt" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 8px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "11px", color: "#374151", cursor: "pointer", outline: "none" }}>
+            <option value="ptt">PTT</option>
+            <option value="vad">VAD</option>
           </select>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: recording ? "#ef4444" : statusColor, boxShadow: recording ? "0 0 8px #ef4444" : (status === STATUS.SPEAKING ? `0 0 8px ${statusColor}` : "none"), transition: "all 0.3s ease", animation: recording ? "pulse 1s ease-in-out infinite" : (status === STATUS.SPEAKING ? "pulse 1s ease-in-out infinite" : "none") }} />
-          <span style={{ fontSize: "11px", color: "#6b7280" }}>{displayStatus}</span>
+          <button onClick={handleBack} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", padding: "6px 12px", display: "flex", alignItems: "center", gap: "4px", fontSize: "13px" }}>
+            <ArrowLeft size={16} />
+          </button>
         </div>
       </div>
       {isOwner && historyPanelOpen && patientHistory?.sessions && (
