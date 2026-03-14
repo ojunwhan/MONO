@@ -112,10 +112,11 @@ function MessageBubble({
               );
             }
           }}
-          className={`px-[14px] py-[10px] text-[14px] break-words whitespace-pre-wrap rounded-[16px] transition-all ${
+          style={isMine ? { background: "linear-gradient(135deg, #7C6FEB, #a78bfa)", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" } : { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
+          className={`px-[14px] py-[10px] text-[14px] break-words whitespace-pre-wrap transition-all ${
             isMine
-              ? "bg-[#3B82F6] text-white rounded-br-[4px]"
-              : "bg-[#F0F0F0] text-[#1A1A1A] rounded-bl-[4px]"
+              ? "text-white rounded-[18px] rounded-br-[4px]"
+              : "bg-[#f3f4f6] text-[#1f2937] rounded-[18px] rounded-bl-[4px]"
           }`}
         >
           {replySnippet ? (
@@ -132,7 +133,7 @@ function MessageBubble({
                 {renderMain()}
               </div>
               {renderSub() ? (
-                <div className={`mt-1 text-[12px] leading-[1.4] ${isMine ? "text-white/60" : "text-[#8E8E93]"} break-words`}>
+                <div className={`mt-1 text-[12px] leading-[1.4] italic ${isMine ? "text-white/60" : "text-[#9ca3af]"} break-words`}>
                   {renderSub()}
                 </div>
               ) : null}

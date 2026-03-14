@@ -1503,12 +1503,12 @@ export default function ChatScreen() {
     <div className="relative">
       <div className="mono-shell h-screen w-full flex flex-col max-w-[480px] mx-auto text-[var(--color-text)] bg-[var(--color-bg)]">
         {/* ─── Header ─── */}
-        <div className="fixed top-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-[var(--color-bg)] border-b border-[var(--color-border)] z-10">
+        <div className="fixed top-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-white z-10" style={{ borderBottom: "1px solid #f3f4f6", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <div className="h-[56px] px-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[12px] min-w-[92px]">
+            <div className="flex items-center gap-2 text-[12px] min-w-[48px]">
               <button
                 onClick={handleLeave}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--color-text)]"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-[#374151]"
                 aria-label={t("common.back")}
                 title={t("chat.backToList")}
               >
@@ -1516,19 +1516,22 @@ export default function ChatScreen() {
               </button>
             </div>
 
-            <div className="flex-1 text-center text-[13px] font-medium text-[var(--color-text)]">
+            <div className="flex-1 text-center text-[13px] font-medium">
               {roomType === "oneToOne" && (
-                <div className="text-[16px] font-semibold truncate">
+                <div className="text-[15px] font-bold text-[#1f2937] truncate">
                   {partnerName || t("chat.unknownPartner")}
                 </div>
               )}
               {roomType === "oneToOne" && (
-                <div className={`text-[12px] truncate ${partnerOnline ? "text-[var(--color-online)]" : "text-[var(--color-text-secondary)]"}`}>
-                  {partnerOnline ? t("chat.online") : t("chat.lastSeenUnknown")}
+                <div className="flex items-center justify-center gap-1 text-[12px]">
+                  {partnerOnline && <span className="w-[6px] h-[6px] rounded-full bg-[#34D399] inline-block" />}
+                  <span className={`${partnerOnline ? "text-[#6b7280]" : "text-[#9ca3af]"}`}>
+                    {partnerOnline ? t("chat.online") : t("chat.lastSeenUnknown")}
+                  </span>
                 </div>
               )}
               {roomType === "oneToOne" ? (
-                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)]">
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-[#f3f4f6] text-[#6b7280]">
                   {myFlagUrl ? <img className="flag" src={myFlagUrl} alt="" /> : null}
                   <span>{myShort || ""}</span>
                   <span>↔</span>
@@ -1538,11 +1541,11 @@ export default function ChatScreen() {
                       <span>{resolvedPartnerShort}</span>
                     </>
                   ) : (
-                    <span className="text-[var(--color-text-secondary)]">{t("chat.waiting")}</span>
+                    <span className="text-[#9ca3af]">{t("chat.waiting")}</span>
                   )}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)]">
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-[#f3f4f6] text-[#6b7280]">
                   {myFlagUrl ? <img className="flag" src={myFlagUrl} alt="" /> : null}
                   <span>{myShort || ""}</span>
                   <span>· LIVE</span>
@@ -1684,7 +1687,8 @@ export default function ChatScreen() {
         {/* ─── Input (hidden for broadcast listeners) ─── */}
         {!isBroadcastListener && (
           <form
-            className="fixed bottom-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-[var(--color-bg)] z-10 border-t border-[var(--color-border)]"
+            className="fixed bottom-0 left-0 right-0 w-full max-w-[480px] mx-auto bg-white z-10"
+            style={{ borderTop: "1px solid #f3f4f6" }}
             onSubmit={(e) => {
               e.preventDefault();
               if (!canSend) return;
@@ -1693,10 +1697,10 @@ export default function ChatScreen() {
               resetHeight();
             }}
           >
-            <div className="px-4 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] min-h-[56px] flex items-center gap-2">
+            <div className="px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] min-h-[56px] flex items-center gap-2">
               <button
                 type="button"
-                className="w-10 h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-secondary)] flex items-center justify-center shrink-0"
+                className="w-10 h-10 rounded-full border border-[#e5e7eb] bg-white text-[#6b7280] flex items-center justify-center shrink-0"
                 title={t("chat.attach")}
                 aria-label={t("chat.attach")}
               >
@@ -1732,7 +1736,8 @@ export default function ChatScreen() {
                   <textarea
                     ref={textareaRef}
                     rows={1}
-                    className="mono-input w-full resize-none min-h-[40px] max-h-[132px] px-4 py-[9px] text-[14px] leading-[1.45] overflow-y-auto bg-[var(--color-bg-secondary)] focus:outline-none box-border"
+                    className="mono-input w-full resize-none min-h-[40px] max-h-[132px] px-4 py-[9px] text-[14px] leading-[1.45] overflow-y-auto focus:outline-none box-border"
+                    style={{ background: "#f9fafb", borderRadius: "24px", border: "1px solid #e5e7eb" }}
                     value={sttInterimText || inputText}
                     onChange={(e) => {
                       const nextText = e.target.value;
@@ -1783,7 +1788,8 @@ export default function ChatScreen() {
               {canSend ? (
                 <button
                   type="submit"
-                  className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center transition-colors duration-200 shrink-0"
+                  className="w-12 h-12 rounded-full text-white flex items-center justify-center transition-all duration-200 shrink-0"
+                  style={{ background: "linear-gradient(135deg, #7C6FEB, #F472B6)", boxShadow: "0 4px 12px rgba(124,111,235,0.4)" }}
                   aria-label={t("chat.send")}
                 >
                   <SendHorizontal size={18} />

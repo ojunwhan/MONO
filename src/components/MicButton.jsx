@@ -437,13 +437,14 @@ export default function MicButton({
       onClick={toggle}
       aria-pressed={listening}
       disabled={pending}
+      style={!pending && !listening ? { background: "linear-gradient(135deg, #7C6FEB, #F472B6)", boxShadow: "0 4px 12px rgba(124,111,235,0.4)" } : undefined}
       className={`flex items-center justify-center transition-all ${
         compact
           ? `w-10 h-10 rounded-full ${
-              pending ? "bg-[#9ca3af]" : listening ? "bg-[#FF3B30] mic-pulse" : "bg-[var(--color-primary)]"
+              pending ? "bg-[#9ca3af]" : listening ? "bg-[#FF3B30] mic-pulse" : ""
             } ${className}`
-          : `w-14 h-14 rounded-full border-0 shadow-md ${
-              pending ? "bg-[#9ca3af]" : listening ? "bg-[#FF3B30] mic-pulse" : "bg-[#111111]"
+          : `w-12 h-12 rounded-full border-0 ${
+              pending ? "bg-[#9ca3af]" : listening ? "bg-[#FF3B30] mic-pulse" : ""
             } ${className}`
       }`}
       title={listening ? t("chat.stopRecording") : t("chat.startRecording")}
