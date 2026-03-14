@@ -27,10 +27,7 @@ function HospitalLogo() {
   return (
     <div className="flex items-center gap-3">
       <MonoLogo />
-      <div className="flex flex-col min-w-0">
-        <span className="text-[12px] font-bold text-[#7C6FEB] whitespace-nowrap">?? ??</span>
-        <span className="text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">Medical Interpreter</span>
-      </div>
+      <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] whitespace-nowrap" style={{fontWeight:600}}>Medical Interpreter</span>
     </div>
   );
 }
@@ -732,7 +729,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-1 flex flex-col items-center px-6 py-6 max-w-[600px] mx-auto w-full">
         <div className="text-center mb-6">
-          <span className="text-[48px] block mb-2">{selectedDept.icon}</span>
+          <span className="block mb-2"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
           <h2 className="text-[22px] font-bold mb-1">{displayTitle}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
@@ -747,7 +744,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             </div>
             <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[12px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
               <span className={`inline-block rounded-full ${staffJoined ? "bg-green-500" : "bg-yellow-500"}`} style={staffJoined ? {width:"10px",height:"10px",animation:"pulse-dot 1.5s infinite",boxShadow:"0 0 0 3px rgba(34,197,94,0.3)"} : {width:"6px",height:"6px"}} />
-              {staffJoined ? "Waiting ? Ready for patient QR scan" : "Connecting..."}
+              {staffJoined ? "Waiting \u2014 Ready for patient QR scan" : "Connecting..."}
             </div>
             {waitingPatients.length > 0 && (
               <div className="w-full max-w-[400px] mb-2 space-y-2">
