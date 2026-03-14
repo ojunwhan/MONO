@@ -28,7 +28,7 @@ function HospitalLogo() {
     <div className="flex items-center gap-3">
       <MonoLogo />
       <div className="flex flex-col min-w-0">
-        <span className="text-[12px] font-bold text-[#7C6FEB] whitespace-nowrap">?? ??</span>
+        <span className="text-[12px] font-bold text-[#7C6FEB] whitespace-nowrap">의료 통역</span>
         <span className="text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">Medical Interpreter</span>
       </div>
     </div>
@@ -156,9 +156,9 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
 
         {/* Guide steps ? larger, no icon block */}
         <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6 space-y-2 sm:space-y-2.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">1?? Scan the QR code with your phone</p>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">2?? Select your language</p>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3?? Tap ?? to speak ? tap again when done</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">1단계. 스마트폰으로 QR코드를 스캔하세요</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">2단계. 언어를 선택하세요</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3단계. 버튼을 눌러 말하고, 완료되면 다시 누르세요</p>
           <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mt-3">No app download needed. Just scan.</p>
         </div>
 
@@ -241,7 +241,7 @@ export default function HospitalApp() {
   const [creatingRoom, setCreatingRoom] = useState(false);
 
   const staffDept = useMemo(
-    () => (template === "reception" ? { id: "reception", labelKo: "?? ??", label: "Interpretation Standby", icon: "???" } : { id: "consultation", labelKo: "???", label: "Consultation", icon: "??" }),
+    () => (template === "reception" ? { id: "reception", labelKo: "접수처", label: "Interpretation Standby", icon: "🏥" } : { id: "consultation", labelKo: "상담실", label: "Consultation", icon: "💬" }),
     [template]
   );
 
@@ -719,8 +719,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         </div>
         {!showLangGrid && (
           <>
-            <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-[11px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${staffJoined ? "bg-green-500 animate-pulse" : "bg-yellow-500"}`} />
+            <div className="w-full max-w-[400px] mb-4 flex flex-col items-center gap-3">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[12px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
+              <span className={`inline-block rounded-full ${staffJoined ? "bg-green-500" : "bg-yellow-500"}`} style={staffJoined ? {width:"8px",height:"8px",animation:"pulse-dot 2s infinite"} : {width:"6px",height:"6px"}} />
               {staffJoined ? "대기 중 — 환자 QR 스캔을 기다리고 있습니다" : "연결 중..."}
             </div>
             {waitingPatients.length > 0 && (
@@ -810,14 +813,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                 })}
               </div>
             )}
-            {waitingPatients.length === 0 && (
-              <div className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-dashed border-[var(--color-border)] text-center">
-                <Users size={24} className="mx-auto mb-1.5 text-[var(--color-text-secondary)] opacity-40" />
-                <p className="text-[12px] text-[var(--color-text-secondary)]">현재 대기 중인 환자가 없습니다</p>
-                <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">환자가 QR을 스캔하면 여기에 표시됩니다</p>
-              </div>
-            )}
-            <style>{`@media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
+            <style>{`@keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:0.7} } @media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
             <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-[var(--color-border)] flex flex-col items-center gap-2">
               <p className="text-[12px] font-semibold text-[var(--color-text)]">환자 QR 코드</p>
               <p className="text-center text-[11px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
@@ -837,7 +833,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       <div className="flex-none py-2 text-center space-y-1">
         <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
         <button type="button" onClick={() => navTo("/hospital-dashboard")} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
-          ????? ??
+          대시보드 이동
         </button>
       </div>
     </div>
