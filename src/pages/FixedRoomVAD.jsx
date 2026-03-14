@@ -66,39 +66,49 @@ const STATUS = {
   ERROR: "오류 발생",
 };
 
-const langFlag = (lang) => {
-  if (!lang) return '';
+const getFlagImg = (lang) => {
+  if (!lang) return null;
   const raw = typeof lang === 'object' ? (lang.code || lang.lang || lang.id || '') : lang;
   const n = raw.toString().toLowerCase().trim().replace(/[^a-z]/g, '');
-  const m = {
-    'kor':'\uD83C\uDDF0\uD83C\uDDF7','ko':'\uD83C\uDDF0\uD83C\uDDF7','kr':'\uD83C\uDDF0\uD83C\uDDF7',
-    'eng':'\uD83C\uDDFA\uD83C\uDDF8','en':'\uD83C\uDDFA\uD83C\uDDF8','us':'\uD83C\uDDFA\uD83C\uDDF8',
-    'jpn':'\uD83C\uDDEF\uD83C\uDDF5','ja':'\uD83C\uDDEF\uD83C\uDDF5','jp':'\uD83C\uDDEF\uD83C\uDDF5',
-    'chn':'\uD83C\uDDE8\uD83C\uDDF3','zh':'\uD83C\uDDE8\uD83C\uDDF3','cn':'\uD83C\uDDE8\uD83C\uDDF3',
-    'vie':'\uD83C\uDDFB\uD83C\uDDF3','vi':'\uD83C\uDDFB\uD83C\uDDF3','vn':'\uD83C\uDDFB\uD83C\uDDF3',
-    'tha':'\uD83C\uDDF9\uD83C\uDDED','th':'\uD83C\uDDF9\uD83C\uDDED',
-    'rus':'\uD83C\uDDF7\uD83C\uDDFA','ru':'\uD83C\uDDF7\uD83C\uDDFA',
-    'spa':'\uD83C\uDDEA\uD83C\uDDF8','es':'\uD83C\uDDEA\uD83C\uDDF8',
-    'fra':'\uD83C\uDDEB\uD83C\uDDF7','fr':'\uD83C\uDDEB\uD83C\uDDF7',
-    'ara':'\uD83C\uDDF8\uD83C\uDDE6','ar':'\uD83C\uDDF8\uD83C\uDDE6',
-    'deu':'\uD83C\uDDE9\uD83C\uDDEA','de':'\uD83C\uDDE9\uD83C\uDDEA',
-    'por':'\uD83C\uDDE7\uD83C\uDDF7','pt':'\uD83C\uDDE7\uD83C\uDDF7',
-    'ita':'\uD83C\uDDEE\uD83C\uDDF9','it':'\uD83C\uDDEE\uD83C\uDDF9',
-    'ind':'\uD83C\uDDEE\uD83C\uDDE9','id':'\uD83C\uDDEE\uD83C\uDDE9',
-    'msa':'\uD83C\uDDF2\uD83C\uDDFE','ms':'\uD83C\uDDF2\uD83C\uDDFE',
-    'tur':'\uD83C\uDDF9\uD83C\uDDF7','tr':'\uD83C\uDDF9\uD83C\uDDF7',
-    'hin':'\uD83C\uDDEE\uD83C\uDDF3','hi':'\uD83C\uDDEE\uD83C\uDDF3',
-    'ukr':'\uD83C\uDDFA\uD83C\uDDE6','uk':'\uD83C\uDDFA\uD83C\uDDE6',
-    'nep':'\uD83C\uDDF3\uD83C\uDDF5','ne':'\uD83C\uDDF3\uD83C\uDDF5',
-    'ben':'\uD83C\uDDE7\uD83C\uDDE9','bn':'\uD83C\uDDE7\uD83C\uDDE9',
-    'pol':'\uD83C\uDDF5\uD83C\uDDF1','pl':'\uD83C\uDDF5\uD83C\uDDF1',
-    'khm':'\uD83C\uDDF0\uD83C\uDDED','km':'\uD83C\uDDF0\uD83C\uDDED',
-    'mya':'\uD83C\uDDF2\uD83C\uDDF2','my':'\uD83C\uDDF2\uD83C\uDDF2',
-    'mon':'\uD83C\uDDF2\uD83C\uDDF3','mn':'\uD83C\uDDF2\uD83C\uDDF3',
-    'fil':'\uD83C\uDDF5\uD83C\uDDED','tl':'\uD83C\uDDF5\uD83C\uDDED',
-    'uzb':'\uD83C\uDDFA\uD83C\uDDFF','uz':'\uD83C\uDDFA\uD83C\uDDFF',
+  const countryMap = {
+    'kor':'kr','ko':'kr','kr':'kr',
+    'eng':'us','en':'us','us':'us',
+    'jpn':'jp','ja':'jp','jp':'jp',
+    'chn':'cn','zho':'cn','zh':'cn','cn':'cn',
+    'vie':'vn','vi':'vn','vn':'vn',
+    'tha':'th','th':'th',
+    'rus':'ru','ru':'ru',
+    'spa':'es','es':'es',
+    'fra':'fr','fre':'fr','fr':'fr',
+    'ara':'sa','ar':'sa',
+    'deu':'de','ger':'de','de':'de',
+    'por':'br','pt':'br',
+    'ita':'it','it':'it',
+    'ind':'id','id':'id',
+    'msa':'my','ms':'my',
+    'tur':'tr','tr':'tr',
+    'hin':'in','hi':'in',
+    'ukr':'ua','uk':'ua',
+    'pol':'pl','pl':'pl',
+    'nld':'nl','nl':'nl',
+    'swe':'se','sv':'se',
+    'nor':'no','no':'no',
+    'dan':'dk','da':'dk',
+    'fin':'fi','fi':'fi',
+    'ben':'bd','bn':'bd',
+    'ron':'ro','ro':'ro',
+    'ces':'cz','cs':'cz',
+    'hun':'hu','hu':'hu',
+    'khm':'kh','km':'kh',
+    'mya':'mm','my':'mm',
+    'mon':'mn','mn':'mn',
+    'fil':'ph','tl':'ph',
+    'uzb':'uz','uz':'uz',
+    'nep':'np','ne':'np',
   };
-  return m[n] || '';
+  const code = countryMap[n];
+  if (!code) return null;
+  return <img src={`https://flagcdn.com/24x18/${code}.png`} alt={code} style={{ width: '24px', height: '18px', borderRadius: '2px', display: 'inline-block', verticalAlign: 'middle' }} />;
 };
 function toLangStr(v) { return typeof v === 'object' ? (v?.code || v?.lang || v?.id || '') : (v || ''); }
 
@@ -293,9 +303,13 @@ function InterpretingVAD({
           <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap" }}>{status}</span>
         </div>
         {/* CENTER: language pair */}
-        <div style={{ flex: 1, textAlign: "center" }}>
+        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
-            <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>{langFlag(fc)} {fc.toUpperCase()} {"\u2192"} {langFlag(tc)} {tc.toUpperCase()}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
+              {getFlagImg(fc)} {fc.toUpperCase()}
+              <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
+              {getFlagImg(tc)} {tc.toUpperCase()}
+            </span>
           ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
@@ -421,9 +435,13 @@ function InterpretingPTT({
           <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap" }}>{displayStatus}</span>
         </div>
         {/* CENTER: language pair */}
-        <div style={{ flex: 1, textAlign: "center" }}>
+        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
-            <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>{langFlag(fc)} {fc.toUpperCase()} {"\u2192"} {langFlag(tc)} {tc.toUpperCase()}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
+              {getFlagImg(fc)} {fc.toUpperCase()}
+              <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
+              {getFlagImg(tc)} {tc.toUpperCase()}
+            </span>
           ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
