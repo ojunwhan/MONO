@@ -295,7 +295,7 @@ function InterpretingVAD({
         {/* CENTER: language pair */}
         <div style={{ flex: 1, textAlign: "center" }}>
           {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
-            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fc)} {(myProfile?.shortLabel || fc || "").toUpperCase()} {"\u2192"} {langFlag(tc)} {(partnerLangDisplay || tc || "").toUpperCase()}</span>
+            <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>{langFlag(fc)} {fc.toUpperCase()} {"\u2192"} {langFlag(tc)} {tc.toUpperCase()}</span>
           ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
@@ -423,7 +423,7 @@ function InterpretingPTT({
         {/* CENTER: language pair */}
         <div style={{ flex: 1, textAlign: "center" }}>
           {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
-            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fc)} {(myProfile?.shortLabel || fc || "").toUpperCase()} {"\u2192"} {langFlag(tc)} {(partnerLangDisplay || tc || "").toUpperCase()}</span>
+            <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>{langFlag(fc)} {fc.toUpperCase()} {"\u2192"} {langFlag(tc)} {tc.toUpperCase()}</span>
           ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
