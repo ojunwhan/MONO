@@ -474,6 +474,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const [acceptedRoomIds, setAcceptedRoomIds] = useState(new Set());
   const [staffJoined, setStaffJoined] = useState(false);
   const [qrLinkCopied, setQrLinkCopied] = useState(false);
+  const [staffLinkCopied, setStaffLinkCopied] = useState(false);
+  const [tabletLinkCopied, setTabletLinkCopied] = useState(false);
   const joinedRef = useRef(false);
   const isReception = template === "reception";
   const isConsultationRoom = template === "consultation" && consultationRoomId;
@@ -820,12 +822,15 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               <p className="text-[12px] font-semibold text-[var(--color-text)]">?? QR ??</p>
               <p className="text-center text-[11px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
               <QRCode value={`https://hospital.lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" />
-              <div className="flex items-center gap-1.5">
-                <button type="button" onClick={() => { const qrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; navigator.clipboard?.writeText(qrUrl).then(() => { setQrLinkCopied(true); setTimeout(() => setQrLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
-                  {qrLinkCopied ? "???!" : "?? ??"}
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; window.open("https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(patientQrUrl), "_blank"); }} className="px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[11px] font-medium hover:bg-[#2563EB]">
+                  QR ??
                 </button>
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[11px] font-medium hover:bg-[#2563EB]">
-                  PDF? ??
+                <button type="button" onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => { setStaffLinkCopied(true); setTimeout(() => setStaffLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
+                  {staffLinkCopied ? "???!" : "?? PC? ?? ??"}
+                </button>
+                <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
+                  {tabletLinkCopied ? "???!" : "???? ?? ??"}
                 </button>
               </div>
             </div>
