@@ -236,6 +236,8 @@ export default function HospitalApp() {
   const [saveDirName, setSaveDirName] = useState("");
   const [autoSaveResult, setAutoSaveResult] = useState("");
   const autoSaveTriggered = useRef(false);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   const staffDept = useMemo(
     () => (template === "reception" ? { id: "reception", labelKo: "?? ??", label: "Interpretation Standby", icon: "???" } : { id: "consultation", labelKo: "???", label: "Consultation", icon: "??" }),
@@ -383,6 +385,55 @@ export default function HospitalApp() {
 
   if (hasStaffParams) {
     const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || hospitalOrgCode || "";
+
+    if (!kiosk && !urlRoom && isHospitalAdmin) {
+      const handleCreateRoom = async (e) => {
+        e.preventDefault();
+        if (!newRoomName.trim() || creatingRoom) return;
+        setCreatingRoom(true);
+        try {
+          const res = await fetch("/api/hospital/rooms", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ name: newRoomName.trim() }),
+          });
+          const data = await res.json();
+          if (data?.success && data?.room?.id) {
+            navTo(`/hospital?template=reception&room=${encodeURIComponent(data.room.id)}${org ? `&org=${encodeURIComponent(org)}` : ""}`, { replace: true });
+          }
+        } catch {
+          // ignore
+        } finally {
+          setCreatingRoom(false);
+        }
+      };
+      return (
+        <div className="min-h-dvh flex items-center justify-center bg-[var(--color-bg)]">
+          <form onSubmit={handleCreateRoom} className="w-full max-w-sm mx-auto px-6">
+            <HospitalLogo />
+            <h2 className="mt-8 text-lg font-bold text-[var(--color-text)]">? ???</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">??? ??? ? ??? ?????</p>
+            <input
+              type="text"
+              value={newRoomName}
+              onChange={(e) => setNewRoomName(e.target.value)}
+              placeholder="?: ???, ???1"
+              className="mt-4 w-full h-[48px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-sm outline-none focus:ring-2 focus:ring-[#7C6FEB]"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={!newRoomName.trim() || creatingRoom}
+              className="mt-4 w-full h-[48px] rounded-[12px] bg-[#7C6FEB] text-white font-semibold text-sm disabled:opacity-40"
+            >
+              {creatingRoom ? "?? ?..." : "??"}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const returnToReceptionUrl =
       template === "reception" && urlRoom
@@ -444,6 +495,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       if (!selectedDept) return;
       const department = isReception && orgCode ? orgCode : selectedDept.id;
       const doWatch = () => {
+        console.log("hospital:watch emitting", { department, orgCode, isReception, consultationRoomId });
         socket.emit("hospital:watch", { department });
         setStaffJoined(true);
       };
