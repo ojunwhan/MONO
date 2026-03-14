@@ -78,14 +78,20 @@ export default function HospitalLogin() {
 
           <button
             type="submit"
-            disabled={loading || !email.trim() || !password}
-            className="w-full h-12 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
+            disabled={loading}
+            className="w-full h-12 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-semibold text-sm transition-all duration-150 active:scale-[0.97] active:brightness-90"
           >
             {loading ? "확인 중..." : "로그인"}
           </button>
         </div>
 
-        <p className="mt-6 text-center text-[11px] text-[var(--color-text-secondary)]">
+        <p className="mt-5 text-center text-[12px] text-[var(--color-text-secondary)]">
+          계정이 없으신가요?{" "}
+          <button type="button" onClick={() => navigate("/hospital-register")} className="text-[#2563EB] hover:underline font-medium">
+            병원 등록 신청
+          </button>
+        </p>
+        <p className="mt-3 text-center text-[11px] text-[var(--color-text-secondary)]">
           병원 대시보드 전용 로그인
         </p>
       </form>

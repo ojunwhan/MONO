@@ -16,6 +16,7 @@ import HospitalApp from "./pages/HospitalApp";
 import HospitalRecords from "./pages/HospitalRecords";
 import HospitalDashboard from "./pages/HospitalDashboard";
 import HospitalLogin from "./pages/HospitalLogin";
+import HospitalRegister from "./pages/HospitalRegister";
 import HospitalKiosk from "./pages/HospitalKiosk";
 import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalStaffQr from "./pages/HospitalStaffQr";
@@ -146,6 +147,10 @@ const router = createBrowserRouter([
   {
     path: "/hospital-login",
     element: <HospitalLogin />,
+  },
+  {
+    path: "/hospital-register",
+    element: <HospitalRegister />,
   },
   {
     path: "/hospital-dashboard",

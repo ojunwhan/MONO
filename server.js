@@ -5022,6 +5022,57 @@ app.post('/api/hospital/auth/login', async (req, res) => {
   }
 });
 
+// POST /api/hospital/register — 병원 등록 신청
+app.post('/api/hospital/register', async (req, res) => {
+  try {
+    const { hospitalName, contactName, email, password, phone } = req.body || {};
+    const emailTrim = (email || '').trim().toLowerCase();
+    const nameTrim = (hospitalName || '').trim();
+    const contactTrim = (contactName || '').trim();
+    const phoneTrim = (phone || '').trim();
+    const pwd = password || '';
+
+    if (!nameTrim || !contactTrim || !emailTrim || !pwd || !phoneTrim) {
+      return res.status(400).json({ error: '모든 항목을 입력해 주세요.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      return res.status(400).json({ error: '올바른 이메일 형식이 아닙니다.' });
+    }
+    if (pwd.length < 8) {
+      return res.status(400).json({ error: '비밀번호는 8자 이상이어야 합니다.' });
+    }
+
+    const existing = await dbGet('SELECT 1 FROM hospital_admins WHERE email = ? LIMIT 1', [emailTrim]);
+    if (existing) {
+      return res.status(409).json({ error: '이미 등록된 이메일입니다.' });
+    }
+
+    const orgCode = 'HOSP-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const passwordHash = await bcrypt.hash(pwd, 10);
+
+    await dbRun(
+      `INSERT INTO organizations (org_code, name, org_type, plan, default_lang, created_at, updated_at)
+       VALUES (?, ?, 'hospital', 'pending', 'ko', datetime('now'), datetime('now'))`,
+      [orgCode, nameTrim]
+    );
+
+    await dbRun(
+      `INSERT INTO hospital_admins (org_code, email, password_hash, name, created_at)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [orgCode, emailTrim, passwordHash, contactTrim]
+    );
+
+    console.log(`[hospital:register] New registration: org=${orgCode} email=${emailTrim} hospital=${nameTrim} phone=${phoneTrim}`);
+    return res.json({ success: true, message: '등록 신청이 완료되었습니다.' });
+  } catch (e) {
+    console.error('[hospital:register]', e?.message);
+    if (e?.message?.includes('UNIQUE constraint')) {
+      return res.status(409).json({ error: '이미 등록된 이메일입니다.' });
+    }
+    res.status(500).json({ error: '등록에 실패했습니다.' });
+  }
+});
+
 // GET /api/hospital/auth/me — 병원 관리자 인증 확인 (대시보드 로더/프론트용)
 app.get('/api/hospital/auth/me', requireHospitalAdminJwt, (req, res) => {
   res.json({
