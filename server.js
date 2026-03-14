@@ -5990,30 +5990,6 @@ io.on('connection', (kioskSocket) => {
     }
   });
 
-  // ── Hospital: staff watches department for incoming patients ──
-  kioskSocket.on('hospital:watch', ({ department }) => {
-    if (!department) return;
-    const channel = `hospital:watch:${department}`;
-    kioskSocket.join(channel);
-    console.log(`[hospital:watch] 👁️ Staff watching dept=${department} (socket=${kioskSocket.id})`);
-
-    // Send current waiting list immediately
-    if (department === '__all__') {
-      // Send ALL waiting patients across all departments
-      for (const [d, list] of HOSPITAL_WAITING.entries()) {
-        list.forEach(w => {
-          kioskSocket.emit('hospital:patient-waiting', w);
-        });
-      }
-    } else {
-      const waiting = HOSPITAL_WAITING.get(department) || [];
-      if (waiting.length > 0) {
-        waiting.forEach(w => {
-          kioskSocket.emit('hospital:patient-waiting', w);
-        });
-      }
-    }
-  });
 
   kioskSocket.on('hospital:unwatch', ({ department }) => {
     if (!department) return;
