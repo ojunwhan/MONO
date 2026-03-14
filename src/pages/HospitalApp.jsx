@@ -413,12 +413,12 @@ export default function HospitalApp() {
           <form onSubmit={handleCreateRoom} className="w-full max-w-sm mx-auto px-6">
             <HospitalLogo />
             <h2 className="mt-8 text-lg font-bold text-[var(--color-text)]">? ???</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">??? ??? ? ??? ?????</p>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">? ??? ??? ???</p>
             <input
               type="text"
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
-              placeholder="?: ???, ???1"
+              placeholder="?: ???, ??? 1"
               className="mt-4 w-full h-[48px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-sm outline-none focus:ring-2 focus:ring-[#7C6FEB]"
               autoFocus
             />
