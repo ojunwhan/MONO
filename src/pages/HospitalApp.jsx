@@ -20,7 +20,6 @@ import {
   Bell,
   Users,
   FolderOpen,
-  LogOut,
 } from "lucide-react";
 
 function HospitalLogo() {
@@ -724,14 +723,10 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             )}
             <button
               type="button"
-              onClick={async () => {
-                await fetch("/api/hospital/logout", { method: "POST", credentials: "include" });
-                navTo("/hospital-login");
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
-              aria-label="Sign Out"
+              onClick={() => navTo(`/hospital/conversations?org=${orgCode}`)}
+              style={{ border:"1px solid #e5e7eb", background:"white", borderRadius:20, padding:"6px 14px", fontSize:13, color:"#6366f1", fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}
             >
-              <LogOut size={14} /> Sign Out
+              {"\uD83D\uDCAC"} {"\uB300\uD654\uD568"}
             </button>
           </div>
         </div>
@@ -863,6 +858,11 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         <button type="button" onClick={() => navTo("/hospital-dashboard")} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
           Go to Dashboard
         </button>
+        <div style={{ borderTop:"1px solid #f3f4f6", marginTop:8, paddingTop:8 }}>
+          <button type="button" onClick={async () => { await fetch("/api/hospital/logout", { method: "POST", credentials: "include" }); navTo("/hospital-login"); }} style={{ fontSize:13, color:"#9ca3af", cursor:"pointer", background:"none", border:"none" }}>
+            Sign Out
+          </button>
+        </div>
       </div>
     </div>
   );

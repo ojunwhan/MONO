@@ -5887,12 +5887,14 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
   }
   try {
     const { chartNumber, stationId, date, limit: lim } = req.query;
-    let sql = "SELECT * FROM hospital_sessions WHERE (COALESCE(org_code, 'UNKNOWN') = ?)";
+    let sql = `SELECT hs.*,
+      (SELECT hm.original_text FROM hospital_messages hm WHERE hm.session_id = hs.id ORDER BY hm.created_at DESC LIMIT 1) as last_message
+      FROM hospital_sessions hs WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?)`;
     const params = [orgCode];
-    if (chartNumber) { sql += ' AND chart_number = ?'; params.push(chartNumber); }
-    if (stationId) { sql += ' AND station_id = ?'; params.push(stationId); }
-    if (date) { sql += ' AND DATE(created_at) = ?'; params.push(date); }
-    sql += ' ORDER BY created_at DESC LIMIT ?';
+    if (chartNumber) { sql += ' AND hs.chart_number = ?'; params.push(chartNumber); }
+    if (stationId) { sql += ' AND hs.station_id = ?'; params.push(stationId); }
+    if (date) { sql += ' AND DATE(hs.created_at) = ?'; params.push(date); }
+    sql += ' ORDER BY hs.created_at DESC LIMIT ?';
     params.push(Number(lim) || 50);
     const sessions = await dbAll(sql, params);
     res.json({ success: true, sessions });
