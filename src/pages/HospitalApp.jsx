@@ -824,13 +824,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               <QRCode value={`https://hospital.lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" />
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
                 <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; window.open("https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(patientQrUrl), "_blank"); }} className="px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[11px] font-medium hover:bg-[#2563EB]">
-                  QR ??
+                  QR 인쇄
                 </button>
                 <button type="button" onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => { setStaffLinkCopied(true); setTimeout(() => setStaffLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
-                  {staffLinkCopied ? "???!" : "?? PC? ?? ??"}
+                  {staffLinkCopied ? "복사됨!" : "직원 PC용 링크 복사"}
                 </button>
                 <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
-                  {tabletLinkCopied ? "???!" : "???? ?? ??"}
+                  {tabletLinkCopied ? "복사됨!" : "태블릿용 링크 복사"}
                 </button>
               </div>
             </div>
