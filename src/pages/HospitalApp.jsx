@@ -118,26 +118,44 @@ function KioskGuideText() {
 }
 
 // ????: ?? QR ??? ?? (???/??? ??. orgCode? ??)
+const KIOSK_STEPS = [
+  "Step 1. Scan the QR code with your phone",
+  "Step 2. Select your language",
+  "Step 3. Tap the button to speak, tap again when done",
+];
+
 function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams }) {
   const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
   const [qrSize, setQrSize] = useState(280);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [stepVisible, setStepVisible] = useState(true);
   useEffect(() => {
     const update = () => setQrSize(Math.min(280, Math.min(window.innerWidth, window.innerHeight) * 0.45));
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setStepVisible(false);
+      setTimeout(() => {
+        setStepIdx(i => (i + 1) % KIOSK_STEPS.length);
+        setStepVisible(true);
+      }, 400);
+    }, 3000);
+    return () => clearInterval(iv);
+  }, []);
   const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(urlOrg || "reception")}`;
 
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border">
+    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border overflow-hidden">
       <div className="w-full max-w-[420px] flex flex-col items-center">
         <div className="mb-4 sm:mb-6 w-full flex justify-center">
           <MonoLogo />
         </div>
 
         {/* International Patients Only ? 3D marquee (two spans, seamless loop) */}
-        <div className="w-full mb-4 sm:mb-6" style={{ perspective: "800px", overflowX: "hidden", overflowY: "visible" }}>
+        <div className="w-full mb-4 sm:mb-6" style={{ perspective: "800px", overflow: "hidden" }}>
           <div className="relative kiosk-marquee-container">
             <span
               className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
@@ -154,11 +172,14 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           </div>
         </div>
 
-        {/* Guide steps ? larger, no icon block */}
-        <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6 space-y-2 sm:space-y-2.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">Step 1. Scan the QR code with your phone</p>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">Step 2. Select your language</p>
-          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">Step 3. Tap the button to speak, tap again when done</p>
+        {/* Guide steps ? cycling one at a time with fade */}
+        <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", minHeight: "4.5em" }}>
+          <p
+            className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed"
+            style={{ opacity: stepVisible ? 1 : 0, transition: "opacity 400ms ease" }}
+          >
+            {KIOSK_STEPS[stepIdx]}
+          </p>
           <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mt-3">No app download needed. Just scan.</p>
         </div>
 
@@ -195,7 +216,7 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
         .kiosk-marquee-container {
           min-height: 2.75em;
           padding: 0.35em 0;
-          overflow: visible;
+          overflow: hidden;
         }
       `}</style>
     </div>
@@ -726,7 +747,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             </div>
             <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[12px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
               <span className={`inline-block rounded-full ${staffJoined ? "bg-green-500" : "bg-yellow-500"}`} style={staffJoined ? {width:"10px",height:"10px",animation:"pulse-dot 1.5s infinite",boxShadow:"0 0 0 3px rgba(34,197,94,0.3)"} : {width:"6px",height:"6px"}} />
-              {staffJoined ? "Waiting — Ready for patient QR scan" : "Connecting..."}
+              {staffJoined ? "Waiting ? Ready for patient QR scan" : "Connecting..."}
             </div>
             {waitingPatients.length > 0 && (
               <div className="w-full max-w-[400px] mb-2 space-y-2">
