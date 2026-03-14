@@ -5229,6 +5229,12 @@ app.post('/api/hospital/join', async (req, res) => {
         });
       }
       console.log(`[hospital:join] 🏥 Patient reconnected to existing channel dept=${dept} room=${roomId} token=${pToken}`);
+      const reconnectMeta = ROOMS.get(roomId);
+      if (reconnectMeta) {
+        const reconnectWaitingData = { roomId, department: dept, patientToken: pToken, language: reconnectMeta.guestLang, sessionId: reconnectMeta.hospitalSessionId };
+        io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', reconnectWaitingData);
+        io.to('hospital:watch:__all__').emit('hospital:patient-waiting', reconnectWaitingData);
+      }
     } else {
       // 4) 없으면 → 새 roomId PT-XXXXXX 생성, 중복 체크
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
