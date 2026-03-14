@@ -1,5 +1,5 @@
 // src/pages/HospitalApp.jsx
-// /hospital?template=&room= ? ?? PC ?? ??
+// /hospital?template=&room= ? ?? PC 입장 요청
 // /hospital?template=&room=&kiosk=true ? ???? QR ??
 // ? ? /hospital ? /hospital-dashboard ?????
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -117,7 +117,7 @@ function KioskGuideText() {
   return <p className="mt-6 text-[18px] font-medium text-[var(--color-text-secondary)] text-center">Scan QR Code to Start</p>;
 }
 
-// ????: ?? QR ??? ?? (???/??? ??. orgCode? ??)
+// ????: ?? QR 상담실 배정 (???/??? ??. orgCode? ??)
 function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams }) {
   const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
   const [qrSize, setQrSize] = useState(280);
@@ -253,7 +253,7 @@ export default function HospitalApp() {
   }, [shouldRedirect, navTo]);
 
   // kiosk=true URL ?? ? QR ??? ?? (???/??? ??, orgCode ??)
-  // (??: 768px ???? join?? ??????? ?? ?? ? ???? QR ?? ?? ???? ???? ?? ??)
+  // (??: 768px ???? join?? ??대시보드 이동 ?? ? ???? QR ?? ?? ???? ???? ?? ??)
 
   useEffect(() => {
     if (kiosk) return;
@@ -363,7 +363,7 @@ export default function HospitalApp() {
           </div>
           <button type="button" onClick={async () => { try { const h = await window.showDirectoryPicker?.({ mode: "readwrite" }); if (h) { await saveDirHandle(h); setHasSaveDir(true); setSaveDirName(h.name || ""); } } catch {} }}
             className="mt-3 w-full flex items-center justify-center gap-1.5 h-[40px] rounded-[12px] border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)]">
-            <FolderOpen size={14} /> {hasSaveDir ? `?? ??: ${saveDirName || "???"}` : "?? ?? ??"}
+            <FolderOpen size={14} /> {hasSaveDir ? `?? ??: ${saveDirName || "???"}` : "대기 중인 환자"}
           </button>
           <p className="mt-8 text-center text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
         </div>
@@ -690,7 +690,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           <div className="flex items-center gap-2">
             {template !== "reception" && (
               <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
-                <Monitor size={12} className="inline mr-1" /> ?? ??
+                <Monitor size={12} className="inline mr-1" /> 상담 모드
               </span>
             )}
             <button
@@ -700,9 +700,9 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                 navTo("/hospital-login");
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
-              aria-label="????"
+              aria-label="로그아웃"
             >
-              <LogOut size={14} /> ????
+              <LogOut size={14} /> 로그아웃
             </button>
           </div>
         </div>
@@ -721,14 +721,14 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           <>
             <div className={`w-full max-w-[400px] mb-2 flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-[11px] font-medium ${staffJoined ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200" : "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 border border-yellow-200"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${staffJoined ? "bg-green-500 animate-pulse" : "bg-yellow-500"}`} />
-              {staffJoined ? "?? ? ? ?? QR ??? ???? ????" : "?? ?..."}
+              {staffJoined ? "대기 중 — 환자 QR 스캔을 기다리고 있습니다" : "연결 중..."}
             </div>
             {waitingPatients.length > 0 && (
               <div className="w-full max-w-[400px] mb-2 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
                   <Bell size={14} className="text-[#F59E0B] animate-bounce" />
                   <span className="text-[12px] font-semibold">
-                    {isConsultationRoom ? "?? ?? (??? ???)" : "?? ?? ??"} ({waitingPatients.length}?)
+                    {isConsultationRoom ? "대기 환자 (상담실 배정대기)" : "대기 중인 환자"} ({waitingPatients.length}명)
                   </span>
                 </div>
                 {waitingPatients.map((patient, idx) => {
@@ -742,13 +742,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                         type="button"
                         onClick={() => setWaitingPatients((prev) => prev.filter((p) => p.roomId !== patient.roomId))}
                         className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[12px] leading-none hover:bg-red-600 transition-colors"
-                        aria-label="???? ??"
+                        aria-label="대기목록 제거"
                       >
                         ?
                       </button>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[22px]" title="??">??</span>
+                          <span className="text-[22px]" title="환자">환자</span>
                           <div className="min-w-0">
                             <p className="text-[12px] font-semibold font-mono">{patient.roomId}</p>
                             {langInfo && (
@@ -757,15 +757,15 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                               </p>
                             )}
                             <p className="text-[10px] text-[var(--color-text-secondary)]">
-                              ?? {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                              {!isConsultationRoom && waitSec > 0 && ` ? ?? ${waitSec < 60 ? `${waitSec}?` : `${Math.floor(waitSec / 60)}?`}`}
+                              입장 {patient.createdAt ? new Date(patient.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                              {!isConsultationRoom && waitSec > 0 && ` · 대기 ${waitSec < 60 ? `${waitSec}초` : `${Math.floor(waitSec / 60)}분`}`}
                               {(patient.visitCount ?? 0) > 1 && (
                                 <span className="ml-1 px-1.5 py-0.5 rounded bg-[#2563EB]/15 text-[#2563EB] text-[10px] font-medium">
-                                  ??? ?? ? {(patient.visitCount ?? 0)}? ??
+                                  재방문 환자 · {(patient.visitCount ?? 0)}회 방문
                                 </span>
                               )}
                             </p>
-                            {accepted && <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">? ??? ?? ???</p>}
+                            {accepted && <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">✓ 입장이 수락되었습니다</p>}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -777,7 +777,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
                                 className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
-                                <Monitor size={12} /> ?? ??
+                                <Monitor size={12} /> 통역 시작
                               </button>
                             </>
                           )}
@@ -789,7 +789,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                               </button>
                               <button type="button" onClick={() => handleStartInterpretation(patient)}
                                 className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
-                                <Monitor size={12} /> ?? ??
+                                <Monitor size={12} /> 통역 시작
                               </button>
                             </>
                           )}
@@ -813,23 +813,20 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             {waitingPatients.length === 0 && (
               <div className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-dashed border-[var(--color-border)] text-center">
                 <Users size={24} className="mx-auto mb-1.5 text-[var(--color-text-secondary)] opacity-40" />
-                <p className="text-[12px] text-[var(--color-text-secondary)]">?? ?? ??? ????</p>
-                <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">??? QR? ??? ???? ??? ?????</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]">현재 대기 중인 환자가 없습니다</p>
+                <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">환자가 QR을 스캔하면 여기에 표시됩니다</p>
               </div>
             )}
             <style>{`@media print { body * { visibility: hidden; } #hospital-qr-print-section, #hospital-qr-print-section * { visibility: visible; } #hospital-qr-print-section { position: absolute; left: 0; top: 0; width: 100%; display: flex !important; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; } }`}</style>
             <div id="hospital-qr-print-section" className="w-full max-w-[400px] mb-2 p-3 rounded-[12px] border border-[var(--color-border)] flex flex-col items-center gap-2">
-              <p className="text-[12px] font-semibold text-[var(--color-text)]">?? QR ??</p>
+              <p className="text-[12px] font-semibold text-[var(--color-text)]">환자 QR 코드</p>
               <p className="text-center text-[11px] text-[var(--color-text)]">Scan QR code to start interpretation</p>
               <QRCode value={`https://hospital.lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" />
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; window.open("https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(patientQrUrl), "_blank"); }} className="px-3 py-1.5 rounded-[8px] bg-[#3B82F6] text-white text-[11px] font-medium hover:bg-[#2563EB]">
+                <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; window.open("https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(patientQrUrl), "_blank"); }} className="px-3 py-1.5 rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] text-[11px] font-medium hover:bg-[#f3f4f6]">
                   QR 인쇄
                 </button>
-                <button type="button" onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => { setStaffLinkCopied(true); setTimeout(() => setStaffLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
-                  {staffLinkCopied ? "복사됨!" : "직원 PC용 링크 복사"}
-                </button>
-                <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] text-[11px] font-medium hover:bg-[var(--color-bg-secondary)]">
+                <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="px-3 py-1.5 rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] text-[11px] font-medium hover:bg-[#f3f4f6]">
                   {tabletLinkCopied ? "복사됨!" : "태블릿용 링크 복사"}
                 </button>
               </div>
