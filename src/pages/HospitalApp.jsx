@@ -478,9 +478,9 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
 
   useEffect(() => {
     console.log("hospital:watch useEffect triggered", { orgCode, consultationRoomId, isReception, isConsultationRoom, selectedDept: selectedDept?.id, socketConnected: socket?.connected });
-    if (joinedRef.current) return;
-    joinedRef.current = true;
     if (isConsultationRoom) {
+      if (joinedRef.current) return;
+      joinedRef.current = true;
       const doWatch = () => {
         socket.emit("hospital:consultation:watch", { consultationRoomId });
         setStaffJoined(true);
@@ -495,8 +495,10 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         joinedRef.current = false;
       };
     } else {
-      if (!selectedDept) return;
-      const department = orgCode || selectedDept?.id || "";
+      if (!orgCode) return;
+      if (joinedRef.current) return;
+      joinedRef.current = true;
+      const department = orgCode;
       const doWatch = () => {
         console.log("hospital:watch emitting", { department, orgCode, isReception, consultationRoomId });
         socket.emit("hospital:watch", { department, orgCode, isReception, consultationRoomId });
@@ -508,7 +510,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       socket.on("connect", onConnect);
       return () => {
         socket.off("connect", onConnect);
-        if (socket.connected && selectedDept) socket.emit("hospital:unwatch", { department });
+        if (socket.connected) socket.emit("hospital:unwatch", { department });
         joinedRef.current = false;
       };
     }
