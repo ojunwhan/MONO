@@ -13,7 +13,7 @@ import socket from "../socket";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
-import { Mic, Loader2, UserCheck, ArrowLeft, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp, Send } from "lucide-react";
+import { Mic, Loader2, UserCheck, ArrowLeft, ArrowRight, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp, Send } from "lucide-react";
 import { saveHospitalConversation, getHospitalConversationsByRoom } from "../db/hospitalConversations";
 
 // ── PTT 전용: PCM16 전송 (VAD 미사용) ──
@@ -66,12 +66,41 @@ const STATUS = {
   ERROR: "오류 발생",
 };
 
-function langFlag(lang) {
-  if (!lang) return "";
-  const n = String(lang).toLowerCase().replace(/[^a-z]/g, "");
-  const m = { kor:"🇰🇷",ko:"🇰🇷",kr:"🇰🇷", eng:"🇺🇸",en:"🇺🇸",us:"🇺🇸", jpn:"🇯🇵",ja:"🇯🇵",jp:"🇯🇵", chn:"🇨🇳",zho:"🇨🇳",zh:"🇨🇳",cn:"🇨🇳", vie:"🇻🇳",vi:"🇻🇳",vn:"🇻🇳", tha:"🇹🇭",th:"🇹🇭", rus:"🇷🇺",ru:"🇷🇺", spa:"🇪🇸",es:"🇪🇸", fra:"🇫🇷",fre:"🇫🇷",fr:"🇫🇷", ara:"🇸🇦",ar:"🇸🇦", deu:"🇩🇪",ger:"🇩🇪",de:"🇩🇪", por:"🇧🇷",pt:"🇧🇷", ita:"🇮🇹",it:"🇮🇹", ind:"🇮🇩",id:"🇮🇩", msa:"🇲🇾",ms:"🇲🇾",may:"🇲🇾", tur:"🇹🇷",tr:"🇹🇷", pol:"🇵🇱",pl:"🇵🇱", nld:"🇳🇱",nl:"🇳🇱", swe:"🇸🇪",sv:"🇸🇪", nor:"🇳🇴",no:"🇳🇴", dan:"🇩🇰",da:"🇩🇰", fin:"🇫🇮",fi:"🇫🇮", hin:"🇮🇳",hi:"🇮🇳", ben:"🇧🇩",bn:"🇧🇩", ukr:"🇺🇦",uk:"🇺🇦", ron:"🇷🇴",ro:"🇷🇴", ces:"🇨🇿",cs:"🇨🇿", hun:"🇭🇺",hu:"🇭🇺", km:"🇰🇭",khm:"🇰🇭", my:"🇲🇲",mya:"🇲🇲", tl:"🇵🇭",fil:"🇵🇭", ne:"🇳🇵",nep:"🇳🇵", mn:"🇲🇳",mon:"🇲🇳", uz:"🇺🇿",uzb:"🇺🇿" };
-  return m[n] || "";
-}
+const langFlag = (lang) => {
+  if (!lang) return '';
+  const raw = typeof lang === 'object' ? (lang.code || lang.lang || lang.id || '') : lang;
+  const n = raw.toString().toLowerCase().trim().replace(/[^a-z]/g, '');
+  const m = {
+    'kor':'\uD83C\uDDF0\uD83C\uDDF7','ko':'\uD83C\uDDF0\uD83C\uDDF7','kr':'\uD83C\uDDF0\uD83C\uDDF7',
+    'eng':'\uD83C\uDDFA\uD83C\uDDF8','en':'\uD83C\uDDFA\uD83C\uDDF8','us':'\uD83C\uDDFA\uD83C\uDDF8',
+    'jpn':'\uD83C\uDDEF\uD83C\uDDF5','ja':'\uD83C\uDDEF\uD83C\uDDF5','jp':'\uD83C\uDDEF\uD83C\uDDF5',
+    'chn':'\uD83C\uDDE8\uD83C\uDDF3','zh':'\uD83C\uDDE8\uD83C\uDDF3','cn':'\uD83C\uDDE8\uD83C\uDDF3',
+    'vie':'\uD83C\uDDFB\uD83C\uDDF3','vi':'\uD83C\uDDFB\uD83C\uDDF3','vn':'\uD83C\uDDFB\uD83C\uDDF3',
+    'tha':'\uD83C\uDDF9\uD83C\uDDED','th':'\uD83C\uDDF9\uD83C\uDDED',
+    'rus':'\uD83C\uDDF7\uD83C\uDDFA','ru':'\uD83C\uDDF7\uD83C\uDDFA',
+    'spa':'\uD83C\uDDEA\uD83C\uDDF8','es':'\uD83C\uDDEA\uD83C\uDDF8',
+    'fra':'\uD83C\uDDEB\uD83C\uDDF7','fr':'\uD83C\uDDEB\uD83C\uDDF7',
+    'ara':'\uD83C\uDDF8\uD83C\uDDE6','ar':'\uD83C\uDDF8\uD83C\uDDE6',
+    'deu':'\uD83C\uDDE9\uD83C\uDDEA','de':'\uD83C\uDDE9\uD83C\uDDEA',
+    'por':'\uD83C\uDDE7\uD83C\uDDF7','pt':'\uD83C\uDDE7\uD83C\uDDF7',
+    'ita':'\uD83C\uDDEE\uD83C\uDDF9','it':'\uD83C\uDDEE\uD83C\uDDF9',
+    'ind':'\uD83C\uDDEE\uD83C\uDDE9','id':'\uD83C\uDDEE\uD83C\uDDE9',
+    'msa':'\uD83C\uDDF2\uD83C\uDDFE','ms':'\uD83C\uDDF2\uD83C\uDDFE',
+    'tur':'\uD83C\uDDF9\uD83C\uDDF7','tr':'\uD83C\uDDF9\uD83C\uDDF7',
+    'hin':'\uD83C\uDDEE\uD83C\uDDF3','hi':'\uD83C\uDDEE\uD83C\uDDF3',
+    'ukr':'\uD83C\uDDFA\uD83C\uDDE6','uk':'\uD83C\uDDFA\uD83C\uDDE6',
+    'nep':'\uD83C\uDDF3\uD83C\uDDF5','ne':'\uD83C\uDDF3\uD83C\uDDF5',
+    'ben':'\uD83C\uDDE7\uD83C\uDDE9','bn':'\uD83C\uDDE7\uD83C\uDDE9',
+    'pol':'\uD83C\uDDF5\uD83C\uDDF1','pl':'\uD83C\uDDF5\uD83C\uDDF1',
+    'khm':'\uD83C\uDDF0\uD83C\uDDED','km':'\uD83C\uDDF0\uD83C\uDDED',
+    'mya':'\uD83C\uDDF2\uD83C\uDDF2','my':'\uD83C\uDDF2\uD83C\uDDF2',
+    'mon':'\uD83C\uDDF2\uD83C\uDDF3','mn':'\uD83C\uDDF2\uD83C\uDDF3',
+    'fil':'\uD83C\uDDF5\uD83C\uDDED','tl':'\uD83C\uDDF5\uD83C\uDDED',
+    'uzb':'\uD83C\uDDFA\uD83C\uDDFF','uz':'\uD83C\uDDFA\uD83C\uDDFF',
+  };
+  return m[n] || '';
+};
+function toLangStr(v) { return typeof v === 'object' ? (v?.code || v?.lang || v?.id || '') : (v || ''); }
 
 // ── 채팅 말풍선 컴포넌트 ──
 function ChatBubble({ originalText, translatedText, mine, flagUrl, langLabel, streaming, timestamp }) {
@@ -265,9 +294,9 @@ function InterpretingVAD({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, textAlign: "center" }}>
-          {partnerInfo && (
-            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>
-          )}
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
+            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fc)} {(myProfile?.shortLabel || fc || "").toUpperCase()} {"\u2192"} {langFlag(tc)} {(partnerLangDisplay || tc || "").toUpperCase()}</span>
+          ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px", justifyContent: "flex-end" }}>
@@ -281,7 +310,7 @@ function InterpretingVAD({
             </button>
           )}
           <button onClick={handleBack} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
-            <ArrowLeft size={16} />
+            <ArrowRight size={16} />
           </button>
         </div>
       </div>
@@ -393,7 +422,9 @@ function InterpretingPTT({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, textAlign: "center" }}>
-          {partnerInfo && <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>}
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
+            <span style={{ fontSize: "14px", color: "#1f2937", fontWeight: 600 }}>{langFlag(fc)} {(myProfile?.shortLabel || fc || "").toUpperCase()} {"\u2192"} {langFlag(tc)} {(partnerLangDisplay || tc || "").toUpperCase()}</span>
+          ); })()}
         </div>
         {/* RIGHT: mode + end + exit */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px", justifyContent: "flex-end" }}>
@@ -407,7 +438,7 @@ function InterpretingPTT({
             </button>
           )}
           <button onClick={handleBack} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}>
-            <ArrowLeft size={16} />
+            <ArrowRight size={16} />
           </button>
         </div>
       </div>
