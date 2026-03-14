@@ -475,6 +475,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const isConsultationRoom = template === "consultation" && consultationRoomId;
 
   useEffect(() => {
+    console.log("hospital:watch useEffect triggered", { orgCode, consultationRoomId, isReception, isConsultationRoom, selectedDept: selectedDept?.id, socketConnected: socket?.connected });
     if (joinedRef.current) return;
     joinedRef.current = true;
     if (isConsultationRoom) {
