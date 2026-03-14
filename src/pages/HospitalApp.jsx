@@ -506,12 +506,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         socket.emit("hospital:watch", { department, orgCode, isReception, consultationRoomId });
         setStaffJoined(true);
       };
-      if (socket.connected) doWatch();
-      else socket.connect();
-      const onConnect = () => doWatch();
-      socket.on("connect", onConnect);
+      if (socket.connected) {
+        doWatch();
+      } else {
+        socket.once("connect", doWatch);
+      }
       return () => {
-        socket.off("connect", onConnect);
+        socket.off("connect", doWatch);
         if (socket.connected) socket.emit("hospital:unwatch", { department });
         joinedRef.current = false;
       };
