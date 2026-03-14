@@ -412,13 +412,13 @@ export default function HospitalApp() {
         <div className="min-h-dvh flex items-center justify-center bg-[var(--color-bg)]">
           <form onSubmit={handleCreateRoom} className="w-full max-w-sm mx-auto px-6">
             <HospitalLogo />
-            <h2 className="mt-8 text-lg font-bold text-[var(--color-text)]">? ???</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">? ??? ??? ???</p>
+            <h2 className="mt-8 text-lg font-bold text-[var(--color-text)]">Create Room</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Enter a name for this room</p>
             <input
               type="text"
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
-              placeholder="?: ???, ??? 1"
+              placeholder="e.g. Reception, Consultation 1"
               className="mt-4 w-full h-[48px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-sm outline-none focus:ring-2 focus:ring-[#7C6FEB]"
               autoFocus
             />
@@ -427,7 +427,7 @@ export default function HospitalApp() {
               disabled={!newRoomName.trim() || creatingRoom}
               className="mt-4 w-full h-[48px] rounded-[12px] bg-[#7C6FEB] text-white font-semibold text-sm disabled:opacity-40"
             >
-              {creatingRoom ? "?? ?..." : "??"}
+              {creatingRoom ? "Creating..." : "Start"}
             </button>
           </form>
         </div>
