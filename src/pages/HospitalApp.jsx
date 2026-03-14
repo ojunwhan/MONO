@@ -487,12 +487,16 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         socket.emit("hospital:consultation:watch", { consultationRoomId });
         setStaffJoined(true);
       };
+      const onReconnect = () => {
+        console.log("socket reconnected, re-emitting hospital:consultation:watch", { consultationRoomId });
+        doWatch();
+      };
       if (socket.connected) doWatch();
-      else socket.connect();
-      const onConnect = () => doWatch();
-      socket.on("connect", onConnect);
+      else socket.once("connect", doWatch);
+      socket.on("connect", onReconnect);
       return () => {
-        socket.off("connect", onConnect);
+        socket.off("connect", doWatch);
+        socket.off("connect", onReconnect);
         if (socket.connected) socket.emit("hospital:consultation:unwatch", { consultationRoomId });
         joinedRef.current = false;
       };
@@ -506,13 +510,19 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         socket.emit("hospital:watch", { department, orgCode, isReception, consultationRoomId });
         setStaffJoined(true);
       };
+      const onReconnect = () => {
+        console.log("socket reconnected, re-emitting hospital:watch", { department });
+        doWatch();
+      };
       if (socket.connected) {
         doWatch();
       } else {
         socket.once("connect", doWatch);
       }
+      socket.on("connect", onReconnect);
       return () => {
         socket.off("connect", doWatch);
+        socket.off("connect", onReconnect);
         if (socket.connected) socket.emit("hospital:unwatch", { department });
         joinedRef.current = false;
       };
