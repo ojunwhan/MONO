@@ -404,6 +404,7 @@ export default function HospitalApp() {
         setSaveMode={setSaveMode}
         navTo={navTo}
         onBack={() => navTo("/hospital-dashboard")}
+        kiosk={kiosk}
       />
     );
   }
@@ -411,7 +412,7 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack }) {
+function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack, kiosk }) {
   const [waitingPatients, setWaitingPatients] = useState([]);
   const [consultationRooms, setConsultationRooms] = useState([]);
   const [assignDropdownRoomId, setAssignDropdownRoomId] = useState(null);
