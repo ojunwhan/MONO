@@ -224,6 +224,7 @@ export default function HospitalApp() {
   const [selectedLang, setSelectedLang] = useState(initialLang);
   const [showLangGrid, setShowLangGrid] = useState(false);
   const [step, setStep] = useState("choose");
+  console.log("HospitalApp render", { step, kiosk, hasStaffParams: template === "reception" });
 
   const [authUser, setAuthUser] = useState(null);
   const [hospitalOrgCode, setHospitalOrgCode] = useState("");
@@ -439,6 +440,7 @@ export default function HospitalApp() {
       template === "reception" && urlRoom
         ? `${origin}/hospital?template=reception&room=${encodeURIComponent(urlRoom)}${org ? `&org=${encodeURIComponent(org)}` : ""}`
         : null;
+    console.log("rendering StaffModePanel", { step, hasStaffParams, kiosk });
     return (
       <StaffModePanel
         template={template}
