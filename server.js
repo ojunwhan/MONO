@@ -4328,6 +4328,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('hospital:watch', ({ department }) => {
+    if (!department) return;
+    const channel = `hospital:watch:${department}`;
+    socket.join(channel);
+    console.log(`[hospital:watch] Staff PC watching dept=${department} (socket=${socket.id})`);
+
+    if (department === '__all__') {
+      for (const [d, list] of HOSPITAL_WAITING.entries()) {
+        list.forEach(w => {
+          socket.emit('hospital:patient-waiting', w);
+        });
+      }
+    } else {
+      const waiting = HOSPITAL_WAITING.get(department) || [];
+      if (waiting.length > 0) {
+        waiting.forEach(w => socket.emit('hospital:patient-waiting', w));
+      }
+    }
+  });
+
   socket.conn.on("close", (reason) => {
     console.log(`⚠️ Socket connection closed (${reason}), waiting for reconnect...`);
   });
