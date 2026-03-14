@@ -1554,6 +1554,7 @@ export default function ChatScreen() {
             </div>
 
             <div className="flex items-center gap-1 text-[12px] min-w-[92px] justify-end relative" ref={roomMenuRef}>
+              {!isHospitalMode && (
               <button
                 onClick={() => setInviteSheetOpen(true)}
                 className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
@@ -1562,6 +1563,7 @@ export default function ChatScreen() {
               >
                 <UserPlus size={18} />
               </button>
+              )}
               <button
                 onClick={() => setRoomMenuOpen((v) => !v)}
                 className="w-9 h-9 rounded-full border text-[16px] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]"

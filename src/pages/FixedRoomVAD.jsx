@@ -259,7 +259,7 @@ function InterpretingVAD({
             <ArrowLeft size={18} />
           </button>
           {partnerInfo && (
-            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} → {langFlag(partnerInfo?.lang)}</span>
+            <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>
           )}
           {isOwner && patientHistory?.sessions?.length > 0 && (
             <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
@@ -375,7 +375,7 @@ function InterpretingPTT({
       <div style={{ padding: "10px 16px", minHeight: "56px", display: "flex", alignItems: "center", justifyContent: "space-between", background: recording ? "#fef2f2" : "#ffffff", borderBottom: "1px solid #f3f4f6", flexShrink: 0, transition: "background 0.3s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
           <button onClick={handleBack} style={{ background: "none", border: "none", color: "#374151", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }}><ArrowLeft size={18} /></button>
-          {partnerInfo && <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} → {langFlag(partnerInfo?.lang)}</span>}
+          {partnerInfo && <span style={{ fontSize: "clamp(13px, 2.5vw, 14px)", color: "#374151", fontWeight: 600 }}>{langFlag(fromLang)} {(myProfile?.shortLabel || fromLang || "").toUpperCase()} → {langFlag(partnerInfo?.lang)} {(partnerLangDisplay || partnerInfo?.lang || "").toUpperCase()}</span>}
           {isOwner && patientHistory?.sessions?.length > 0 && (
             <button type="button" onClick={() => setHistoryPanelOpen((p) => !p)} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px", border: "1px solid #e5e7eb", background: historyPanelOpen ? "#eff6ff" : "transparent", color: "#374151", fontSize: "11px", cursor: "pointer", marginLeft: "4px" }}>
               <History size={12} /> {historyPanelOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -1256,6 +1256,7 @@ export default function FixedRoomVAD() {
       display: "flex",
       flexDirection: "column",
       height: "100dvh",
+      minHeight: "100dvh",
       maxWidth: "100%",
       background: "#ffffff",
       color: "#1f2937",
