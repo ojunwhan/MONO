@@ -497,6 +497,15 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const [staffLinkCopied, setStaffLinkCopied] = useState(false);
   const [tabletLinkCopied, setTabletLinkCopied] = useState(false);
   const joinedRef = useRef(false);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const h = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  const isMobile = windowWidth < 640;
+  const isTablet = windowWidth >= 640 && windowWidth < 1024;
+
   const isReception = template === "reception";
   const isConsultationRoom = template === "consultation" && consultationRoomId;
 
@@ -704,8 +713,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
-      <div className="flex-none border-b border-[var(--color-border)]" style={{padding:"12px 16px"}}>
-        <div className="flex items-center justify-between max-w-[480px] mx-auto w-full">
+      <div className="flex-none border-b border-[var(--color-border)]" style={{padding:isMobile ? "10px 12px" : "12px 16px"}}>
+        <div className="flex items-center justify-between mx-auto w-full" style={{maxWidth: isMobile ? "100%" : "480px"}}>
           <HospitalLogo />
           <div className="flex items-center gap-2">
             {template !== "reception" && (
@@ -727,10 +736,10 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           </div>
         </div>
       </div>
-      <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh",maxWidth:"480px",padding:"16px"}}>
+      <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh",maxWidth: isMobile ? "100%" : "480px",padding: isMobile ? "12px" : isTablet ? "24px" : "32px"}}>
         <div className="text-center mb-6">
           <div style={{display:"flex",justifyContent:"center",marginBottom:"12px"}}><svg style={{width:"clamp(40px, 8vw, 56px)",height:"clamp(40px, 8vw, 56px)"}} viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-          <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize:"clamp(20px, 4vw, 28px)"}}>{displayTitle}</h2>
+          <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px"}}>{displayTitle}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
         <div className="w-full mb-2" style={{maxWidth:"400px"}}>
@@ -835,13 +844,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               <p className="font-semibold text-[var(--color-text)]" style={{fontSize:"clamp(12px, 2.5vw, 14px)"}}>Patient QR Code</p>
               <p className="text-center text-[var(--color-text)]" style={{fontSize:"clamp(11px, 2vw, 13px)"}}>Scan QR code to start interpretation</p>
               <div style={{width:"100%",display:"flex",justifyContent:"center"}}>
-                <QRCode value={`https://hospital.lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" style={{width:"min(240px, 80vw)",height:"min(240px, 80vw)",display:"block",margin:"0 auto"}} />
+                <QRCode value={`https://hospital.lingora.chat/hospital/join/${orgCode || ""}`} size={160} bgColor="#FFFFFF" fgColor="#000000" level="M" style={{width: isMobile ? "min(220px, 75vw)" : isTablet ? "280px" : "240px", height: isMobile ? "min(220px, 75vw)" : isTablet ? "280px" : "240px", display:"block", margin:"0 auto"}} />
               </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:"8px",justifyContent:"center",width:"100%"}}>
-                <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; const pw = window.open('', '_blank'); pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>MONO QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#fff;font-family:-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px}.logo{font-size:42px;font-weight:800;letter-spacing:8px;margin-bottom:32px}.logo span:nth-child(1){color:#7C6FEB}.logo span:nth-child(2){color:#F472B6}.logo span:nth-child(3){color:#34D399}.logo span:nth-child(4){color:#FBBF24}.steps{text-align:center;margin-bottom:28px}.steps p{font-size:16px;color:#374151;margin-bottom:10px}.note{font-size:13px;color:#9ca3af;margin-bottom:28px}.qr-box{background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,0.08)}.qr-box img{display:block;width:260px;height:260px}.scan-text{margin-top:16px;font-size:14px;color:#6b7280;text-align:center}@media print{body{justify-content:flex-start;padding-top:60px}}</style></head><body><div class="logo"><span>M</span><span>O</span><span>N</span><span>O</span></div><div class="steps"><p>Step 1. Scan the QR code with your phone</p><p>Step 2. Select your language</p><p>Step 3. Tap the button to speak, tap again when done</p></div><p class="note">No app download needed. Just scan.</p><div class="qr-box"><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&color=3b5bdb&bgcolor=ffffff&data=${encodeURIComponent(patientQrUrl)}" /></div><p class="scan-text">Scan QR Code to Start</p><script>window.onload=function(){window.print()}<\/script></body></html>`); pw.document.close(); }} className="rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] font-medium hover:bg-[#f3f4f6]" style={{minHeight:"44px",fontSize:"clamp(13px, 2.5vw, 14px)",padding:"8px 16px"}}>
+              <div style={{display:"flex",flexDirection: isMobile ? "column" : "row",flexWrap:"wrap",gap:"8px",justifyContent:"center",width:"100%"}}>
+                <button type="button" onClick={() => { const patientQrUrl = `https://hospital.lingora.chat/hospital/join/${orgCode || ""}`; const pw = window.open('', '_blank'); pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>MONO QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#fff;font-family:-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px}.logo{font-size:42px;font-weight:800;letter-spacing:8px;margin-bottom:32px}.logo span:nth-child(1){color:#7C6FEB}.logo span:nth-child(2){color:#F472B6}.logo span:nth-child(3){color:#34D399}.logo span:nth-child(4){color:#FBBF24}.steps{text-align:center;margin-bottom:28px}.steps p{font-size:16px;color:#374151;margin-bottom:10px}.note{font-size:13px;color:#9ca3af;margin-bottom:28px}.qr-box{background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,0.08)}.qr-box img{display:block;width:260px;height:260px}.scan-text{margin-top:16px;font-size:14px;color:#6b7280;text-align:center}@media print{body{justify-content:flex-start;padding-top:60px}}</style></head><body><div class="logo"><span>M</span><span>O</span><span>N</span><span>O</span></div><div class="steps"><p>Step 1. Scan the QR code with your phone</p><p>Step 2. Select your language</p><p>Step 3. Tap the button to speak, tap again when done</p></div><p class="note">No app download needed. Just scan.</p><div class="qr-box"><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&color=3b5bdb&bgcolor=ffffff&data=${encodeURIComponent(patientQrUrl)}" /></div><p class="scan-text">Scan QR Code to Start</p><script>window.onload=function(){window.print()}<\/script></body></html>`); pw.document.close(); }} className="rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] font-medium hover:bg-[#f3f4f6]" style={{minHeight: isMobile ? "48px" : "44px", fontSize: isMobile ? "14px" : "13px", padding: isMobile ? "10px 16px" : "8px 16px", width: isMobile ? "100%" : "auto"}}>
                   Print QR
                 </button>
-                <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] font-medium hover:bg-[#f3f4f6]" style={{minHeight:"44px",fontSize:"clamp(13px, 2.5vw, 14px)",padding:"8px 16px"}}>
+                <button type="button" onClick={() => { const url = new URL(window.location.href); if (!url.searchParams.has("kiosk")) url.searchParams.set("kiosk", "true"); navigator.clipboard?.writeText(url.toString()).then(() => { setTabletLinkCopied(true); setTimeout(() => setTabletLinkCopied(false), 2000); }); }} className="rounded-[8px] border border-[#d1d5db] bg-white text-[#374151] font-medium hover:bg-[#f3f4f6]" style={{minHeight: isMobile ? "48px" : "44px", fontSize: isMobile ? "14px" : "13px", padding: isMobile ? "10px 16px" : "8px 16px", width: isMobile ? "100%" : "auto"}}>
                   {tabletLinkCopied ? "Copied!" : "Copy Tablet Link"}
                 </button>
               </div>
