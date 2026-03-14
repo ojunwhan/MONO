@@ -465,7 +465,9 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack, kiosk }) {
+function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode: orgCodeProp, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack, kiosk }) {
+  const orgCodeFromUrl = new URLSearchParams(window.location.search).get("org") || "";
+  const orgCode = orgCodeProp || orgCodeFromUrl;
   const [waitingPatients, setWaitingPatients] = useState([]);
   const [consultationRooms, setConsultationRooms] = useState([]);
   const [assignDropdownRoomId, setAssignDropdownRoomId] = useState(null);
