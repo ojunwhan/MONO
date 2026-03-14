@@ -729,7 +729,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-1 flex flex-col items-center px-6 py-6 max-w-[600px] mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh"}}>
         <div className="text-center mb-6">
-          <div style={{display:"flex",justifyContent:"center",marginBottom:"12px"}}><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:"12px"}}><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
           <h2 className="text-[22px] font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%"}}>{displayTitle}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
