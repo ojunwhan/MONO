@@ -350,7 +350,7 @@ export default function HospitalApp() {
   if (!kiosk && hospitalAuthChecked && !isHospitalAdmin) return null;
 
   if (step === "summary") {
-    const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital-dashboard", { replace: true }); };
+    const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital?template=reception", { replace: true }); };
     const handleCopySummary = () => {
       const text = summaryMessages.filter((m) => m.text || m.original).map((m) => `[${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : ""}] ${m.isMine ? "???" : "??"}: ${m.original || m.text || ""}`).join("\n");
       navigator.clipboard?.writeText(text).catch(() => {});
