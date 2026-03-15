@@ -185,7 +185,7 @@ function saveMessageToServer({ sessionId, roomId, patientToken, senderRole, orig
   const payload = {
     sessionId,
     roomId,
-    senderRole: senderRole || "guest",
+    senderRole: (senderRole === "owner" ? "host" : senderRole) || "guest",
     senderLang: senderLang || "",
     originalText: originalText || "",
     translatedText: translatedText || "",
