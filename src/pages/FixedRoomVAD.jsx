@@ -630,7 +630,7 @@ export default function FixedRoomVAD() {
             originalText: orig,
             translatedText: isHost ? orig : trans,
             mine: isHost,
-            senderId: isHost ? participantId : "partner",
+            senderId: isHost ? "self" : "partner",
             timestamp: ts,
           };
         });
