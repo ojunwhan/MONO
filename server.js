@@ -3807,12 +3807,6 @@ io.on('connection', (socket) => {
               [roomId]
             ).catch(() => null);
           }
-          const msgId = uuidv4();
-          await dbRun(
-            `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, "", "", pToken]
-          );
           const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
           const otherP = otherPid ? meta.participants[otherPid] : null;
           const toLang = otherP?.lang || "en";
@@ -3828,6 +3822,12 @@ io.on('connection', (socket) => {
               }
             } catch (e) { console.warn("[stt:whisper][translate]:", e?.message); }
           }
+          const msgId = uuidv4();
+          await dbRun(
+            `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, translatedText, toLang, pToken]
+          );
           const senderSocketId = socket.id;
           const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
           const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
@@ -5523,23 +5523,43 @@ app.get('/api/hospital/session-log/:roomId', (req, res) => {
   }
 });
 
-// GET /api/hospital/patient/:patientToken/history — 환자 이전 대화 최근 30건 (재입장 시 히스토리 복원용)
+// GET /api/hospital/patient/:patientToken/history — 환자 이전 대화 최근 30건 (logs/sessions/{roomId}.txt 파싱)
+// Line format: [HH:MM:SS] role: original_text → translated_text  (role: 직원=host, 환자=guest)
 app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
   try {
     const token = String(req.params.patientToken).trim();
-    const rows = await dbAll(
-      `SELECT m.id, m.session_id, m.room_id, m.sender_role, COALESCE(m.sender_lang, m.lang) as sender_lang,
-              m.original_text, m.translated_text, m.translated_lang, m.created_at
-       FROM hospital_messages m
-       JOIN hospital_sessions s ON m.session_id = s.id
-       WHERE s.patient_token = ?
-       ORDER BY m.created_at DESC
-       LIMIT 30`,
-      [token]
-    ).catch(() => []);
+    const patient = await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [token]);
+    if (!patient?.room_id) return res.json({ success: true, messages: [] });
 
-    // chronological order (oldest first) for display
-    const messages = rows.reverse();
+    const roomId = patient.room_id;
+    const filePath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+    if (!fs.existsSync(filePath)) return res.json({ success: true, messages: [] });
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split(/\r?\n/).filter((line) => line.trim());
+    // Parse: [HH:MM:SS] 직원: original_text → translated_text  (role: 직원=host, 환자=guest)
+    const parsed = [];
+    const arrow = ' → ';
+    for (const line of lines) {
+      const arrowIdx = line.lastIndexOf(arrow);
+      if (arrowIdx === -1) continue;
+      const prefix = line.slice(0, arrowIdx);
+      const translated_text = line.slice(arrowIdx + arrow.length).trim();
+      const prefixRe = /^\[(\d{2}:\d{2}:\d{2})\]\s*(직원|환자):\s*(.*)$/;
+      const m = prefix.match(prefixRe);
+      if (!m) continue;
+      const [, timeStr, roleKo, originalText] = m;
+      const sender_role = roleKo === '직원' ? 'host' : 'guest';
+      // Frontend expects parseable date: use same-day ISO so date dividers work
+      const created_at = timeStr.length === 8 ? `1970-01-01T${timeStr}Z` : timeStr;
+      parsed.push({
+        sender_role,
+        original_text: (originalText || '').trim(),
+        translated_text,
+        created_at,
+      });
+    }
+    const messages = parsed.slice(-30);
 
     res.json({ success: true, messages });
   } catch (e) {
