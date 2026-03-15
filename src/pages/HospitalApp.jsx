@@ -317,6 +317,7 @@ export default function HospitalApp() {
     fetch("/api/hospital/auth/me", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
+        console.log("auth/me response:", data);
         if (data?.org_code) setHospitalOrgCode(data.org_code);
         setHospitalAuthChecked(true);
         setAuthChecked(true);
