@@ -224,19 +224,27 @@ export default function HospitalApp() {
   const navTo = useNav();
   const [searchParams] = useSearchParams();
   const template = searchParams.get("template");
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (searchParams.get("template")) return;
+    if (searchParams.get("template")) {
+      setChecking(false);
+      return;
+    }
     fetch("/api/hospital/auth/me", { credentials: "include" })
       .then((res) => res.json().catch(() => ({})))
       .then((data) => {
+        setChecking(false);
         if (data?.authenticated) {
           navTo("/hospital?template=reception", { replace: true });
         } else {
           navTo("/hospital-login", { replace: true });
         }
       })
-      .catch(() => navTo("/hospital-login", { replace: true }));
+      .catch(() => {
+        setChecking(false);
+        navTo("/hospital-login", { replace: true });
+      });
   }, []);
 
   if (template == null || template === "") {
