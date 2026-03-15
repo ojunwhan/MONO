@@ -329,6 +329,41 @@ export default function ChatScreen() {
     } catch {}
   }, [roomId, participantId, fromLang, roleHint]);
 
+  // 병원 모드: pendingMessages(이전 대화 30건)가 있으면 읽기 전용 히스토리로 상단에 표시
+  useEffect(() => {
+    if (!roomId || !isHospitalMode) return;
+    const pending = location.state?.pendingMessages;
+    if (!Array.isArray(pending) || pending.length === 0) {
+      historyLoadedRef.current = true;
+      return;
+    }
+    const hydrated = pending.map((m) => {
+      const mine = String(m.sender_role || "").toLowerCase() === "guest";
+      const text = mine ? (m.original_text || "") : (m.translated_text || m.original_text || "");
+      const ts = m.created_at
+        ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime())
+        : Date.now();
+      return {
+        id: m.id,
+        text,
+        originalText: m.original_text || "",
+        translatedText: m.translated_text || "",
+        mine,
+        senderId: "",
+        status: "translated",
+        timestamp: ts,
+        senderDisplayName: mine ? "" : (hospitalDept?.labelKo || "병원"),
+        senderFlagUrl: "",
+        senderLabel: "",
+      };
+    });
+    setMessages(hydrated);
+    hydrated.forEach((m) => {
+      if (m?.id) seenIdsRef.current.add(m.id);
+    });
+    historyLoadedRef.current = true;
+  }, [roomId, isHospitalMode, location.state?.pendingMessages, hospitalDept?.labelKo]);
+
   useEffect(() => {
     let cancelled = false;
     if (!roomId) return;

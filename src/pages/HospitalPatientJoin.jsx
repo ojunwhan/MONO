@@ -118,9 +118,9 @@ export default function HospitalPatientJoin() {
 
       let pendingMessages = [];
       try {
-        const pendingRes = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/pending-messages`);
-        const pendingData = await pendingRes.json().catch(() => ({}));
-        if (pendingData.ok && Array.isArray(pendingData.messages)) pendingMessages = pendingData.messages;
+        const historyRes = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/history`);
+        const historyData = await historyRes.json().catch(() => ({}));
+        if (historyData.success && Array.isArray(historyData.messages)) pendingMessages = historyData.messages;
       } catch (_) {}
 
       sessionStorage.setItem(

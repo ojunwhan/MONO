@@ -5523,30 +5523,25 @@ app.get('/api/hospital/session-log/:roomId', (req, res) => {
   }
 });
 
-// GET /api/hospital/patient/:patientToken/history — 환자 이전 방문 기록 + 대화 요약
+// GET /api/hospital/patient/:patientToken/history — 환자 이전 대화 최근 30건 (재입장 시 히스토리 복원용)
 app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
   try {
     const token = String(req.params.patientToken).trim();
-    const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
-    if (!patient) return res.json({ success: true, found: false, sessions: [] });
-
-    // Fetch sessions
-    const sessions = await dbAll(
-      `SELECT id, patient_token, room_id, dept, started_at, ended_at
-       FROM hospital_sessions WHERE patient_token = ? ORDER BY started_at DESC LIMIT 50`,
+    const rows = await dbAll(
+      `SELECT m.id, m.session_id, m.room_id, m.sender_role, COALESCE(m.sender_lang, m.lang) as sender_lang,
+              m.original_text, m.translated_text, m.translated_lang, m.created_at
+       FROM hospital_messages m
+       JOIN hospital_sessions s ON m.session_id = s.id
+       WHERE s.patient_token = ?
+       ORDER BY m.created_at DESC
+       LIMIT 30`,
       [token]
     ).catch(() => []);
 
-    // Fetch messages per session
-    for (const sess of sessions) {
-        sess.messages = await dbAll(
-        `SELECT id, sender_role, original_text, translated_text, COALESCE(sender_lang, lang) as lang, created_at
-         FROM hospital_messages WHERE room_id = ? ORDER BY created_at ASC LIMIT 200`,
-        [sess.room_id]
-      ).catch(() => []);
-    }
+    // chronological order (oldest first) for display
+    const messages = rows.reverse();
 
-    res.json({ success: true, found: true, patient, sessions });
+    res.json({ success: true, messages });
   } catch (e) {
     console.error('[hospital:patient:history] error:', e?.message);
     trackUsageError(e, { source: 'hospital:patient:history' });
