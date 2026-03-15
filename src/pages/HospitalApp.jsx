@@ -825,7 +825,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-none py-2 text-center space-y-1">
         <p className="text-[10px] text-[var(--color-text-secondary)]">Powered by <span style={{color:"#7C6FEB",fontWeight:700}}>M</span><span style={{color:"#F472B6",fontWeight:700}}>O</span><span style={{color:"#34D399",fontWeight:700}}>N</span><span style={{color:"#FBBF24",fontWeight:700}}>O</span> Medical Interpreter</p>
-        <button type="button" onClick={() => navTo("/hospital?template=reception")} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
+        <button type="button" onClick={() => { window.location.href = "/hospital-dashboard"; }} className="text-[11px] text-[var(--color-text-secondary)] hover:text-[#2563EB] underline">
           Go to Dashboard
         </button>
         <div style={{ borderTop:"1px solid #f3f4f6", marginTop:8, paddingTop:8 }}>
