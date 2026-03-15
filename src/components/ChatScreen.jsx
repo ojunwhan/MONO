@@ -254,6 +254,7 @@ export default function ChatScreen() {
   const seenIdsRef = useRef(new Set());
   const wakeLockRef = useRef(null);
   const historyLoadedRef = useRef(false);
+  const pendingHistoryRef = useRef([]);
 
   // Stable refs
   const participantIdRef = useRef(participantId);
@@ -331,6 +332,7 @@ export default function ChatScreen() {
 
   // 병원 모드: pendingMessages(이전 대화 30건)가 있으면 읽기 전용 히스토리로 상단에 표시
   useEffect(() => {
+    console.log("[Hospital History] roomId:", roomId, "isHospitalMode:", isHospitalMode, "pending count:", location.state?.pendingMessages?.length);
     if (!roomId || !isHospitalMode) return;
     const pending = location.state?.pendingMessages;
     if (!Array.isArray(pending) || pending.length === 0) {
@@ -357,6 +359,7 @@ export default function ChatScreen() {
         senderLabel: "",
       };
     });
+    pendingHistoryRef.current = hydrated;
     setMessages(hydrated);
     hydrated.forEach((m) => {
       if (m?.id) seenIdsRef.current.add(m.id);
