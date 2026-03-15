@@ -114,62 +114,47 @@ function KioskGuideText() {
 }
 
 // ????: ?? QR ??? ?? (???/??? ??. orgCode? ??)
-const KIOSK_STEPS = [
-  "Step 1. Scan the QR code with your phone",
-  "Step 2. Select your language",
-  "Step 3. Tap the button to speak, tap again when done",
-];
-
 function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUser, searchParams }) {
   const urlOrg = searchParams.get("org") || (authUser?.accountType === "organization" && authUser?.id ? authUser.id : "");
   const [qrSize, setQrSize] = useState(280);
-  const [stepIdx, setStepIdx] = useState(0);
-  const [stepVisible, setStepVisible] = useState(true);
   useEffect(() => {
     const update = () => setQrSize(Math.min(280, Math.min(window.innerWidth, window.innerHeight) * 0.45));
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setStepVisible(false);
-      setTimeout(() => {
-        setStepIdx(i => (i + 1) % KIOSK_STEPS.length);
-        setStepVisible(true);
-      }, 400);
-    }, 3000);
-    return () => clearInterval(iv);
-  }, []);
   const qrUrl = `${window.location.origin}/hospital/join/${encodeURIComponent(urlOrg || "reception")}`;
 
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border overflow-hidden">
+    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#111] text-[var(--color-text)] p-4 sm:p-6 md:p-8 box-border">
       <div className="w-full max-w-[420px] flex flex-col items-center">
         <div className="mb-4 sm:mb-6 w-full flex justify-center">
           <MonoLogo />
         </div>
 
-        {/* International Patients Only — left-to-right marquee (parent overflow hidden, content scrolls) */}
-        <div className="kiosk-marquee-outer w-full mb-4 sm:mb-6">
-          <div className="kiosk-marquee-track">
-            <span className="kiosk-marquee-text text-2xl sm:text-3xl font-bold whitespace-nowrap" style={{ color: "#F97316" }}>
+        {/* International Patients Only ? 3D marquee (two spans, seamless loop) */}
+        <div className="w-full mb-4 sm:mb-6" style={{ perspective: "800px", overflowX: "hidden", overflowY: "visible" }}>
+          <div className="relative kiosk-marquee-container">
+            <span
+              className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
+              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
+            >
               International Patients Only
             </span>
-            <span className="kiosk-marquee-text text-2xl sm:text-3xl font-bold whitespace-nowrap" style={{ color: "#F97316" }}>
+            <span
+              className="kiosk-marquee kiosk-marquee-2 text-2xl sm:text-3xl font-bold whitespace-nowrap"
+              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
+            >
               International Patients Only
             </span>
           </div>
         </div>
 
-        {/* Guide steps ? cycling one at a time with fade */}
-        <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", minHeight: "4.5em" }}>
-          <p
-            className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed"
-            style={{ opacity: stepVisible ? 1 : 0, transition: "opacity 400ms ease" }}
-          >
-            {KIOSK_STEPS[stepIdx]}
-          </p>
+        {/* Guide steps ? larger, no icon block */}
+        <div className="text-center max-w-[320px] sm:max-w-[360px] mb-4 sm:mb-6 space-y-2 sm:space-y-2.5" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">1. Scan the QR code with your phone</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">2. Select your language</p>
+          <p className="text-base sm:text-lg text-[var(--color-text)] font-medium leading-relaxed">3. Tap the button to speak, tap again when done</p>
           <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mt-3">No app download needed. Just scan.</p>
         </div>
 
@@ -182,24 +167,29 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       </div>
 
       <style>{`
-        .kiosk-marquee-outer {
-          overflow: hidden;
-          min-height: 2.75em;
-          padding: 0.35em 0;
+        @keyframes kioskMarquee {
+          0% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
+          45% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
+          50% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
+          51% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
+          53% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
+          100% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
         }
-        .kiosk-marquee-track {
-          display: flex;
-          width: max-content;
-          animation: kioskMarquee 20s linear infinite;
-        }
-        .kiosk-marquee-text {
-          flex-shrink: 0;
-          padding-right: 1.5em;
+        .kiosk-marquee {
+          position: absolute;
+          left: 0;
+          top: 0;
+          animation: kioskMarquee 14s ease-in-out infinite;
+          backface-visibility: hidden;
           line-height: 1.5;
         }
-        @keyframes kioskMarquee {
-          0% { transform: translateX(-50%); }
-          100% { transform: translateX(0); }
+        .kiosk-marquee-2 {
+          animation-delay: -7s;
+        }
+        .kiosk-marquee-container {
+          min-height: 2.75em;
+          padding: 0.35em 0;
+          overflow: visible;
         }
       `}</style>
     </div>
