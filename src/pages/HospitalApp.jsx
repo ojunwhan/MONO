@@ -318,7 +318,10 @@ export default function HospitalApp() {
       .then((r) => r.json())
       .then((data) => {
         console.log("auth/me response:", data);
-        if (data?.org_code) setHospitalOrgCode(data.org_code);
+        if (data?.org_code) {
+          setHospitalOrgCode(data.org_code);
+          console.log("setting hospitalOrgCode:", data.org_code);
+        }
         setHospitalAuthChecked(true);
         setAuthChecked(true);
       })
