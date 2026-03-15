@@ -276,7 +276,7 @@ export default function HospitalApp() {
 
   useEffect(() => {
     if (shouldRedirect) {
-      navTo("/hospital-dashboard", { replace: true });
+      navTo("/hospital?template=reception", { replace: true });
       return;
     }
   }, [shouldRedirect, navTo]);
@@ -417,7 +417,7 @@ export default function HospitalApp() {
     const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || hospitalOrgCode || "";
 
     if (!kiosk && !urlRoom && isHospitalAdmin) {
-      return <Navigate to="/hospital-dashboard" replace />;
+      return <Navigate to="/hospital?template=reception" replace />;
     }
 
     const origin = typeof window !== "undefined" ? window.location.origin : "";
