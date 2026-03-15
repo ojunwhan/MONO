@@ -226,9 +226,17 @@ export default function HospitalApp() {
   const template = searchParams.get("template");
 
   useEffect(() => {
-    if (!searchParams.get("template")) {
-      navTo("/hospital-login", { replace: true });
-    }
+    if (searchParams.get("template")) return;
+    fetch("/api/hospital/auth/me", { credentials: "include" })
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        if (data?.authenticated) {
+          navTo("/hospital?template=reception", { replace: true });
+        } else {
+          navTo("/hospital-login", { replace: true });
+        }
+      })
+      .catch(() => navTo("/hospital-login", { replace: true }));
   }, []);
 
   if (template == null || template === "") {
