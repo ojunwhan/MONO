@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
 import { Mic, Loader2, UserCheck, ArrowLeft, ArrowRight, Phone, PhoneOff, CheckCircle, History, ChevronDown, ChevronUp, Send } from "lucide-react";
-import { saveHospitalConversation, getHospitalConversationsByRoom } from "../db/hospitalConversations";
+import { saveHospitalConversation } from "../db/hospitalConversations";
 
 // ── PTT 전용: PCM16 전송 (VAD 미사용) ──
 const PTT_CHUNK_SIZE = 24000; // 1.5초 @16kHz, server와 동일
@@ -657,31 +657,7 @@ export default function FixedRoomVAD() {
     ]);
   }, [pendingMessages]);
 
-  // ── 환자 폰: 병원 모드일 때 대화 내용 실시간 IndexedDB 저장 (PT-XXXXXX + 날짜). 상담실 태블릿(sessionId로 입장)은 새 세션이므로 IndexedDB 로드 생략(귀신 메시지 방지). ──
   const isHospitalGuest = isGuest && (hospitalDept || String(siteContext || "").startsWith("hospital_"));
-  const loadedForRoomIdRef = useRef(null);
-  useEffect(() => {
-    if (!isHospitalGuest || !roomId) return;
-    if (loadedForRoomIdRef.current === roomId) return;
-    if (state.sessionId && siteContext === "hospital_consultation") return;
-    loadedForRoomIdRef.current = roomId;
-    const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
-    getHospitalConversationsByRoom(roomId)
-      .then((list) => {
-        const rec = (list || []).find((r) => r.dateStr === today);
-        if (rec?.messages?.length) {
-          setMessages(rec.messages.map((m) => ({
-            id: m.id || `idb_${m.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
-            originalText: m.originalText ?? m.text ?? "",
-            translatedText: m.translatedText ?? "",
-            mine: !!m.mine,
-            senderId: m.mine ? participantId : "staff",
-            timestamp: m.timestamp || 0,
-          })));
-        }
-      })
-      .catch(() => {});
-  }, [isHospitalGuest, roomId, participantId, state.sessionId, siteContext]);
   useEffect(() => {
     if (!isHospitalGuest || !roomId || messages.length === 0) return;
     const toSave = messages.map((m) => ({
