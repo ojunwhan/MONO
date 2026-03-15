@@ -224,8 +224,14 @@ export default function HospitalApp() {
   const navTo = useNav();
   const [searchParams] = useSearchParams();
   const template = searchParams.get("template");
+
+  useEffect(() => {
+    if (!searchParams.get("template")) {
+      navTo("/hospital-login", { replace: true });
+    }
+  }, []);
+
   if (template == null || template === "") {
-    navTo("/hospital-login", { replace: true });
     return null;
   }
 
