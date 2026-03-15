@@ -634,6 +634,7 @@ export default function FixedRoomVAD() {
             timestamp: ts,
           };
         });
+        console.log("[FixedRoomVAD History] first mapped message:", JSON.stringify(mapped[0]));
         setMessages((prev) => [...mapped, ...prev]);
       })
       .catch(() => {});
