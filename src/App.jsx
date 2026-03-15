@@ -12,28 +12,6 @@ const App = () => {
     () => localStorage.getItem("mono.onboardingDone") !== "1"
   );
   const pathname = window.location.pathname;
-  const isHospitalExact = pathname === "/hospital";
-  const [hospitalAuthGuard, setHospitalAuthGuard] = React.useState(() =>
-    isHospitalExact ? { checked: false, ok: false } : { checked: true, ok: true }
-  );
-
-  React.useEffect(() => {
-    if (!isHospitalExact) return;
-    if (hospitalAuthGuard.checked) return;
-    let cancelled = false;
-    fetch("/api/hospital/auth/me", { credentials: "include" })
-      .then((res) => {
-        if (cancelled) return;
-        setHospitalAuthGuard({ checked: true, ok: res.ok });
-        if (!res.ok) window.location.replace("/hospital-login");
-      })
-      .catch(() => {
-        if (!cancelled) setHospitalAuthGuard({ checked: true, ok: false });
-        if (!cancelled) window.location.replace("/hospital-login");
-      });
-    return () => { cancelled = true; };
-  }, [isHospitalExact, hospitalAuthGuard.checked]);
-
   const isGuestJoinRoute = pathname.startsWith("/join/")
     || pathname.startsWith("/hospital/kiosk/")
     || pathname.startsWith("/hospital/join/")
@@ -83,20 +61,6 @@ const App = () => {
       window.removeEventListener("mono:fontSizeChanged", applyFontSize);
     };
   }, []);
-
-  if (isHospitalExact && !hospitalAuthGuard.checked) {
-    return (
-      <>
-        <InAppBlocker />
-        <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-bg)] text-[var(--color-text)]">
-          <span>로그인 확인 중...</span>
-        </div>
-      </>
-    );
-  }
-  if (isHospitalExact && hospitalAuthGuard.checked && !hospitalAuthGuard.ok) {
-    return <InAppBlocker />;
-  }
 
   return (
     <>
