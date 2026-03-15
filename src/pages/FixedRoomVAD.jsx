@@ -619,14 +619,16 @@ export default function FixedRoomVAD() {
         console.log("[FixedRoomVAD History] fetched messages count:", rows.length);
         if (!rows.length) return;
         const mapped = data.messages.map((m) => {
-          const isHost = String(m.sender_role || "").toLowerCase() === "host";
+          const isHost = m.sender_role === "host";
           const ts = m.created_at
             ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime())
             : Date.now();
+          const orig = m.original_text || "";
+          const trans = m.translated_text || orig;
           return {
             id: m.id || `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
-            originalText: m.original_text || "",
-            translatedText: isHost ? (m.original_text || "") : (m.translated_text || m.original_text || ""),
+            originalText: orig,
+            translatedText: isHost ? orig : trans,
             mine: isHost,
             senderId: isHost ? participantId : "partner",
             timestamp: ts,
