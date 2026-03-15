@@ -271,7 +271,7 @@ export default function HospitalDashboard() {
           </h1>
           <button
             type="button"
-            onClick={() => navigate("/hospital?template=reception")}
+            onClick={() => { window.location.href = "/hospital?template=reception"; }}
             className="ml-auto text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
           >
             ← 통역 대기창
