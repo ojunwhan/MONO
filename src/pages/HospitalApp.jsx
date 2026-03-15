@@ -150,19 +150,13 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
           <MonoLogo />
         </div>
 
-        {/* International Patients Only ? 3D marquee (two spans, seamless loop) */}
-        <div className="w-full mb-4 sm:mb-6" style={{ perspective: "800px", overflow: "hidden" }}>
-          <div className="relative kiosk-marquee-container">
-            <span
-              className="kiosk-marquee text-2xl sm:text-3xl font-bold whitespace-nowrap"
-              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
-            >
+        {/* International Patients Only — left-to-right marquee (parent overflow hidden, content scrolls) */}
+        <div className="kiosk-marquee-outer w-full mb-4 sm:mb-6">
+          <div className="kiosk-marquee-track">
+            <span className="kiosk-marquee-text text-2xl sm:text-3xl font-bold whitespace-nowrap" style={{ color: "#F97316" }}>
               International Patients Only
             </span>
-            <span
-              className="kiosk-marquee kiosk-marquee-2 text-2xl sm:text-3xl font-bold whitespace-nowrap"
-              style={{ color: "#F97316", transformStyle: "preserve-3d" }}
-            >
+            <span className="kiosk-marquee-text text-2xl sm:text-3xl font-bold whitespace-nowrap" style={{ color: "#F97316" }}>
               International Patients Only
             </span>
           </div>
@@ -188,31 +182,24 @@ function ConsultationKioskView({ template, urlRoom, roomName, staffDept, authUse
       </div>
 
       <style>{`
-        @keyframes kioskMarquee {
-          0% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
-          8% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
-          43% { transform: translateX(100vw) translateZ(0) rotateY(0deg); opacity: 1; }
-          48% { transform: translateX(100vw) translateZ(0) rotateY(90deg); opacity: 0; }
-          50% { transform: translateX(-100%) translateZ(0) rotateY(-90deg); opacity: 0; }
-          53% { transform: translateX(-100%) translateZ(0) rotateY(0deg); opacity: 1; }
-          92% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
-          100% { transform: translateX(calc(50vw - 50%)) translateZ(0) rotateY(0deg); opacity: 1; }
-        }
-        .kiosk-marquee {
-          position: absolute;
-          left: 0;
-          top: 0;
-          animation: kioskMarquee 14s ease-in-out infinite;
-          backface-visibility: hidden;
-          line-height: 1.5;
-        }
-        .kiosk-marquee-2 {
-          animation-delay: -7s;
-        }
-        .kiosk-marquee-container {
+        .kiosk-marquee-outer {
+          overflow: hidden;
           min-height: 2.75em;
           padding: 0.35em 0;
-          overflow: hidden;
+        }
+        .kiosk-marquee-track {
+          display: flex;
+          width: max-content;
+          animation: kioskMarquee 20s linear infinite;
+        }
+        .kiosk-marquee-text {
+          flex-shrink: 0;
+          padding-right: 1.5em;
+          line-height: 1.5;
+        }
+        @keyframes kioskMarquee {
+          0% { transform: translateX(-50%); }
+          100% { transform: translateX(0); }
         }
       `}</style>
     </div>
@@ -428,11 +415,13 @@ export default function HospitalApp() {
       template === "reception" && urlRoom
         ? `${origin}/hospital?template=reception&room=${encodeURIComponent(urlRoom)}${org ? `&org=${encodeURIComponent(org)}` : ""}`
         : null;
+    // Kiosk: avoid showing "???" for staff/dept title when authUser is null; use English label instead
+    const staffDeptForPanel = kiosk ? { ...staffDept, labelKo: staffDept.label || staffDept.labelKo } : staffDept;
     console.log("rendering StaffModePanel", { step, hasStaffParams, kiosk });
     return (
       <StaffModePanel
         template={template}
-        selectedDept={staffDept}
+        selectedDept={staffDeptForPanel}
         roomName={roomName}
         consultationRoomId={urlRoom || null}
         returnToReceptionUrl={returnToReceptionUrl}
