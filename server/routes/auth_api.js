@@ -931,6 +931,27 @@ module.exports = function attachAuthApi(app) {
     }
   });
 
+  // GET /api/hospital/patient-by-room/:roomId/history — room_id로 환자 찾아 해당 환자 세션들의 메시지 최근 30건
+  app.get("/api/hospital/patient-by-room/:roomId/history", async (req, res) => {
+    try {
+      const roomId = String(req.params.roomId || "").trim();
+      if (!roomId) return res.json({ success: true, messages: [] });
+      const patient = await get(
+        "SELECT patient_token FROM hospital_patients WHERE room_id = ? ORDER BY created_at DESC LIMIT 1",
+        [roomId]
+      );
+      if (!patient?.patient_token) return res.json({ success: true, messages: [] });
+      const rows = await all(
+        "SELECT id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, created_at FROM hospital_messages WHERE session_id IN (SELECT id FROM hospital_sessions WHERE patient_token = ?) ORDER BY created_at ASC LIMIT 30",
+        [patient.patient_token]
+      );
+      return res.json({ success: true, messages: rows || [] });
+    } catch (e) {
+      console.error("[hospital:patient-by-room:history]", e?.message);
+      return res.status(500).json({ error: "history_lookup_failed" });
+    }
+  });
+
   // ── Account deletion ──
   app.delete("/api/auth/account", verifyToken, async (req, res) => {
     try {

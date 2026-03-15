@@ -3,7 +3,7 @@
 // /hospital?template=&room=&kiosk=true ? ???? QR ??
 // ? ? /hospital ? /hospital-dashboard ?????
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useLocation, useNavigate as useNav, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate as useNav, useSearchParams, Navigate } from "react-router-dom";
 import { detectUserLanguage } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
@@ -223,8 +223,12 @@ export default function HospitalApp() {
   const location = useLocation();
   const navTo = useNav();
   const [searchParams] = useSearchParams();
+  const template = searchParams.get("template");
+  if (template == null || template === "") {
+    navTo("/hospital-login", { replace: true });
+    return null;
+  }
 
-  const template = searchParams.get("template") || "reception";
   const kiosk = searchParams.get("kiosk") === "true";
   const urlRoom = searchParams.get("room") || "";
 
@@ -407,51 +411,7 @@ export default function HospitalApp() {
     const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || hospitalOrgCode || "";
 
     if (!kiosk && !urlRoom && isHospitalAdmin) {
-      const handleCreateRoom = async (e) => {
-        e.preventDefault();
-        if (!newRoomName.trim() || creatingRoom) return;
-        setCreatingRoom(true);
-        try {
-          const res = await fetch("/api/hospital/rooms", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ name: newRoomName.trim() }),
-          });
-          const data = await res.json();
-          if (data?.success && data?.room?.id) {
-            navTo(`/hospital?template=reception&room=${encodeURIComponent(data.room.id)}${org ? `&org=${encodeURIComponent(org)}` : ""}`, { replace: true });
-          }
-        } catch {
-          // ignore
-        } finally {
-          setCreatingRoom(false);
-        }
-      };
-      return (
-        <div className="min-h-dvh flex items-center justify-center bg-[var(--color-bg)]">
-          <form onSubmit={handleCreateRoom} className="w-full max-w-sm mx-auto px-6">
-            <HospitalLogo />
-            <h2 className="mt-8 text-lg font-bold text-[var(--color-text)]">Create Room</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Enter a name for this room</p>
-            <input
-              type="text"
-              value={newRoomName}
-              onChange={(e) => setNewRoomName(e.target.value)}
-              placeholder="e.g. Reception, Consultation 1"
-              className="mt-4 w-full h-[48px] px-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-sm outline-none focus:ring-2 focus:ring-[#7C6FEB]"
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={!newRoomName.trim() || creatingRoom}
-              className="mt-4 w-full h-[48px] rounded-[12px] bg-[#7C6FEB] text-white font-semibold text-sm disabled:opacity-40"
-            >
-              {creatingRoom ? "Creating..." : "Start"}
-            </button>
-          </form>
-        </div>
-      );
+      return <Navigate to="/hospital-dashboard" replace />;
     }
 
     const origin = typeof window !== "undefined" ? window.location.origin : "";
