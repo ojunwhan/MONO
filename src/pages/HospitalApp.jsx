@@ -354,7 +354,7 @@ export default function HospitalApp() {
 
   const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
   if (!kiosk && hospitalAuthChecked && !isHospitalAdmin) return null;
-  if (!kiosk && !authChecked) return null;
+  if (!kiosk && (!authChecked || !hospitalOrgCode)) return null;
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital?template=reception", { replace: true }); };
