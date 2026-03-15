@@ -1173,10 +1173,8 @@ export default function FixedRoomVAD() {
 
   // ── 텍스트 메시지 전송 (send-message) ──
   const sendTextMessage = useCallback(() => {
-    console.log('[sendTextMessage] called', { textInputValue, roomId, participantId, socketConnected: socket.connected, socketId: socket.id });
     const trimmed = (textInputValue || "").trim();
     if (!trimmed || !roomId || !participantId) return;
-    console.log('[sendTextMessage] passed guard, emitting send-message');
     const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     setMessages((prev) => {
       const next = [
@@ -1198,7 +1196,6 @@ export default function FixedRoomVAD() {
       participantId,
       message: { id: msgId, text: trimmed },
     });
-    console.log('[sendTextMessage] emit done');
   }, [roomId, participantId, textInputValue]);
 
   // ── 뒤로 가기 ──
