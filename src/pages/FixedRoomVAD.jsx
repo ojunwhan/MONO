@@ -586,6 +586,7 @@ export default function FixedRoomVAD() {
   const messagesRef = useRef([]);
   const savedMessageIdsRef = useRef(new Set());
   const endedFlushDoneRef = useRef(false);
+  const historyLoadedRef = useRef(false);
 
   // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 (step 선언 이후에 배치) ──
   const [orgCopySettings, setOrgCopySettings] = useState(null);
@@ -601,6 +602,40 @@ export default function FixedRoomVAD() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [step, isOwner, orgCode]);
+
+  // ── roomId 기준 이전 대화 히스토리 로드 (1회, 상단에 선행 메시지로 삽입) ──
+  useEffect(() => {
+    console.log("[FixedRoomVAD History] useEffect triggered, roomId:", roomId);
+    if (!roomId) return;
+    if (historyLoadedRef.current) {
+      console.log("[FixedRoomVAD History] already loaded, skipping");
+      return;
+    }
+    historyLoadedRef.current = true;
+    fetch(`/api/hospital/patient-by-room/${encodeURIComponent(roomId)}/history`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const rows = data?.messages ?? [];
+        console.log("[FixedRoomVAD History] fetched messages count:", rows.length);
+        if (!rows.length) return;
+        const mapped = data.messages.map((m) => {
+          const isHost = String(m.sender_role || "").toLowerCase() === "host";
+          const ts = m.created_at
+            ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime())
+            : Date.now();
+          return {
+            id: m.id || `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+            originalText: m.original_text || "",
+            translatedText: isHost ? (m.original_text || "") : (m.translated_text || m.original_text || ""),
+            mine: isHost,
+            senderId: isHost ? participantId : "partner",
+            timestamp: ts,
+          };
+        });
+        setMessages((prev) => [...mapped, ...prev]);
+      })
+      .catch(() => {});
+  }, [roomId]);
 
   // ── 입장 시 pending 메시지(직원이 보낸 오프라인 메시지)를 목록에 반영 ──
   useEffect(() => {
