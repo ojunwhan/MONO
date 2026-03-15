@@ -333,6 +333,19 @@ export default function HospitalApp() {
   if (!kiosk && hospitalAuthChecked && !isHospitalAdmin) return null;
   if (!kiosk && (!authChecked || !hospitalOrgCode)) return null;
 
+  if (kiosk) {
+    return (
+      <ConsultationKioskView
+        template={template}
+        urlRoom={urlRoom || ""}
+        roomName={roomName}
+        staffDept={staffDept}
+        authUser={authUser}
+        searchParams={searchParams}
+      />
+    );
+  }
+
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital?template=reception", { replace: true }); };
     const handleCopySummary = () => {
@@ -381,19 +394,6 @@ export default function HospitalApp() {
           <p className="mt-8 text-center text-[10px] text-[var(--color-text-secondary)]">Powered by MONO Medical Interpreter</p>
         </div>
       </div>
-    );
-  }
-
-  if (hasKioskParams) {
-    return (
-      <ConsultationKioskView
-        template={template}
-        urlRoom={urlRoom}
-        roomName={roomName}
-        staffDept={staffDept}
-        authUser={authUser}
-        searchParams={searchParams}
-      />
     );
   }
 
