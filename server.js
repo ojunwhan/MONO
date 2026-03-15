@@ -3397,6 +3397,8 @@ io.on('connection', (socket) => {
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
         }
+        // Strip ALL leading [tag] (e.g. [Korean], [Professional Medical Korean]) before sending/saving
+        if (typeof translated === 'string') translated = translated.replace(/^(\[.*?\]\s*)+/, '').trim();
         if (isGarbageText(translated)) return;
 
         // → Other: 번역 시 스트리밍으로 이미 전송됨. 동일 언어 시 receive-message로 한 번에 전송
@@ -3822,6 +3824,9 @@ io.on('connection', (socket) => {
               }
             } catch (e) { console.warn("[stt:whisper][translate]:", e?.message); }
           }
+          // Strip ALL leading [tag] (e.g. [Korean], [Professional Medical Korean]) before every use
+          const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
+          translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
           await dbRun(
             `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
@@ -5569,6 +5574,28 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
   }
 });
 
+// GET /api/hospital/patient-by-room/:roomId/history — roomId 기준 이전 대화 메시지 (최대 100건)
+app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.json({ success: false, message: 'Missing roomId' });
+
+    const messages = await dbAll(
+      `SELECT id, room_id, sender_role, original_text, translated_text, sender_lang, translated_lang, created_at
+       FROM hospital_messages
+       WHERE room_id = ?
+       ORDER BY id ASC
+       LIMIT 100`,
+      [roomId]
+    );
+
+    res.json({ success: true, messages: messages || [] });
+  } catch (err) {
+    console.error('[patient-by-room history]', err);
+    res.json({ success: false, message: 'Server error' });
+  }
+});
+
 // POST /api/hospital/patient/:patientToken/message — 직원이 퇴원 환자에게 오프라인 메시지 저장
 app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
   try {
@@ -5809,7 +5836,7 @@ app.get('/api/hospital/dashboard/stats', requireHospitalAdminJwt, async (req, re
   }
 });
 
-// GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (JWT org_code로 필터)
+// GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (hospital_sessions + message_count, JWT org_code로 필터)
 app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req, res) => {
   try {
     const { startDate, endDate, department, language, search, page: pg, limit: lim } = req.query;
@@ -5818,33 +5845,32 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req,
     const offset = (page - 1) * limit;
 
     const orgCodeFilter = req.hospitalOrgCode || 'UNKNOWN';
-    let where = "(COALESCE(s.org_code, 'UNKNOWN') = ?)";
+    let where = "(COALESCE(hs.org_code, 'UNKNOWN') = ?)";
     const params = [orgCodeFilter];
 
-    if (startDate) { where += ' AND DATE(s.created_at) >= ?'; params.push(startDate); }
-    if (endDate) { where += ' AND DATE(s.created_at) <= ?'; params.push(endDate); }
-    if (department) { where += ' AND (s.department = ? OR s.dept = ?)'; params.push(department, department); }
-    if (language) { where += ' AND (s.guest_lang = ? OR s.host_lang = ?)'; params.push(language, language); }
+    if (startDate) { where += ' AND DATE(COALESCE(hs.started_at, hs.created_at)) >= ?'; params.push(startDate); }
+    if (endDate) { where += ' AND DATE(COALESCE(hs.started_at, hs.created_at)) <= ?'; params.push(endDate); }
+    if (department) { where += ' AND (hs.department = ? OR hs.dept = ?)'; params.push(department, department); }
+    if (language) { where += ' AND (hs.guest_lang = ? OR hs.host_lang = ?)'; params.push(language, language); }
     if (search) {
-      where += ' AND (s.chart_number LIKE ? OR s.room_id LIKE ?)';
+      where += ' AND (hs.chart_number LIKE ? OR hs.room_id LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    // Total count
+    // Total count (same filters, no JOIN)
     const countRow = await dbGet(
-      `SELECT COUNT(*) as total FROM hospital_sessions s WHERE ${where}`, params
+      `SELECT COUNT(*) as total FROM hospital_sessions hs WHERE ${where}`,
+      params
     );
 
-    // Sessions with message count
+    // Sessions from hospital_sessions with message_count via LEFT JOIN + GROUP BY
     const sessions = await dbAll(
-      `SELECT s.*,
-              (SELECT COUNT(*) FROM hospital_messages m WHERE m.session_id = s.id) as message_count,
-              CASE WHEN s.ended_at IS NOT NULL AND s.created_at IS NOT NULL
-                THEN ROUND((julianday(s.ended_at) - julianday(s.created_at)) * 24 * 60, 1)
-                ELSE NULL END as duration_min
-       FROM hospital_sessions s
+      `SELECT hs.id, hs.room_id, hs.patient_token, hs.dept, hs.started_at, hs.ended_at, hs.status, COUNT(hm.id) as message_count
+       FROM hospital_sessions hs
+       LEFT JOIN hospital_messages hm ON hm.session_id = hs.id
        WHERE ${where}
-       ORDER BY s.created_at DESC
+       GROUP BY hs.id
+       ORDER BY hs.started_at DESC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -5897,7 +5923,7 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
   }
 });
 
-// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (로그 파일에서 읽음, org 소유만)
+// GET /api/hospital/sessions/:sessionId/messages — 세션별 대화 내역 (session_id로만 필터, org 소유만)
 app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, async (req, res) => {
   try {
     const orgCode = req.hospitalOrgCode || 'UNKNOWN';
@@ -5907,21 +5933,10 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
       [sessionId, orgCode]
     );
     if (!session) return res.status(404).json({ error: 'session_not_found' });
-    const roomId = session.room_id || null;
-    const patientToken = session.patient_token || null;
-    let content = null;
-    if (roomId) {
-      const archiveBase = patientToken ? `${patientToken}_${roomId}` : roomId;
-      const archivePath = path.join(LOGS_RECORDS_DIR, `${archiveBase}.txt`);
-      const sessionPath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
-      if (fs.existsSync(archivePath)) {
-        content = fs.readFileSync(archivePath, 'utf8');
-      } else if (fs.existsSync(sessionPath)) {
-        content = fs.readFileSync(sessionPath, 'utf8');
-      }
-    }
-    const messages = content ? parseSessionLogFile(content, session, sessionId) : [];
-    res.json({ success: true, session, messages });
+    const messagesQuery = 'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC';
+    console.log('[hospital:sessions:messages]', { sessionId, query: messagesQuery });
+    const messages = await dbAll(messagesQuery, [sessionId]);
+    res.json({ success: true, session, messages: messages || [] });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
   }
