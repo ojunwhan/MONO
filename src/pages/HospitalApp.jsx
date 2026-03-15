@@ -423,10 +423,6 @@ export default function HospitalApp() {
   if (hasStaffParams) {
     const org = searchParams.get("org") || authUser?.org_code || authUser?.orgCode || hospitalOrgCode || "";
 
-    if (!kiosk && !urlRoom && isHospitalAdmin) {
-      return <Navigate to="/hospital?template=reception" replace />;
-    }
-
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const returnToReceptionUrl =
       template === "reception" && urlRoom
