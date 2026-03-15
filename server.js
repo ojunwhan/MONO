@@ -5239,55 +5239,23 @@ app.post('/api/hospital/join', async (req, res) => {
       }
     }
 
-    // 2) 해당 환자의 기존 활성 세션 조회 + 재방문 횟수
-    let existingSession = null;
+    // 2) Persistent PT room per patient: use hospital_patients.room_id if set, else create new and save
     let visitCount = 0;
     if (pToken) {
-      existingSession = await dbGet(
-        `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-        [pToken]
-      );
       try {
         const vcRow = await dbGet('SELECT COUNT(*) as c FROM hospital_sessions WHERE patient_token = ?', [pToken]);
         visitCount = vcRow?.c || 0;
       } catch (_) {}
     }
 
+    const patientRow = pToken ? await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [pToken]).catch(() => null) : null;
     let roomId;
-    let sessionId;
     let isExistingSession = false;
 
-    if (existingSession && existingSession.room_id) {
-      // 3) 기존 활성 세션 있으면 → 그 roomId 반환
-      roomId = existingSession.room_id;
-      sessionId = existingSession.id;
+    if (patientRow && patientRow.room_id) {
+      roomId = patientRow.room_id;
       isExistingSession = true;
-      if (!ROOMS.has(roomId)) {
-        ROOMS.set(roomId, {
-          roomType: 'oneToOne',
-          ownerLang: 'auto',
-          guestLang: lang ? mapLang(lang) : 'auto',
-          siteContext: hospitalSiteContext,
-          locked: true,
-          ownerPid: null,
-          participants: {},
-          callSignCounters: {},
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-          hospitalMode: true,
-          department: dept,
-          patientToken: pToken,
-          hospitalSessionId: sessionId,
-        });
-      }
-      console.log(`[hospital:join] 🏥 Patient reconnected to existing channel dept=${dept} room=${roomId} token=${pToken}`);
-      const reconnectMeta = ROOMS.get(roomId);
-      if (reconnectMeta) {
-        const reconnectWaitingData = { roomId, department: dept, patientToken: pToken, language: reconnectMeta.guestLang, sessionId: reconnectMeta.hospitalSessionId };
-        io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', reconnectWaitingData);
-        io.to('hospital:watch:__all__').emit('hospital:patient-waiting', reconnectWaitingData);
-      }
     } else {
-      // 4) 없으면 → 새 roomId PT-XXXXXX 생성, 중복 체크
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let candidate;
       let exists;
@@ -5295,21 +5263,32 @@ app.post('/api/hospital/join', async (req, res) => {
         candidate = 'PT-';
         for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
         exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
+        if (!exists) exists = await dbGet('SELECT 1 FROM hospital_patients WHERE room_id = ? LIMIT 1', [candidate]);
       } while (exists);
       roomId = candidate;
-      const createdAt = new Date().toISOString();
-      sessionId = uuidv4();
-      try {
-        await dbRun(
-          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode]
-        );
-      } catch (dbErr) {
-        console.warn('[hospital:join] session insert warning:', dbErr?.message);
-        trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
+      if (pToken) {
+        try {
+          await dbRun('UPDATE hospital_patients SET room_id = ?, last_visit_at = datetime(\'now\'), dept = ? WHERE patient_token = ?', [roomId, dept, pToken]);
+        } catch (dbErr) {
+          console.warn('[hospital:join] patient room_id update warning:', dbErr?.message);
+        }
       }
+    }
 
+    const createdAt = new Date().toISOString();
+    const sessionId = uuidv4();
+    try {
+      await dbRun(
+        `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+        [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode]
+      );
+    } catch (dbErr) {
+      console.warn('[hospital:join] session insert warning:', dbErr?.message);
+      trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
+    }
+
+    if (!ROOMS.has(roomId)) {
       ROOMS.set(roomId, {
         roomType: 'oneToOne',
         ownerLang: 'auto',
@@ -5325,14 +5304,14 @@ app.post('/api/hospital/join', async (req, res) => {
         patientToken: pToken,
         hospitalSessionId: sessionId,
       });
-
-      if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
-      HOSPITAL_WAITING.get(dept).push({ roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount });
-      const waitingData = { roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount };
-      io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
-      io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
-      console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${roomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'}`);
     }
+
+    if (!HOSPITAL_WAITING.has(dept)) HOSPITAL_WAITING.set(dept, []);
+    HOSPITAL_WAITING.get(dept).push({ roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount });
+    const waitingData = { roomId, department: dept, createdAt, patientToken: pToken, language: lang, sessionId, visitCount };
+    io.to(`hospital:watch:${dept}`).emit('hospital:patient-waiting', waitingData);
+    io.to('hospital:watch:__all__').emit('hospital:patient-waiting', waitingData);
+    console.log(`[hospital:join] 🏥 Patient joined dept=${dept} room=${roomId} ctx=${hospitalSiteContext} token=${pToken || 'anonymous'} isExistingRoom=${isExistingSession}`);
 
     res.json({
       success: true,
