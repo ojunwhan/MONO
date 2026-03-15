@@ -258,6 +258,7 @@ export default function HospitalApp() {
   const [authUser, setAuthUser] = useState(null);
   const [hospitalOrgCode, setHospitalOrgCode] = useState("");
   const [hospitalAuthChecked, setHospitalAuthChecked] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [saveMode, setSaveMode] = useState(false);
   const [summaryMessages, setSummaryMessages] = useState([]);
   const [summaryDept, setSummaryDept] = useState(null);
@@ -312,14 +313,15 @@ export default function HospitalApp() {
   }, [kiosk]);
 
   useEffect(() => {
-    if (kiosk) { setHospitalAuthChecked(true); return; }
+    if (kiosk) { setHospitalAuthChecked(true); setAuthChecked(true); return; }
     fetch("/api/hospital/auth/me", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
         if (data?.org_code) setHospitalOrgCode(data.org_code);
         setHospitalAuthChecked(true);
+        setAuthChecked(true);
       })
-      .catch(() => setHospitalAuthChecked(true));
+      .catch(() => { setHospitalAuthChecked(true); setAuthChecked(true); });
   }, [kiosk]);
 
   useEffect(() => {
@@ -348,6 +350,7 @@ export default function HospitalApp() {
 
   const isHospitalAdmin = !!hospitalOrgCode || (authUser && (authUser.accountType === "organization" || authUser.org_code || authUser.orgCode));
   if (!kiosk && hospitalAuthChecked && !isHospitalAdmin) return null;
+  if (!kiosk && !authChecked) return null;
 
   if (step === "summary") {
     const handleNewSession = () => { setSummaryMessages([]); setSummaryDept(null); setStep("choose"); navTo("/hospital?template=reception", { replace: true }); };
@@ -434,6 +437,7 @@ export default function HospitalApp() {
         consultationRoomId={urlRoom || null}
         returnToReceptionUrl={returnToReceptionUrl}
         orgCode={org}
+        authChecked={authChecked}
         selectedLang={selectedLang}
         setSelectedLang={setSelectedLang}
         showLangGrid={showLangGrid}
@@ -450,7 +454,7 @@ export default function HospitalApp() {
   return null;
 }
 
-function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode: orgCodeProp, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack, kiosk }) {
+function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, returnToReceptionUrl, orgCode: orgCodeProp, authChecked, selectedLang, setSelectedLang, showLangGrid, setShowLangGrid, saveMode, setSaveMode, navTo, onBack, kiosk }) {
   const orgCodeFromUrl = new URLSearchParams(window.location.search).get("org") || "";
   const orgCode = orgCodeProp || orgCodeFromUrl;
   const [waitingPatients, setWaitingPatients] = useState([]);
@@ -497,7 +501,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         joinedRef.current = false;
       };
     } else {
-      if (!orgCode) return;
+      if (!authChecked) return;
       if (joinedRef.current) return;
       joinedRef.current = true;
       const department = orgCode;
