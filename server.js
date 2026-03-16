@@ -5945,9 +5945,10 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
       [sessionId, orgCode]
     );
     if (!session) return res.status(404).json({ error: 'session_not_found' });
-    const messagesQuery = 'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC';
-    console.log('[hospital:sessions:messages]', { sessionId, query: messagesQuery });
-    const messages = await dbAll(messagesQuery, [sessionId]);
+    const roomId = session.room_id;
+    const messagesQuery = 'SELECT * FROM hospital_messages WHERE room_id = ? ORDER BY created_at ASC';
+    console.log('[hospital:sessions:messages]', { sessionId, roomId, query: messagesQuery });
+    const messages = await dbAll(messagesQuery, [roomId]);
     res.json({ success: true, session, messages: messages || [] });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
