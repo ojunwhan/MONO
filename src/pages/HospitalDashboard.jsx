@@ -1153,7 +1153,7 @@ function HistoryPanel() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[var(--color-border)]">
-                  {["날짜/시간", "차트번호", "진료과", "사용 언어", "통역 시간", "메시지 수", "액션"].map((h) => (
+                  {["최근 활동", "차트번호", "환자", "진료과", "사용 언어", "메시지 수", "액션"].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider"
@@ -1170,25 +1170,27 @@ function HistoryPanel() {
                     className="group border-b border-[var(--color-border)] hover:bg-[var(--color-bg-secondary)] transition-colors"
                   >
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
-                      {formatDate(s.created_at)}
+                      {formatDate(s.last_started_at)}
                     </td>
                     <td className="px-4 py-3 text-[12px] font-mono text-[var(--color-text)]">
-                      {s.room_id || formatChartNumber(s.chart_number) || "-"}
+                      {s.chart_number || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
+                      <div className="flex items-center gap-1.5">
+                        {s.language && (
+                          <span className="text-[var(--color-text-secondary)] text-[11px]">{getLangDisplay(s.language)}</span>
+                        )}
+                        <span>{s.name || "-"}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       <span className="flex items-center gap-1.5">
-                        <span>{getDeptIcon(s.department)}</span>
-                        {getDeptLabel(s.department)}
+                        <span>{getDeptIcon(s.dept)}</span>
+                        {getDeptLabel(s.dept)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
-                      <span className="flex items-center gap-1">
-                        <Globe size={12} className="text-[var(--color-text-secondary)]" />
-                        {getLangDisplay(s.guest_lang)} → {getLangDisplay(s.host_lang)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
-                      {s.duration_min != null ? `${s.duration_min}분` : "-"}
+                      {getLangDisplay(s.language) || "-"}
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       <span className="flex items-center gap-1">
