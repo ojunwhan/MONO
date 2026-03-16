@@ -3502,7 +3502,7 @@ io.on('connection', (socket) => {
 
         // ── Save to DB: when saveMessages is true, or when hospital mode and saveMessages not explicitly false ──
         const isOrgContext = String(meta.siteContext || "").startsWith("org_");
-        const shouldSaveMessages = !meta.hospitalEndedSession && (meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg));
+        const shouldSaveMessages = !meta.hospitalEndedSession && (meta.saveMessages === true || (meta.saveMessages !== false && isHospitalMsg) || (roomId && roomId.startsWith('PT-')));
         if (shouldSaveMessages && roomId) {
           try {
             const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
