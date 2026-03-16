@@ -5336,7 +5336,7 @@ app.post('/api/hospital/join', async (req, res) => {
 // POST /api/hospital/patient — 환자 토큰으로 등록/업데이트 (QR 스캔 시)
 app.post('/api/hospital/patient', async (req, res) => {
   try {
-    const { patientToken, patientId, language, department } = req.body || {};
+    const { patientToken, patientId, language, department, name } = req.body || {};
     const pToken = patientToken || patientId;
     if (!pToken) return res.status(400).json({ error: 'patient_token_required' });
     const token = String(pToken).trim();
@@ -5347,8 +5347,8 @@ app.post('/api/hospital/patient', async (req, res) => {
     const existing = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
     if (existing) {
       await dbRun(
-        `UPDATE hospital_patients SET last_visit_at = datetime('now'), dept = ? WHERE patient_token = ?`,
-        [dept, token]
+        `UPDATE hospital_patients SET last_visit_at = datetime('now'), dept = ?, name = COALESCE(?, name) WHERE patient_token = ?`,
+        [dept, name || null, token]
       );
       const updated = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
       return res.json({ success: true, patient: updated, isNew: false });
@@ -5356,8 +5356,8 @@ app.post('/api/hospital/patient', async (req, res) => {
 
     // New registration
     await dbRun(
-      `INSERT INTO hospital_patients (id, chart_number, patient_token, dept, first_visit_at, last_visit_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [token, token, token, dept]
+      `INSERT INTO hospital_patients (id, chart_number, patient_token, dept, first_visit_at, last_visit_at, name) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?)`,
+      [token, token, token, dept, name || '']
     );
     const patient = await dbGet('SELECT * FROM hospital_patients WHERE patient_token = ?', [token]);
     console.log(`[hospital] 👤 Patient registered: token=${token} lang=${lang} dept=${dept}`);
