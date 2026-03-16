@@ -3523,7 +3523,6 @@ io.on('connection', (socket) => {
             }
             const senderRole = rec.role === 'owner' ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
-            console.log('[HOSPITAL-SAVE-A] path 3527, roomId:', roomId, 'senderRole:', senderRole, 'text:', finalText?.substring(0, 30));
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3829,7 +3828,6 @@ io.on('connection', (socket) => {
           const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
           translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
-          console.log('[HOSPITAL-SAVE-B] path 3832, roomId:', roomId, 'senderRole:', senderRole, 'text:', normalized?.substring(0, 30));
           await dbRun(
             `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3911,7 +3909,7 @@ io.on('connection', (socket) => {
     ackReply({ ok: true, accepted: true });
 
     // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
-    if (meta.hospitalSessionId || meta.hospitalMode) {
+    if (meta.hospitalSessionId || meta.hospitalMode || (roomId && roomId.startsWith('PT-'))) {
       const senderRole = rec.role === 'owner' ? 'host' : 'guest';
       (async () => {
         const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
@@ -4021,7 +4019,7 @@ io.on('connection', (socket) => {
           }
         }
         // ── Hospital: update translated text ──
-        if (meta.hospitalSessionId || meta.hospitalMode) {
+        if (meta.hospitalSessionId || meta.hospitalMode || (roomId && roomId.startsWith('PT-'))) {
           dbRun(
             `UPDATE hospital_messages SET translated_text = ?, translated_lang = ? WHERE id = ?`,
             [finalizedForTts, toLang, id]
@@ -4047,7 +4045,7 @@ io.on('connection', (socket) => {
       } catch (e) { console.warn("[tts:send-msg]:", e?.message); }
 
       // ── Hospital mode: auto-save message to DB ──
-      if (isHospitalMsg2 && roomId) {
+      if ((isHospitalMsg2 || (roomId && roomId.startsWith('PT-'))) && roomId) {
         try {
           const sessionRow2 = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
           const pToken2 = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow2?.patient_token ?? null;
@@ -5613,7 +5611,6 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
-    console.log('[HOSPITAL-SAVE-C] path 5615');
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
@@ -5737,7 +5734,6 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
-    console.log('[HOSPITAL-SAVE-D] path 5738');
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
