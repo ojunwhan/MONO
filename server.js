@@ -2825,10 +2825,19 @@ io.on('connection', (socket) => {
     socket.data.participantId = participantId;
     updateUserPresence(participantId, { activeRoomId: roomId, visibilityState: "visible", socketId: socket.id });
 
-    const isOwner = roleHint === "owner"
-      ? true
-      : (meta.ownerPid === participantId ? true : (!meta.ownerPid && roleHint !== "guest"));
-    if (isOwner) meta.ownerPid = participantId;
+    // PT- rooms: role by roleHint/patientToken only (join order must not flip owner/guest)
+    const isPTRoom = String(roomId).startsWith('PT-');
+    let isOwner;
+    if (isPTRoom) {
+      const isGuest = roleHint === 'guest' || (meta.patientToken && participantId === meta.patientToken);
+      isOwner = !isGuest;
+      if (isOwner) meta.ownerPid = participantId;
+    } else {
+      isOwner = roleHint === "owner"
+        ? true
+        : (meta.ownerPid === participantId ? true : (!meta.ownerPid && roleHint !== "guest"));
+      if (isOwner) meta.ownerPid = participantId;
+    }
     const serverRole = isOwner ? "owner" : "guest";
     SOCKET_ROLES.set(socket.id, { role: serverRole });
 
