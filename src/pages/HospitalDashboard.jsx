@@ -1178,9 +1178,17 @@ function HistoryPanel() {
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
                       <div className="flex items-center gap-1.5">
                         {s.language && (
-                          <span className="text-[var(--color-text-secondary)] text-[11px]">{getLangDisplay(s.language)}</span>
+                          <img
+                            src={`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${(() => { const flag = { en: '1f1fa-1f1f8', zh: '1f1e8-1f1f3', ja: '1f1ef-1f1f5', vi: '1f1fb-1f1f3', th: '1f1f9-1f1ed', ko: '1f1f0-1f1f7', ru: '1f1f7-1f1fa', es: '1f1ea-1f1f8', fr: '1f1eb-1f1f7', de: '1f1e9-1f1ea', pt: '1f1e7-1f1f7', ar: '1f1f8-1f1e6', hi: '1f1ee-1f1f3', id: '1f1ee-1f1e9', ms: '1f1f2-1f1fe', tl: '1f1f5-1f1ed', mn: '1f1f2-1f1f3', my: '1f1f2-1f1f2', km: '1f1f0-1f1ed', lo: '1f1f1-1f1e6', ne: '1f1f3-1f1f5', bn: '1f1e7-1f1e9', ur: '1f1f5-1f1f0', tr: '1f1f9-1f1f7', uk: '1f1fa-1f1e6', pl: '1f1f5-1f1f1', it: '1f1ee-1f1f9', nl: '1f1f3-1f1f1', sv: '1f1f8-1f1ea', ka: '1f1ec-1f1ea' }; return flag[s.language] || '1f310'; })()}.svg`}
+                            alt={s.language}
+                            width={18}
+                            height={18}
+                            className="rounded-sm"
+                            style={{ objectFit: 'cover' }}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
                         )}
-                        <span>{s.name || "-"}</span>
+                        <span className="font-medium">{s.name || "-"}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--color-text)]">
