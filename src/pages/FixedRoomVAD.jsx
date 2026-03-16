@@ -729,16 +729,18 @@ export default function FixedRoomVAD() {
     const saved = savedMessageIdsRef.current;
     current.forEach((m) => {
       if (m._separator || !m.id || saved.has(m.id)) return;
+      // Only save when message is from host (staff); guest messages are already saved by server
+      if (m.mine || roleHint !== "guest") return;
       try {
         saveMessageToServer({
           sessionId: sessionIdRef.current,
           roomId,
           patientToken: patientToken || undefined,
-          senderRole: m.mine ? roleHint : "guest",
+          senderRole: "host",
           originalText: m.originalText || "",
           translatedText: m.translatedText || "",
-          senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
-          translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+          senderLang: partnerInfo?.lang || "",
+          translatedLang: fromLang,
         });
         saved.add(m.id);
       } catch (_) {}
@@ -985,16 +987,17 @@ export default function FixedRoomVAD() {
           m.id === messageId ? { ...m, translatedText: fullText ?? m.translatedText, streaming: false } : m
         );
         messagesRef.current = next;
-        if (msg && saveMessages && sessionIdRef.current && !savedMessageIdsRef.current.has(messageId)) {
+        // Only save when message is from host (staff); guest messages are already saved by server (stt:segment_end/send-message)
+        if (msg && saveMessages && sessionIdRef.current && !savedMessageIdsRef.current.has(messageId) && !msg.mine && roleHint === "guest") {
           saveMessageToServer({
             sessionId: sessionIdRef.current,
             roomId,
             patientToken,
-            senderRole: msg.mine ? roleHint : (isOwner ? "guest" : "owner"),
+            senderRole: "host",
             originalText: msg.originalText || "",
             translatedText: fullText ?? msg.translatedText ?? "",
-            senderLang: msg.mine ? fromLang : (partnerInfo?.lang || ""),
-            translatedLang: msg.mine ? (partnerInfo?.lang || "") : fromLang,
+            senderLang: partnerInfo?.lang || "",
+            translatedLang: fromLang,
           });
           savedMessageIdsRef.current.add(messageId);
         }
@@ -1040,16 +1043,17 @@ export default function FixedRoomVAD() {
         return next;
       });
 
-      if (saveMessages && sessionIdRef.current) {
+      // Only save when message is from host (staff); guest messages are already saved by server (stt:segment_end/send-message)
+      if (saveMessages && sessionIdRef.current && !isMine && roleHint === "guest") {
         saveMessageToServer({
           sessionId: sessionIdRef.current,
           roomId,
           patientToken,
-          senderRole: isMine ? roleHint : (isOwner ? "guest" : "owner"),
+          senderRole: "host",
           originalText: originalText || "",
           translatedText: translatedText || "",
-          senderLang: isMine ? fromLang : (partnerInfo?.lang || ""),
-          translatedLang: isMine ? (partnerInfo?.lang || "") : fromLang,
+          senderLang: partnerInfo?.lang || "",
+          translatedLang: fromLang,
         });
         savedMessageIdsRef.current.add(id);
       }
@@ -1132,16 +1136,18 @@ export default function FixedRoomVAD() {
         const saved = savedMessageIdsRef.current;
         current.forEach((m) => {
           if (m._separator || !m.id || saved.has(m.id)) return;
+          // Only save when message is from host (staff); guest messages are already saved by server
+          if (m.mine || roleHint !== "guest") return;
           try {
             saveMessageToServer({
               sessionId: sessionIdRef.current,
               roomId,
               patientToken: patientToken || undefined,
-              senderRole: m.mine ? roleHint : "guest",
+              senderRole: "host",
               originalText: m.originalText || "",
               translatedText: m.translatedText || "",
-              senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
-              translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+              senderLang: partnerInfo?.lang || "",
+              translatedLang: fromLang,
             });
             saved.add(m.id);
           } catch (_) {}
@@ -1310,15 +1316,17 @@ export default function FixedRoomVAD() {
       const saved = savedMessageIdsRef.current;
       current.forEach((m) => {
         if (m._separator || !m.id || saved.has(m.id)) return;
+        // Only save when message is from host (staff); guest messages are already saved by server
+        if (m.mine || roleHint !== "guest") return;
         saveMessageToServer({
           sessionId: sid,
           roomId,
           patientToken: patientToken || undefined,
-          senderRole: m.mine ? roleHint : (isOwner ? "guest" : "owner"),
+          senderRole: "host",
           originalText: m.originalText || "",
           translatedText: m.translatedText || "",
-          senderLang: m.mine ? fromLang : (partnerInfo?.lang || ""),
-          translatedLang: m.mine ? (partnerInfo?.lang || "") : fromLang,
+          senderLang: partnerInfo?.lang || "",
+          translatedLang: fromLang,
         });
         saved.add(m.id);
       });
