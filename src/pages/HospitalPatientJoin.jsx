@@ -25,8 +25,10 @@ function getPatientLabel(langCode) {
   return PATIENT_LABEL[code] || "Patient";
 }
 
-// ── patientToken localStorage 관리 ──
+// ── patientToken / name / lang localStorage 관리 ──
 const PATIENT_TOKEN_KEY = "mono_hospital_patient_token";
+const PATIENT_NAME_KEY = "mono_hospital_patient_name";
+const PATIENT_LANG_KEY = "mono_hospital_patient_lang";
 
 function getOrCreatePatientToken() {
   const existing = localStorage.getItem(PATIENT_TOKEN_KEY);
@@ -34,6 +36,31 @@ function getOrCreatePatientToken() {
   const token = `pt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   localStorage.setItem(PATIENT_TOKEN_KEY, token);
   return token;
+}
+
+function getReturningPatient() {
+  const token = localStorage.getItem(PATIENT_TOKEN_KEY);
+  const name = localStorage.getItem(PATIENT_NAME_KEY);
+  const lang = localStorage.getItem(PATIENT_LANG_KEY);
+  if (token && name && lang) return { token: token.trim(), name: name.trim(), lang: lang.trim() };
+  return null;
+}
+
+function clearReturningPatientStorage() {
+  localStorage.removeItem(PATIENT_TOKEN_KEY);
+  localStorage.removeItem(PATIENT_NAME_KEY);
+  localStorage.removeItem(PATIENT_LANG_KEY);
+}
+
+// Flag emoji for welcome-back (common hospital languages)
+const LANG_FLAG_EMOJI = {
+  en: "🇺🇸", ko: "🇰🇷", zh: "🇨🇳", ja: "🇯🇵", vi: "🇻🇳", th: "🇹🇭", id: "🇮🇩",
+  tl: "🇵🇭", mn: "🇲🇳", uz: "🇺🇿", ru: "🇷🇺", ar: "🇸🇦", es: "🇪🇸", ne: "🇳🇵",
+  my: "🇲🇲", km: "🇰🇭", fr: "🇫🇷", de: "🇩🇪", pt: "🇵🇹", it: "🇮🇹",
+};
+function getFlagEmoji(langCode) {
+  const code = String(langCode || "").toLowerCase().split("-")[0];
+  return LANG_FLAG_EMOJI[code] || "🌐";
 }
 
 export default function HospitalPatientJoin() {
@@ -68,6 +95,8 @@ export default function HospitalPatientJoin() {
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
   const [localHistoryList, setLocalHistoryList] = useState([]);
   const [patientName, setPatientName] = useState("");
+  const [returningPatient, setReturningPatient] = useState(() => getReturningPatient());
+  const returningAutoJoinDoneRef = useRef(false);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -116,6 +145,8 @@ export default function HospitalPatientJoin() {
 
       localStorage.setItem("myLang", lang);
       if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
+      localStorage.setItem(PATIENT_NAME_KEY, (patientName || "").trim() || cleanName);
+      localStorage.setItem(PATIENT_LANG_KEY, lang);
 
       let pendingMessages = [];
       try {
@@ -157,6 +188,139 @@ export default function HospitalPatientJoin() {
       joinCalledRef.current = false;
     }
   }, [orgCode, navigate, selectedLang, urlToken, urlOrg, patientName]);
+
+  // Returning patient: auto-proceed after 1.5s (call join then navigate)
+  useEffect(() => {
+    if (!returningPatient || returningAutoJoinDoneRef.current) return;
+    const t = setTimeout(async () => {
+      returningAutoJoinDoneRef.current = true;
+      setStep("connecting");
+      setError("");
+      try {
+        const { token: patientToken, name: savedName, lang: savedLang } = returningPatient;
+        await fetch("/api/hospital/patient", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patientToken, language: savedLang, department: orgCode, name: savedName }),
+        });
+        const joinBody = {
+          department: orgCode,
+          patientToken,
+          language: savedLang,
+          ...(urlOrg ? { org: urlOrg } : orgCode ? { org: orgCode } : {}),
+        };
+        const res = await fetch("/api/hospital/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(joinBody),
+        });
+        const data = await res.json();
+        if (!data.success || !data.roomId) throw new Error(data.error || "연결에 실패했습니다");
+        const roomId = data.roomId;
+        const guestId = `guest_${uuidv4().slice(0, 8)}`;
+        const cleanName = getPatientLabel(savedLang);
+        let pendingMessages = [];
+        try {
+          const historyRes = await fetch(`/api/hospital/patient/${encodeURIComponent(patientToken)}/history`);
+          const historyData = await historyRes.json().catch(() => ({}));
+          if (historyData.success && Array.isArray(historyData.messages)) pendingMessages = historyData.messages;
+        } catch (_) {}
+        sessionStorage.setItem(
+          "mono_guest",
+          JSON.stringify({
+            roomId,
+            lang: savedLang,
+            name: cleanName,
+            guestId,
+            siteContext: "hospital_reception",
+            roomType: "oneToOne",
+            joinedAt: Date.now(),
+            patientToken,
+          })
+        );
+        navigate(`/room/${roomId}`, {
+          replace: true,
+          state: {
+            fromLang: savedLang,
+            localName: cleanName,
+            guestId,
+            siteContext: "hospital_reception",
+            roomType: "oneToOne",
+            patientToken,
+            pendingMessages,
+            ...(data.sessionId ? { sessionId: data.sessionId } : {}),
+          },
+        });
+      } catch (e) {
+        console.error("[hospital:returning-join] error:", e);
+        setReturningPatient(null);
+        setError(e?.message || "연결에 실패했습니다. 다시 시도해주세요.");
+        setStep("error");
+        returningAutoJoinDoneRef.current = false;
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [returningPatient, orgCode, navigate, urlOrg]);
+
+  if (returningPatient && step !== "connecting" && step !== "error") {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#ffffff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "32px 20px",
+          boxSizing: "border-box",
+          overflowY: "auto",
+        }}
+      >
+        <MonoLogo />
+        <div style={{ fontSize: "64px", marginTop: "24px", marginBottom: "16px" }}>
+          {getFlagEmoji(returningPatient.lang)}
+        </div>
+        <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1a1a1a", margin: 0, textAlign: "center" }}>
+          Welcome back, {returningPatient.name}!
+        </h2>
+        <p style={{ fontSize: "15px", color: "#6b7280", marginTop: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span
+            style={{
+              width: "20px",
+              height: "20px",
+              border: "2px solid #e5e7eb",
+              borderTopColor: "#3B82F6",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          Connecting you now...
+        </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <button
+          type="button"
+          onClick={() => {
+            clearReturningPatientStorage();
+            setReturningPatient(null);
+          }}
+          style={{
+            marginTop: "auto",
+            paddingTop: "32px",
+            background: "none",
+            border: "none",
+            color: "#6b7280",
+            fontSize: "13px",
+            textDecoration: "underline",
+            cursor: "pointer",
+          }}
+        >
+          Not {returningPatient.name}? Tap here
+        </button>
+      </div>
+    );
+  }
+
   if (step === "language") {
     return (
       <div
