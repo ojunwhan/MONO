@@ -5564,7 +5564,7 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
   }
 });
 
-// GET /api/hospital/patient-by-room/:roomId/history — roomId 기준 이전 대화 메시지 (최대 100건)
+// GET /api/hospital/patient-by-room/:roomId/history — roomId 기준 이전 대화 메시지 (최대 100건) + patient_lang, patient_name
 app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -5579,7 +5579,22 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
       [roomId]
     );
 
-    res.json({ success: true, messages: messages || [] });
+    const sessionRow = await dbGet(
+      `SELECT s.guest_lang, s.patient_id, p.name
+       FROM hospital_sessions s
+       LEFT JOIN hospital_patients p ON s.patient_id = p.patient_id
+       WHERE s.room_id = ?
+       ORDER BY s.created_at DESC
+       LIMIT 1`,
+      [roomId]
+    ).catch(() => null);
+
+    res.json({
+      success: true,
+      messages: messages || [],
+      patient_lang: sessionRow?.guest_lang ?? null,
+      patient_name: sessionRow?.name ?? null,
+    });
   } catch (err) {
     console.error('[patient-by-room history]', err);
     res.json({ success: false, message: 'Server error' });

@@ -345,9 +345,15 @@ function InterpretingVAD({
         {messages.length === 0 ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af", fontSize: "0.95rem" }}>말하면 자동으로 감지됩니다</div>
         ) : (
-          messages.map((msg) => (
-            <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
-          ))
+          messages.map((msg) =>
+            msg._separator ? (
+              <div key={msg.id} style={{ padding: "8px 16px", margin: "8px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb", background: "#f3f4f6", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
+                이전 대화 / Previous messages
+              </div>
+            ) : (
+              <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
+            )
+          )
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -470,9 +476,15 @@ function InterpretingPTT({
         </div>
       )}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 0", background: "#fafafa" }}>
-        {messages.length === 0 ? <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af", fontSize: "0.95rem" }}>말하기 버튼을 누르고 말한 뒤 다시 클릭하면 전송됩니다</div> : messages.map((msg) => (
-          <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
-        ))}
+        {messages.length === 0 ? <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af", fontSize: "0.95rem" }}>말하기 버튼을 누르고 말한 뒤 다시 클릭하면 전송됩니다</div> : messages.map((msg) =>
+          msg._separator ? (
+            <div key={msg.id} style={{ padding: "8px 16px", margin: "8px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb", background: "#f3f4f6", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
+              이전 대화 / Previous messages
+            </div>
+          ) : (
+            <ChatBubble key={msg.id} originalText={msg.originalText} translatedText={msg.translatedText} mine={msg.mine} flagUrl={msg.mine ? (myProfile?.flagUrl || "") : (partnerFlagUrl || "")} langLabel={msg.mine ? (myProfile?.shortLabel || fromLang) : (partnerLangDisplay || "")} streaming={msg.streaming} timestamp={msg.timestamp} />
+          )
+        )}
         <div ref={messagesEndRef} />
       </div>
       <div style={{ padding: "8px 12px", background: "#ffffff", borderTop: "1px solid #f3f4f6", flexShrink: 0 }}>
@@ -577,6 +589,8 @@ export default function FixedRoomVAD() {
   const [messages, setMessages] = useState([]);
   const [partnerInfo, setPartnerInfo] = useState(null);
   const [patientData, setPatientData] = useState(null);
+  const [historyGuestLang, setHistoryGuestLang] = useState(null);
+  const [historyPatientName, setHistoryPatientName] = useState(null);
   const seenIdsRef = useRef(new Set());
   const processingRef = useRef(false);
   const [active, setActive] = useState(false);
@@ -614,7 +628,8 @@ export default function FixedRoomVAD() {
     return () => { cancelled = true; };
   }, [step, isOwner, orgCode]);
 
-  // ── roomId 기준 이전 대화 히스토리 로드 (1회, chronological order로 삽입) ──
+  // ── roomId 기준 이전 대화 히스토리 로드 (1회, chronological order, 구분선 + dedup) ──
+  const HISTORY_SEPARATOR_ID = "sep-previous-messages";
   useEffect(() => {
     console.log("[FixedRoomVAD History] useEffect triggered, roomId:", roomId);
     if (!roomId) return;
@@ -626,9 +641,16 @@ export default function FixedRoomVAD() {
     fetch(`/api/hospital/patient-by-room/${encodeURIComponent(roomId)}/history`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (data?.patient_lang) setHistoryGuestLang(data.patient_lang);
+        if (data?.patient_name != null) setHistoryPatientName(data.patient_name);
+
         const rows = Array.isArray(data?.messages) ? data.messages : [];
         console.log("[FixedRoomVAD History] fetched messages count:", rows.length);
+        const liveFromPrev = (prev) => prev.filter((p) => !p._separator);
+        const separator = { id: HISTORY_SEPARATOR_ID, _separator: true, _labelKey: "previousMessages" };
+
         if (rows.length === 0) return;
+
         const mapped = rows.map((m) => {
           const isHost = m.sender_role === "host";
           const ts = m.created_at
@@ -643,11 +665,20 @@ export default function FixedRoomVAD() {
             mine: isHost,
             senderId: isHost ? "self" : "partner",
             timestamp: ts,
+            isFromHistory: true,
           };
         });
         mapped.sort((a, b) => a.timestamp - b.timestamp);
-        console.log("[FixedRoomVAD History] mapped count:", mapped.length, "first:", mapped[0]?.id);
-        setMessages((prev) => [...mapped, ...prev]);
+
+        setMessages((prev) => {
+          const live = liveFromPrev(prev);
+          const filteredMapped = mapped.filter(
+            (m) => !live.some((p) => p.id === m.id || (String(p.originalText) === String(m.originalText) && p.timestamp === m.timestamp))
+          );
+          if (filteredMapped.length === 0 && live.length === 0) return prev;
+          console.log("[FixedRoomVAD History] mapped count:", filteredMapped.length, "first:", filteredMapped[0]?.id);
+          return [...filteredMapped, separator, ...live];
+        });
       })
       .catch(() => {});
   }, [roomId]);
@@ -672,7 +703,7 @@ export default function FixedRoomVAD() {
   const isHospitalGuest = isGuest && (hospitalDept || String(siteContext || "").startsWith("hospital_"));
   useEffect(() => {
     if (!isHospitalGuest || !roomId || messages.length === 0) return;
-    const toSave = messages.map((m) => ({
+    const toSave = messages.filter((m) => !m._separator).map((m) => ({
       id: m.id,
       originalText: m.originalText ?? m.text ?? "",
       translatedText: m.translatedText ?? "",
@@ -697,7 +728,7 @@ export default function FixedRoomVAD() {
     const current = messagesRef.current || [];
     const saved = savedMessageIdsRef.current;
     current.forEach((m) => {
-      if (!m.id || saved.has(m.id)) return;
+      if (m._separator || !m.id || saved.has(m.id)) return;
       try {
         saveMessageToServer({
           sessionId: sessionIdRef.current,
@@ -1100,7 +1131,7 @@ export default function FixedRoomVAD() {
         const current = messagesRef.current || [];
         const saved = savedMessageIdsRef.current;
         current.forEach((m) => {
-          if (!m.id || saved.has(m.id)) return;
+          if (m._separator || !m.id || saved.has(m.id)) return;
           try {
             saveMessageToServer({
               sessionId: sessionIdRef.current,
@@ -1204,7 +1235,7 @@ export default function FixedRoomVAD() {
       const current = messagesRef.current || [];
       const saved = savedMessageIdsRef.current;
       current.forEach((m) => {
-        if (!m.id || saved.has(m.id)) return;
+        if (m._separator || !m.id || saved.has(m.id)) return;
         try {
           saveMessageToServer({
             sessionId: sid,
@@ -1278,7 +1309,7 @@ export default function FixedRoomVAD() {
       const current = messagesRef.current || [];
       const saved = savedMessageIdsRef.current;
       current.forEach((m) => {
-        if (!m.id || saved.has(m.id)) return;
+        if (m._separator || !m.id || saved.has(m.id)) return;
         saveMessageToServer({
           sessionId: sid,
           roomId,
@@ -1301,24 +1332,28 @@ export default function FixedRoomVAD() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ── Guest language fallback: live socket → history API patient_lang → 'en' ──
+  const effectivePartnerLang = partnerInfo?.lang ?? historyGuestLang ?? patientData?.language ?? "en";
+
   // ── Partner language display ──
   const partnerLangDisplay = useMemo(() => {
     if (partnerInfo?.langLabel) return partnerInfo.langLabel;
-    if (patientData?.language) {
-      const p = getLanguageProfileByCode(patientData.language);
-      return p?.shortLabel || patientData.language;
+    const lang = effectivePartnerLang;
+    if (lang) {
+      const p = getLanguageProfileByCode(lang);
+      return p?.shortLabel || lang;
     }
     return "";
-  }, [partnerInfo, patientData]);
+  }, [partnerInfo, effectivePartnerLang]);
 
   const partnerFlagUrl = useMemo(() => {
     if (partnerInfo?.flagUrl) return partnerInfo.flagUrl;
     if (partnerInfo?.lang) return getLanguageProfileByCode(partnerInfo.lang)?.flagUrl || getFlagUrlByLang(partnerInfo.lang);
-    if (patientData?.language) {
-      return getLanguageProfileByCode(patientData.language)?.flagUrl || getFlagUrlByLang(patientData.language);
+    if (effectivePartnerLang) {
+      return getLanguageProfileByCode(effectivePartnerLang)?.flagUrl || getFlagUrlByLang(effectivePartnerLang);
     }
     return "";
-  }, [partnerInfo, patientData]);
+  }, [partnerInfo, effectivePartnerLang]);
 
   const myProfile = useMemo(() => {
     const profile = getLanguageProfileByCode(fromLang);
@@ -1340,7 +1375,7 @@ export default function FixedRoomVAD() {
     const d = new Date();
     const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     const staffLang = getLanguageByCode(fromLang)?.name || "Korean";
-    const patientLang = getLanguageByCode(partnerInfo?.lang || patientData?.language)?.name || "English";
+    const patientLang = getLanguageByCode(effectivePartnerLang)?.name || "English";
     const lines = [
       "[MONO 통역 기록]",
       `날짜: ${dateStr}`,
@@ -1348,7 +1383,7 @@ export default function FixedRoomVAD() {
       `언어: ${patientLang} → ${staffLang}`,
       "---",
     ];
-    (messages || []).forEach((m) => {
+    (messages || []).filter((m) => !m._separator).forEach((m) => {
       const orig = (m.originalText || "").trim();
       const trans = (m.translatedText || "").trim();
       if (m.mine) {
@@ -1361,7 +1396,7 @@ export default function FixedRoomVAD() {
     });
     lines.push("---", "Powered by MONO Medical Interpreter");
     return lines.join("\n");
-  }, [messages, roomId, fromLang, partnerInfo, patientData]);
+  }, [messages, roomId, fromLang, effectivePartnerLang]);
 
   const handleCopyForTool = useCallback(async (kind) => {
     const text = getTranscriptCopyText();
