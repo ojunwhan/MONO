@@ -3523,6 +3523,7 @@ io.on('connection', (socket) => {
             }
             const senderRole = rec.role === 'owner' ? 'host' : 'guest';
             // Save to hospital_messages with patient_token
+            console.log('[HOSPITAL-SAVE-A] path 3527, roomId:', roomId, 'senderRole:', senderRole, 'text:', finalText?.substring(0, 30));
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3828,6 +3829,7 @@ io.on('connection', (socket) => {
           const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
           translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
+          console.log('[HOSPITAL-SAVE-B] path 3832, roomId:', roomId, 'senderRole:', senderRole, 'text:', normalized?.substring(0, 30));
           await dbRun(
             `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -5611,6 +5613,7 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
+    console.log('[HOSPITAL-SAVE-C] path 5615');
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
@@ -5734,6 +5737,7 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
+    console.log('[HOSPITAL-SAVE-D] path 5738');
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
