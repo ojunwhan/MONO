@@ -587,6 +587,17 @@ export default function FixedRoomVAD() {
   const savedMessageIdsRef = useRef(new Set());
   const endedFlushDoneRef = useRef(false);
   const historyLoadedRef = useRef(false);
+  const initialConnectRef = useRef(true);
+  const wasConnectedRef = useRef(false);
+  const joinPayloadRef = useRef(null);
+  const roomIdRef = useRef(null);
+  const participantIdRef = useRef(null);
+  const stepRef = useRef(step);
+  const lastJoinTsRef = useRef(0);
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   // ── 통역 종료 후 EMR/CRM 복사용: 병원 설정 + 복사 피드백 (step 선언 이후에 배치) ──
   const [orgCopySettings, setOrgCopySettings] = useState(null);
@@ -733,21 +744,26 @@ export default function FixedRoomVAD() {
   useEffect(() => {
     if (!roomId || !participantId) return;
 
+    const payload = {
+      roomId,
+      fromLang,
+      participantId,
+      role: isGuest ? "Patient" : "Doctor",
+      localName: isGuest ? (state.localName || "") : "",
+      roleHint,
+      siteContext,
+      isCreator,
+      ...(state.guestId ? { guestId: state.guestId } : {}),
+      saveMessages,
+      summaryOnly,
+      inputMode,
+    };
+    roomIdRef.current = roomId;
+    participantIdRef.current = participantId;
+    joinPayloadRef.current = payload;
+
     const doJoin = () => {
-      socket.emit("join", {
-        roomId,
-        fromLang,
-        participantId,
-        role: isGuest ? "Patient" : "Doctor",
-        localName: isGuest ? (state.localName || "") : "",
-        roleHint,
-        siteContext,
-        isCreator,
-        ...(state.guestId ? { guestId: state.guestId } : {}),
-        saveMessages,
-        summaryOnly,
-        inputMode,
-      });
+      socket.emit("join", payload);
     };
 
     if (socket.connected) {
@@ -772,7 +788,47 @@ export default function FixedRoomVAD() {
         reason: "fixed-room-vad-cleanup",
       });
     };
-  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly]);
+  }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly, inputMode, state.guestId, state.localName]);
+
+  // ── 소켓: 재연결 시 방 재입장 + VAD 세션 복원 ──
+  useEffect(() => {
+    const onDisconnect = () => {
+      wasConnectedRef.current = true;
+    };
+
+    const onConnect = () => {
+      if (initialConnectRef.current) {
+        initialConnectRef.current = false;
+        return;
+      }
+      if (!wasConnectedRef.current) return;
+      wasConnectedRef.current = false;
+
+      const rid = roomIdRef.current;
+      const pid = participantIdRef.current;
+      if (!rid || !pid) return;
+      const now = Date.now();
+      if (now - lastJoinTsRef.current < 3000) return;
+      lastJoinTsRef.current = now;
+
+      const payload = joinPayloadRef.current;
+      if (!payload) return;
+
+      console.log("[FixedRoomVAD] Socket reconnected, rejoining room:", rid);
+      socket.emit("join", payload);
+
+      if (stepRef.current === "interpreting") {
+        socket.emit("fixed-room:start", { roomId: rid });
+      }
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, []);
 
   // ── 통역 시작 공통 로직 (VAD 시작은 InterpretingVAD에서 수행) ──
   const doStartInterpreting = useCallback(async () => {
