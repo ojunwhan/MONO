@@ -746,16 +746,10 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {isReception && (
-                            <>
-                              <button type="button" onClick={() => setAssignDropdownRoomId(showAssignDropdown ? null : patient.roomId)}
-                                className="px-2 py-1.5 rounded-[8px] bg-amber-500 text-white text-[11px] font-medium hover:bg-amber-600">
-                                {"\uC0C1\uB2F4\uC2E4 \uBC30\uC815"}
-                              </button>
-                              <button type="button" onClick={() => handleStartInterpretation(patient)}
-                                className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
-                                <Monitor size={12} /> {"\uD1B5\uC5ED \uC2DC\uC791"}
-                              </button>
-                            </>
+                            <button type="button" onClick={() => handleStartInterpretation(patient)}
+                              className="px-3 py-1.5 rounded-[10px] bg-[#3B82F6] text-white text-[12px] font-semibold hover:bg-[#2563EB] flex items-center gap-1.5">
+                              <Monitor size={12} /> {"\uD1B5\uC5ED \uC2DC\uC791"}
+                            </button>
                           )}
                           {isConsultationRoom && (
                             <>
@@ -771,16 +765,6 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
                           )}
                         </div>
                       </div>
-                      {showAssignDropdown && consultationRooms.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800 flex flex-wrap gap-2">
-                          {consultationRooms.map((room) => (
-                            <button key={room.id} type="button" onClick={() => handleAssignRoom(patient, room)}
-                              className="px-3 py-1.5 rounded-[8px] bg-white dark:bg-[var(--color-bg)] border border-[var(--color-border)] text-[12px] font-medium hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A5F]">
-                              {room.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
