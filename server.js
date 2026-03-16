@@ -3944,6 +3944,8 @@ io.on('connection', (socket) => {
           if (isQuotaExceededError(e)) emitQuotaWarning(socket);
         }
       }
+      // Strip ALL leading [tag] (e.g. [Korean], [English]) before sending/saving — same as stt:segment_end
+      if (typeof draft === 'string') draft = draft.replace(/^(\[.*?\]\s*)+/, '').trim();
 
       // → Other (sender name adapted to receiver's language)
       const targetSocketId = otherP?.socketId;
@@ -3996,12 +3998,14 @@ io.on('connection', (socket) => {
       let finalizedForTts = draft;
       try {
         const hq = await hqTranslate(trimmedText, fromLang, toLang, '', siteCtx, roomContext, { contextInject: meta.contextInject });
-        if (!isGarbageText(hq)) {
-          finalizedForTts = hq;
+        // Strip ALL leading [tag] (e.g. [Korean], [English]) — same as stt:segment_end
+        const hqClean = typeof hq === 'string' ? hq.replace(/^(\[.*?\]\s*)+/, '').trim() : hq;
+        if (!isGarbageText(hqClean)) {
+          finalizedForTts = hqClean;
           if (targetSocketId) {
-            io.to(targetSocketId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+            io.to(targetSocketId).emit('revise-message', { id, senderPid: participantId, translatedText: hqClean, isDraft: false });
           } else {
-            socket.to(roomId).emit('revise-message', { id, senderPid: participantId, translatedText: hq, isDraft: false });
+            socket.to(roomId).emit('revise-message', { id, senderPid: participantId, translatedText: hqClean, isDraft: false });
           }
         }
         // ── Hospital: update translated text ──
