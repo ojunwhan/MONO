@@ -45,7 +45,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
       </button>
 
       {showGrid ? (
-        <div className="mt-4 grid grid-cols-4 gap-3">
+        <div className="mt-4 grid grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto">
           {LANGUAGES.map((p) => {
             const isSelected = selected?.code === p.code;
             return (
