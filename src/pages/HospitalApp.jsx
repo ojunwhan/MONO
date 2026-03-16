@@ -251,7 +251,7 @@ export default function HospitalApp() {
   const [creatingRoom, setCreatingRoom] = useState(false);
 
   const staffDept = useMemo(
-    () => (template === "reception" ? { id: "reception", labelKo: "???", label: "Interpretation Standby", icon: "??" } : { id: "consultation", labelKo: "???", label: "Consultation", icon: "??" }),
+    () => (template === "reception" ? { id: "reception", labelKo: "", label: "Interpretation Standby", icon: "??" } : { id: "consultation", labelKo: "", label: "Consultation", icon: "??" }),
     [template]
   );
 
