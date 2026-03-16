@@ -3908,20 +3908,6 @@ io.on('connection', (socket) => {
     if (messageBuffer[roomId].length > 200) messageBuffer[roomId].shift();
     ackReply({ ok: true, accepted: true });
 
-    // ── Hospital mode: auto-save message to DB if this room is a hospital session ──
-    if (meta.hospitalSessionId || meta.hospitalMode || (roomId && roomId.startsWith('PT-'))) {
-      const senderRole = rec.role === 'owner' ? 'host' : 'guest';
-      (async () => {
-        const sessionRow = await dbGet('SELECT patient_token FROM hospital_sessions WHERE room_id = ?', [roomId]).catch(() => null);
-        const pToken = meta.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
-        await dbRun(
-          `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, patient_token)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [id, meta.hospitalSessionId || null, roomId, senderRole, senderP?.lang || '', trimmedText, pToken]
-        );
-      })().catch(e => { console.warn('[hospital] msg save error:', e?.message); trackUsageError(e, { source: 'hospital:msg-save' }); });
-    }
-
     const registeredLang = senderP?.lang || (rec.role === 'owner' ? meta.ownerLang : meta.guestLang);
     const detectedLang = detectTextLang(trimmedText);
     const fromLang = registeredLang || detectedLang;
