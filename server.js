@@ -5857,22 +5857,34 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req,
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    // Total count (same filters, no JOIN)
+    // Total count: unique patients (room_id = PT number) matching filters
     const countRow = await dbGet(
-      `SELECT COUNT(*) as total FROM hospital_sessions hs WHERE ${where}`,
+      `SELECT COUNT(DISTINCT hs.room_id) as total FROM hospital_sessions hs WHERE ${where}`,
       params
     );
 
-    // Sessions from hospital_sessions with message_count via LEFT JOIN + GROUP BY
+    // One row per patient (room_id), aggregated from hospital_sessions + hospital_patients
+    const whereForSub = where.replace(/\bhs\./g, 'hs2.');
     const sessions = await dbAll(
-      `SELECT hs.id, hs.room_id, hs.patient_token, hs.dept, hs.started_at, hs.ended_at, hs.status, COUNT(hm.id) as message_count
+      `SELECT
+         hs.room_id as chart_number,
+         MAX(hs.patient_token) as patient_token,
+         MAX(hp.name) as name,
+         COALESCE(MAX(hs.guest_lang), MAX(hp.language), '') as language,
+         COALESCE(MAX(hs.department), MAX(hs.dept)) as dept,
+         COUNT(DISTINCT hs.id) as session_count,
+         COUNT(hm.id) as message_count,
+         MAX(COALESCE(hs.started_at, hs.created_at)) as last_started_at,
+         (SELECT hs2.id FROM hospital_sessions hs2 WHERE hs2.room_id = hs.room_id AND ${whereForSub} ORDER BY COALESCE(hs2.started_at, hs2.created_at) DESC LIMIT 1) as id,
+         hs.room_id as room_id
        FROM hospital_sessions hs
+       LEFT JOIN hospital_patients hp ON hp.chart_number = hs.chart_number
        LEFT JOIN hospital_messages hm ON hm.session_id = hs.id
        WHERE ${where}
-       GROUP BY hs.id
-       ORDER BY hs.started_at DESC
+       GROUP BY hs.room_id
+       ORDER BY last_started_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      [...params, ...params, limit, offset]
     );
 
     res.json({
