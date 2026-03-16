@@ -628,7 +628,7 @@ export default function FixedRoomVAD() {
           return {
             id: m.id || `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
             originalText: orig,
-            translatedText: isHost ? orig : trans,
+            translatedText: trans,
             mine: isHost,
             senderId: isHost ? "self" : "partner",
             timestamp: ts,
