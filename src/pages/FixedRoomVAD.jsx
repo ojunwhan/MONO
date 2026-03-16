@@ -603,7 +603,7 @@ export default function FixedRoomVAD() {
     return () => { cancelled = true; };
   }, [step, isOwner, orgCode]);
 
-  // ── roomId 기준 이전 대화 히스토리 로드 (1회, 상단에 선행 메시지로 삽입) ──
+  // ── roomId 기준 이전 대화 히스토리 로드 (1회, chronological order로 삽입) ──
   useEffect(() => {
     console.log("[FixedRoomVAD History] useEffect triggered, roomId:", roomId);
     if (!roomId) return;
@@ -615,18 +615,18 @@ export default function FixedRoomVAD() {
     fetch(`/api/hospital/patient-by-room/${encodeURIComponent(roomId)}/history`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        const rows = data?.messages ?? [];
+        const rows = Array.isArray(data?.messages) ? data.messages : [];
         console.log("[FixedRoomVAD History] fetched messages count:", rows.length);
-        if (!rows.length) return;
-        const mapped = data.messages.map((m) => {
+        if (rows.length === 0) return;
+        const mapped = rows.map((m) => {
           const isHost = m.sender_role === "host";
           const ts = m.created_at
             ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime())
             : Date.now();
-          const orig = m.original_text || "";
-          const trans = m.translated_text || orig;
+          const orig = (m.original_text != null && m.original_text !== "") ? m.original_text : "";
+          const trans = (m.translated_text != null && m.translated_text !== "") ? m.translated_text : orig;
           return {
-            id: m.id || `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+            id: m.id != null && m.id !== "" ? String(m.id) : `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
             originalText: orig,
             translatedText: trans,
             mine: isHost,
@@ -634,7 +634,8 @@ export default function FixedRoomVAD() {
             timestamp: ts,
           };
         });
-        console.log("[FixedRoomVAD History] first mapped message:", JSON.stringify(mapped[0]));
+        mapped.sort((a, b) => a.timestamp - b.timestamp);
+        console.log("[FixedRoomVAD History] mapped count:", mapped.length, "first:", mapped[0]?.id);
         setMessages((prev) => [...mapped, ...prev]);
       })
       .catch(() => {});
