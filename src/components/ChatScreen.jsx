@@ -176,7 +176,13 @@ export default function ChatScreen() {
   const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [showInviteQr, setShowInviteQr] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(true);
   const roomMenuRef = useRef(null);
+
+  useEffect(() => {
+    const standalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone);
+    if (standalone) setShowInstallBanner(false);
+  }, []);
 
   // ── 접수처 EMR/CRM 복사용: org 설정 (직원만) ──
   const orgCodeForCopy = location.state?.orgCode || searchParams.get("org") || "";
@@ -381,6 +387,7 @@ export default function ChatScreen() {
       try {
         const res = await fetch(`/api/hospital/patient-by-room/${encodeURIComponent(rid)}/history`);
         const data = res.ok ? await res.json() : null;
+        if (data) console.log("[ChatScreen PT history] raw count:", Array.isArray(data?.messages) ? data.messages.length : 0);
         const rows = Array.isArray(data?.messages) ? data.messages : [];
         if (rows.length === 0) return;
         const mapped = rows.map((m) => {
@@ -405,6 +412,7 @@ export default function ChatScreen() {
             senderLabel: "",
           };
         });
+        console.log("[ChatScreen PT history] mapped count:", mapped.length);
         setMessages((prev) => {
           const byId = new Set(prev.map((x) => x.id));
           const added = mapped.filter((m) => !byId.has(m.id));
@@ -432,6 +440,11 @@ export default function ChatScreen() {
   useEffect(() => {
     let cancelled = false;
     if (!roomId) return;
+    // PT- 방: 히스토리는 API에서만 로드 (아래 PT- 전용 useEffect). 여기서 getMessages 호출 시 로컬 캐시로 덮어쓰는 것 방지
+    if (roomId.startsWith("PT-")) {
+      historyLoadedRef.current = true;
+      return;
+    }
     // 병원 고정방: 이전 대화 히스토리 로드 안 함 (매 세션 새로 시작)
     if (isHospitalMode) {
       historyLoadedRef.current = true;
@@ -1938,7 +1951,7 @@ export default function ChatScreen() {
           </div>
         )}
       </div>
-      <InstallBanner />
+      {showInstallBanner && <InstallBanner />}
       <BottomSheet open={!!menuMessage} onClose={closeMessageMenu} title={t("chat.messageMenu")}>
         <div className="px-2 pb-2">
           <button
