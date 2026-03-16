@@ -3522,12 +3522,18 @@ io.on('connection', (socket) => {
               ).catch(() => null);
             }
             const senderRole = rec.role === 'owner' ? 'host' : 'guest';
-            // Save to hospital_messages with patient_token
-            await dbRun(
-              `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [msgId, activeSession?.id || null, roomId, senderRole, fromLang, finalText, translated || '', toLang, pToken]
-            );
+            // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
+            const recentDup = await dbGet(
+              `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
+              [roomId, finalText]
+            ).catch(() => null);
+            if (!recentDup) {
+              await dbRun(
+                `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [msgId, activeSession?.id || null, roomId, senderRole, fromLang, finalText, translated || '', toLang, pToken]
+              );
+            }
           } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); trackUsageError(dbErr, { source: 'hospital:msg-save' }); }
         }
         return;
@@ -3828,11 +3834,18 @@ io.on('connection', (socket) => {
           const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
           translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
-          await dbRun(
-            `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, translatedText, toLang, pToken]
-          );
+          // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
+          const recentDup = await dbGet(
+            `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
+            [roomId, normalized]
+          ).catch(() => null);
+          if (!recentDup) {
+            await dbRun(
+              `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, translatedText, toLang, pToken]
+            );
+          }
           const senderSocketId = socket.id;
           const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
           const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
@@ -4053,11 +4066,18 @@ io.on('connection', (socket) => {
             ).catch(() => null);
           }
           const senderRole = rec.role === 'owner' ? 'host' : 'guest';
-          await dbRun(
-            `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, activeSession2?.id || null, roomId, senderRole, fromLang, trimmedText, draft || '', toLang, pToken2]
-          );
+          // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
+          const recentDup = await dbGet(
+            `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
+            [roomId, trimmedText]
+          ).catch(() => null);
+          if (!recentDup) {
+            await dbRun(
+              `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [id, activeSession2?.id || null, roomId, senderRole, fromLang, trimmedText, draft || '', toLang, pToken2]
+            );
+          }
         } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); trackUsageError(dbErr2, { source: 'hospital:msg-save2' }); }
       }
       return;
