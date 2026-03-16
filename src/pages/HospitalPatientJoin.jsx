@@ -67,6 +67,7 @@ export default function HospitalPatientJoin() {
   const [isExistingSession, setIsExistingSession] = useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
   const [localHistoryList, setLocalHistoryList] = useState([]);
+  const [patientName, setPatientName] = useState("");
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -89,7 +90,7 @@ export default function HospitalPatientJoin() {
       await fetch("/api/hospital/patient", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientToken, language: lang, department: orgCode }),
+        body: JSON.stringify({ patientToken, language: lang, department: orgCode, name: patientName.trim() }),
       });
 
       const joinBody = {
@@ -155,7 +156,7 @@ export default function HospitalPatientJoin() {
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [orgCode, navigate, selectedLang, urlToken, urlOrg]);
+  }, [orgCode, navigate, selectedLang, urlToken, urlOrg, patientName]);
   if (step === "language") {
     return (
       <div
@@ -216,25 +217,50 @@ export default function HospitalPatientJoin() {
 
         {/* Join Button — visible when language is confirmed */}
         {!showLangGrid && (
-          <button
-            type="button"
-            onClick={handleJoin}
-            style={{
-              width: "100%",
-              maxWidth: "400px",
-              height: "52px",
-              borderRadius: "14px",
-              border: "none",
-              background: "#2563EB",
-              color: "#ffffff",
-              fontSize: "16px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "background 0.2s",
-            }}
-          >
-            통역 시작 / Start Interpretation
-          </button>
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 14, color: "#666", marginBottom: 6, textAlign: "center" }}>
+                Please enter your name (as shown on passport)
+              </p>
+              <input
+                type="text"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                placeholder="e.g. John Smith"
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  fontSize: 16,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 12,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                autoComplete="off"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleJoin}
+              disabled={!patientName.trim()}
+              style={{
+                width: "100%",
+                maxWidth: "400px",
+                height: "52px",
+                borderRadius: "14px",
+                border: "none",
+                background: "#2563EB",
+                color: "#ffffff",
+                fontSize: "16px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "background 0.2s",
+                opacity: !patientName.trim() ? 0.5 : 1,
+              }}
+            >
+              통역 시작 / Start Interpretation
+            </button>
+          </>
         )}
 
         {/* 내 통역 기록 보기 (로컬 IndexedDB) */}
