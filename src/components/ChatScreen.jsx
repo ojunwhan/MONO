@@ -255,6 +255,8 @@ export default function ChatScreen() {
   const wakeLockRef = useRef(null);
   const historyLoadedRef = useRef(false);
   const pendingHistoryRef = useRef([]);
+  const ptHistoryLoadedRef = useRef(false);
+  const fetchPtHistoryRef = useRef(null);
 
   // Stable refs
   const participantIdRef = useRef(participantId);
@@ -366,6 +368,66 @@ export default function ChatScreen() {
     });
     historyLoadedRef.current = true;
   }, [roomId, isHospitalMode, location.state?.pendingMessages, hospitalDept?.labelKo]);
+
+  // PT- 방 전용: roomId 변경 시 히스토리 로드 플래그 리셋
+  useEffect(() => {
+    ptHistoryLoadedRef.current = false;
+  }, [roomId]);
+
+  // PT- 방: API로 대화 히스토리 로드 (환자 재입장 시 빈 화면 방지)
+  useEffect(() => {
+    const fetchPtRoomHistory = async (rid) => {
+      if (!rid || !rid.startsWith("PT-")) return;
+      try {
+        const res = await fetch(`/api/hospital/patient-by-room/${encodeURIComponent(rid)}/history`);
+        const data = res.ok ? await res.json() : null;
+        const rows = Array.isArray(data?.messages) ? data.messages : [];
+        if (rows.length === 0) return;
+        const mapped = rows.map((m) => {
+          const mine = m.sender_role === "guest";
+          const ts = m.created_at
+            ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime())
+            : Date.now();
+          const orig = (m.original_text != null && m.original_text !== "") ? m.original_text : "";
+          const trans = (m.translated_text != null && m.translated_text !== "") ? m.translated_text : orig;
+          const displayText = mine ? orig : (trans || orig);
+          return {
+            id: m.id != null && m.id !== "" ? String(m.id) : `pt-hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+            text: displayText,
+            originalText: orig,
+            translatedText: trans || orig,
+            mine,
+            senderId: mine ? participantIdRef.current : "",
+            status: "translated",
+            timestamp: ts,
+            senderDisplayName: mine ? "" : (hospitalDept?.labelKo || "병원"),
+            senderFlagUrl: "",
+            senderLabel: "",
+          };
+        });
+        setMessages((prev) => {
+          const byId = new Set(prev.map((x) => x.id));
+          const added = mapped.filter((m) => !byId.has(m.id));
+          if (added.length === 0) return prev;
+          const next = [...prev, ...added].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          return next;
+        });
+        mapped.forEach((m) => {
+          if (m?.id) seenIdsRef.current.add(m.id);
+        });
+      } catch (_) {}
+    };
+
+    fetchPtHistoryRef.current = fetchPtRoomHistory;
+
+    if (!roomId || !roomId.startsWith("PT-") || ptHistoryLoadedRef.current) return;
+    const t = setTimeout(() => {
+      fetchPtRoomHistory(roomId).then(() => {
+        ptHistoryLoadedRef.current = true;
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [roomId, hospitalDept?.labelKo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1105,6 +1167,11 @@ export default function ChatScreen() {
         return;
       }
       rejoin("reconnect");
+      // PT- 방: 재연결 후 히스토리 재요청 (연결 끊김 동안 온 메시지 반영)
+      const rid = roomIdRef.current;
+      if (rid && rid.startsWith("PT-") && typeof fetchPtHistoryRef.current === "function") {
+        fetchPtHistoryRef.current(rid);
+      }
     };
     const onDisconnect = () => scheduleReconnect();
     const onConnectError = () => scheduleReconnect();
@@ -1169,6 +1236,9 @@ export default function ChatScreen() {
         ...(joinStateRef.current?.contextInject !== undefined && { contextInject: joinStateRef.current.contextInject }),
       });
       socket.emit("check-room", { roomId: rid, userId: pid });
+      if (rid.startsWith("PT-") && typeof fetchPtHistoryRef.current === "function") {
+        fetchPtHistoryRef.current(rid);
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
