@@ -5689,7 +5689,9 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
 app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
   try {
     const { roomId } = req.params;
-    if (!roomId) return res.json({ success: false, message: 'Missing roomId' });
+    const cleanRoomId = decodeURIComponent(String(roomId || '')).trim();
+    if (!cleanRoomId) return res.json({ success: false, message: 'Missing roomId' });
+    console.log('[patient-by-room history] roomId:', JSON.stringify(cleanRoomId));
 
     const messages = await dbAll(
       `SELECT id, session_id, room_id, sender_role, original_text, translated_text, sender_lang, translated_lang, created_at
@@ -5697,7 +5699,7 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
        WHERE room_id = ?
        ORDER BY id ASC
        LIMIT 100`,
-      [roomId]
+      [cleanRoomId]
     );
 
     const sessionRow = await dbGet(
@@ -5707,7 +5709,7 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
        WHERE s.room_id = ?
        ORDER BY s.created_at DESC
        LIMIT 1`,
-      [roomId]
+      [cleanRoomId]
     ).catch(() => null);
 
     const keyHex = await getOrgEncryptionKey(sessionRow?.org_code || null);
