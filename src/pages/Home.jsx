@@ -10,6 +10,8 @@ import { fetchAuthMe } from "../auth/session";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 
+const monoToI18n = { ko: "ko", en: "en", ja: "ja", zh: "zh", vi: "vi", th: "th", ru: "ru", ar: "ar", fr: "fr", es: "es", cn: "zh" };
+
 function MonoLogo() {
   return (
     <div className="text-[72px] font-light leading-none" style={{ letterSpacing: "8px", paddingLeft: "8px" }}>
@@ -103,6 +105,7 @@ export default function Home() {
   const handleHostLangChange = (code) => {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
+    i18n.changeLanguage(monoToI18n[code] || code);
     setShowLangGrid(false);
     const newRoomId = uuidv4();
     setRoomId(newRoomId);
@@ -172,7 +175,7 @@ export default function Home() {
               if (isGuest) {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
-                i18n.changeLanguage(code);
+                i18n.changeLanguage(monoToI18n[code] || code);
                 setShowLangGrid(false);
               } else {
                 handleHostLangChange(code);

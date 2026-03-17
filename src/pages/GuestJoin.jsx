@@ -8,6 +8,8 @@ import { detectUserLanguage } from "../constants/languageProfiles";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 
+const monoToI18n = { ko: "ko", en: "en", ja: "ja", zh: "zh", vi: "vi", th: "th", ru: "ru", ar: "ar", fr: "fr", es: "es", cn: "zh" };
+
 function detectBrowserLanguage() {
   const detected = detectUserLanguage();
   return getLanguageByCode(detected?.code)?.code || "en";
@@ -223,7 +225,7 @@ export default function GuestJoinPage() {
               onSelect={(code) => {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
-                i18n.changeLanguage(code);
+                i18n.changeLanguage(monoToI18n[code] || code);
                 setLangConfirmed(true);
                 setShowLangGrid(false);
               }}
