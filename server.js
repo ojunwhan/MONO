@@ -71,6 +71,20 @@ async function getOrgEncryptionKey(orgCode) {
   });
 }
 
+/** Dedup for encrypted hospital_messages: fetch recent rows, decrypt original_text, compare to plaintext. */
+async function isRecentMessageDuplicate(roomId, plainText) {
+  const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
+  const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+  const rows = await dbAll(
+    `SELECT id, original_text FROM hospital_messages WHERE room_id = ? AND created_at > datetime('now', '-10 seconds') LIMIT 20`,
+    [roomId]
+  ).catch(() => []);
+  for (const row of rows || []) {
+    if (decryptText(row.original_text, keyHex) === plainText) return true;
+  }
+  return false;
+}
+
 // === 사용량 추적 ===
 const usageStats = {
   // 오늘 날짜 (자정에 리셋)
@@ -3566,11 +3580,8 @@ io.on('connection', (socket) => {
               ).catch(() => null);
             }
             const senderRole = rec.role === 'owner' ? 'host' : 'guest';
-            // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
-            const recentDup = await dbGet(
-              `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
-              [roomId, finalText]
-            ).catch(() => null);
+            // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt; encrypted store makes plaintext query useless)
+            const recentDup = await isRecentMessageDuplicate(roomId, finalText);
             if (!recentDup) {
               const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
               const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
@@ -3882,11 +3893,8 @@ io.on('connection', (socket) => {
           const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
           translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
-          // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
-          const recentDup = await dbGet(
-            `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
-            [roomId, normalized]
-          ).catch(() => null);
+          // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt)
+          const recentDup = await isRecentMessageDuplicate(roomId, normalized);
           if (!recentDup) {
             const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
             const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
@@ -4118,11 +4126,8 @@ io.on('connection', (socket) => {
             ).catch(() => null);
           }
           const senderRole = rec.role === 'owner' ? 'host' : 'guest';
-          // Dedup: skip if same room+text already saved in last 10s (e.g. stt:whisper + send-message on mobile)
-          const recentDup = await dbGet(
-            `SELECT id FROM hospital_messages WHERE room_id = ? AND original_text = ? AND created_at > datetime('now', '-10 seconds') LIMIT 1`,
-            [roomId, trimmedText]
-          ).catch(() => null);
+          // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt)
+          const recentDup = await isRecentMessageDuplicate(roomId, trimmedText);
           if (!recentDup) {
             const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
             const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
@@ -5645,9 +5650,13 @@ app.get('/api/hospital/patient/:patientToken/history', async (req, res) => {
   try {
     const token = String(req.params.patientToken).trim();
     const patient = await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [token]);
-    if (!patient?.room_id) return res.json({ success: true, messages: [] });
+    let roomId = patient?.room_id;
+    if (!roomId) {
+      const session = await dbGet('SELECT room_id FROM hospital_sessions WHERE patient_token = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1', [token]);
+      roomId = session?.room_id;
+    }
+    if (!roomId) return res.json({ success: true, messages: [] });
 
-    const roomId = patient.room_id;
     const filePath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
     if (!fs.existsSync(filePath)) return res.json({ success: true, messages: [] });
 

@@ -1620,7 +1620,7 @@ function UsageBillingTab() {
   const tierInfo = getTierLabel(totalMins);
   const now = new Date();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysElapsed = Math.min(now.getDate(), sessions.length ? 17 : now.getDate());
+  const daysElapsed = now.getDate();
   const projectedMins = daysElapsed > 0 ? (totalMins / daysElapsed) * daysInMonth : totalMins;
   const projectedBill = calcBill(projectedMins);
   const humanRatePerCase = 45000;
