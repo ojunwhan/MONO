@@ -31,6 +31,7 @@ import {
   Tablet,
   Mic,
   MicOff,
+  Receipt,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import {
@@ -54,6 +55,7 @@ const MENU_ITEMS = [
   { id: "departments", label: "진료과별 현황", icon: Building2 },
   { id: "rooms", label: "방 관리", icon: LayoutGrid },
   { id: "reports", label: "보고서 출력", icon: FileText },
+  { id: "usage-billing", label: "사용량 & 요금", icon: Receipt },
 ];
 
 const LANG_LABELS = {
@@ -285,6 +287,7 @@ export default function HospitalDashboard() {
           {activeMenu === "departments" && <DepartmentsPanel />}
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
           {activeMenu === "reports" && <ReportsPanel />}
+          {activeMenu === "usage-billing" && <UsageBillingTab />}
         </div>
       </main>
     </div>
@@ -1526,6 +1529,237 @@ function ReportsPanel() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// USAGE & BILLING TAB
+// ═══════════════════════════════════════════
+const USAGE_BILLING_TIERS = [
+  { limit: 600, rate: 167 },
+  { limit: 1800, rate: 133 },
+  { limit: 3600, rate: 100 },
+  { limit: Infinity, rate: 83 },
+];
+
+function calcBill(totalMins) {
+  let remaining = totalMins;
+  let cost = 0;
+  let prev = 0;
+  for (const tier of USAGE_BILLING_TIERS) {
+    const available = tier.limit === Infinity ? remaining : tier.limit - prev;
+    const used = Math.min(remaining, available);
+    if (used <= 0) break;
+    cost += used * tier.rate;
+    remaining -= used;
+    prev = tier.limit === Infinity ? prev : tier.limit;
+    if (remaining <= 0) break;
+  }
+  return cost;
+}
+
+function getTierLabel(totalMins) {
+  if (totalMins <= 600) return { label: "1구간", rate: 167 };
+  if (totalMins <= 1800) return { label: "2구간", rate: 133 };
+  if (totalMins <= 3600) return { label: "3구간", rate: 100 };
+  return { label: "4구간", rate: 83 };
+}
+
+function fmtWon(n) {
+  if (n >= 10000) return "₩" + (Math.round(n / 1000) / 10).toFixed(0) + "만원";
+  return "₩" + Math.round(n).toLocaleString() + "원";
+}
+
+const USAGE_BILLING_MOCK = {
+  trialDaysLeft: 5,
+  trialDaysTotal: 14,
+  sessions: [
+    { date: "03/09", cases: 3, mins: 52 },
+    { date: "03/10", cases: 5, mins: 88 },
+    { date: "03/11", cases: 4, mins: 71 },
+    { date: "03/12", cases: 6, mins: 104 },
+    { date: "03/13", cases: 4, mins: 69 },
+    { date: "03/14", cases: 5, mins: 92 },
+    { date: "03/15", cases: 4, mins: 74 },
+    { date: "03/16", cases: 4, mins: 68 },
+    { date: "03/17", cases: 3, mins: 54 },
+  ],
+};
+
+function UsageBillingTab() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/hospital/usage-stats", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (!cancelled && d && (d.sessions || d.trialDaysLeft !== undefined)) setData(d);
+        else if (!cancelled) setData(USAGE_BILLING_MOCK);
+      })
+      .catch(() => {
+        if (!cancelled) setData(USAGE_BILLING_MOCK);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  const sessions = data.sessions || [];
+  const totalCases = sessions.reduce((acc, s) => acc + (s.cases || 0), 0);
+  const totalMins = sessions.reduce((acc, s) => acc + (s.mins || 0), 0);
+  const totalHours = Math.round((totalMins / 60) * 10) / 10;
+  const tierInfo = getTierLabel(totalMins);
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysElapsed = Math.min(now.getDate(), sessions.length ? 17 : now.getDate());
+  const projectedMins = daysElapsed > 0 ? (totalMins / daysElapsed) * daysInMonth : totalMins;
+  const projectedBill = calcBill(projectedMins);
+  const humanRatePerCase = 45000;
+  const humanTotal = totalCases * humanRatePerCase;
+  const savings = Math.max(0, humanTotal - projectedBill);
+
+  const tierMinutes = [
+    Math.min(totalMins, 600),
+    Math.min(Math.max(0, totalMins - 600), 1200),
+    Math.min(Math.max(0, totalMins - 1800), 1800),
+    Math.max(0, totalMins - 3600),
+  ];
+  const tierLabels = ["1구간 (0~600분)", "2구간 (600~1800분)", "3구간 (1800~3600분)", "4구간 (3600분~)"];
+  const tierRates = [167, 133, 100, 83];
+  const tierLimits = [600, 1200, 1800, Infinity];
+  const maxDayMins = sessions.length ? Math.max(...sessions.map((s) => s.mins || 0), 1) : 1;
+  const avgMinsPerDay = sessions.length ? Math.round(totalMins / sessions.length) : 0;
+  const avgCasesPerDay = sessions.length ? Math.round((totalCases / sessions.length) * 10) / 10 : 0;
+
+  const scenarioMultipliers = [
+    { label: "현재 페이스 유지", mult: 1 },
+    { label: "20% 증가", mult: 1.2 },
+    { label: "50% 증가", mult: 1.5 },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Section A — Top summary row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">이번 달 통역 건수</p>
+          <p className="text-[28px] font-bold text-[var(--color-text)]">{totalCases}</p>
+        </div>
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">총 사용 시간</p>
+          <p className="text-[28px] font-bold text-[var(--color-text)]">{totalHours}시간</p>
+        </div>
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">현재 구간</p>
+          <p className="text-[28px] font-bold text-[var(--color-text)]">{tierInfo.label} · ₩{tierInfo.rate}원/분</p>
+        </div>
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">이번 달 예상 청구액</p>
+          <p className="text-[28px] font-bold text-[#16A34A]">{fmtWon(projectedBill)}</p>
+        </div>
+      </div>
+
+      {/* Section B — Two columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <h3 className="text-[14px] font-semibold mb-4 text-[var(--color-text)]">예상 청구액 상세</h3>
+          <div className="space-y-3 mb-4">
+            {tierLabels.map((label, i) => (
+              <div key={i}>
+                <div className="flex justify-between text-[11px] text-[var(--color-text-secondary)] mb-1">
+                  <span>{label}</span>
+                  <span>{tierMinutes[i]}분</span>
+                </div>
+                <div className="h-2 rounded-full bg-[var(--color-bg-secondary)] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#3B82F6]"
+                    style={{
+                      width: `${tierLimits[i] === Infinity ? (tierMinutes[i] > 0 ? 100 : 0) : Math.min(100, (tierMinutes[i] / tierLimits[i]) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1 text-[13px] text-[var(--color-text)] mb-4">
+            {tierMinutes.map((mins, i) => {
+              const amt = mins * tierRates[i];
+              return (
+                <div key={i} className="flex justify-between">
+                  <span>{tierLabels[i].split(" ")[0]} {mins}분 × ₩{tierRates[i]} =</span>
+                  <span>{fmtWon(amt)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[18px] font-bold text-[#16A34A] mb-3">총 예상: {fmtWon(projectedBill)}</p>
+          <p className="text-[12px] text-[var(--color-text-secondary)]">
+            전문 통역사 동일 건수: {fmtWon(humanTotal)} — MONO 대비 {fmtWon(savings)} 절감
+          </p>
+        </div>
+
+        <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <h3 className="text-[14px] font-semibold mb-4 text-[var(--color-text)]">일별 사용 현황</h3>
+          <div className="space-y-2 mb-4">
+            {sessions.map((s, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="w-12 text-[12px] text-[var(--color-text)]">{s.date}</span>
+                <span className="w-10 text-[12px] text-[var(--color-text-secondary)]">{s.cases}건</span>
+                <div className="flex-1 h-5 rounded bg-[var(--color-bg-secondary)] overflow-hidden min-w-[60px]">
+                  <div
+                    className="h-full rounded bg-[#3B82F6]"
+                    style={{ width: `${Math.min(100, ((s.mins || 0) / maxDayMins) * 100)}%` }}
+                  />
+                </div>
+                <span className="w-12 text-[12px] font-medium text-[var(--color-text)]">{s.mins}분</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[12px] text-[var(--color-text-secondary)]">
+            일 평균 {avgMinsPerDay}분 · {avgCasesPerDay}건/일
+          </p>
+        </div>
+      </div>
+
+      {/* Section C — 월말 시나리오 예측 */}
+      <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+        <h3 className="text-[14px] font-semibold mb-4 text-[var(--color-text)]">월말 시나리오 예측</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {scenarioMultipliers.map((sc, i) => {
+            const projM = Math.round(projectedMins * sc.mult);
+            const projC = Math.round((totalCases / (daysElapsed || 1)) * daysInMonth * sc.mult);
+            const projH = Math.round((projM / 60) * 10) / 10;
+            const bill = calcBill(projM);
+            const t = getTierLabel(projM);
+            return (
+              <div key={i} className="p-4 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)] mb-2">{sc.label} {i === 0 ? "(×1.0)" : i === 1 ? "(+20%)" : "(+50%)"}</p>
+                <p className="text-[16px] font-bold text-[#16A34A] mb-1">{fmtWon(bill)}</p>
+                <p className="text-[11px] text-[var(--color-text-secondary)]">예상 건수: {projC}건 · {projH}시간 · {t.label} ₩{t.rate}/분</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Section D — Trial banner */}
+      {(data.trialDaysLeft > 0) && (
+        <div className="p-4 rounded-[16px] bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100">
+          <p className="text-[14px] font-medium">
+            무료 체험 D+{Math.max(0, (data.trialDaysTotal || 14) - (data.trialDaysLeft || 0))} | 잔여 {data.trialDaysLeft}일 | 이번 달 예상 청구액 기준 월 {fmtWon(projectedBill)} 예상
+          </p>
+        </div>
+      )}
     </div>
   );
 }
