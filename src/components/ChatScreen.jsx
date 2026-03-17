@@ -176,12 +176,16 @@ export default function ChatScreen() {
   const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [showInviteQr, setShowInviteQr] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
-  const [showInstallBanner, setShowInstallBanner] = useState(true);
+  const [showInstallBanner, setShowInstallBanner] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone;
+    return !isStandalone;
+  });
   const roomMenuRef = useRef(null);
 
   useEffect(() => {
-    const standalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone);
-    if (standalone) setShowInstallBanner(false);
+    const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone);
+    if (isStandalone) setShowInstallBanner(false);
   }, []);
 
   // ── 접수처 EMR/CRM 복사용: org 설정 (직원만) ──
