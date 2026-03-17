@@ -35,6 +35,47 @@ const { bumpTranslationUsage, checkUsageLimit } = require('./server/billing');
 const cron = require('node-cron');
 const { generateCostReport } = require('./server/cost-report');
 const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/db/sqlite');
+const crypto = require('crypto');
+
+// === 병원 메시지 암호화 (기관별 AES-256-GCM) ===
+const ALGO = 'aes-256-gcm';
+
+function encryptText(text, keyHex) {
+  if (!text || !keyHex) return text;
+  try {
+    const key = Buffer.from(keyHex, 'hex');
+    if (key.length !== 32) return text;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGO, key, iv);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('hex');
+  } catch (_) { return text; }
+}
+
+function decryptText(encrypted, keyHex) {
+  if (!encrypted || !keyHex || !encrypted.includes(':')) return encrypted;
+  try {
+    const [ivHex, tagHex, dataHex] = encrypted.split(':');
+    if (!ivHex || !tagHex || !dataHex) return encrypted;
+    const key = Buffer.from(keyHex, 'hex');
+    if (key.length !== 32) return encrypted;
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const data = Buffer.from(dataHex, 'hex');
+    const decipher = crypto.createDecipheriv(ALGO, key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+  } catch (_) { return encrypted; }
+}
+
+async function getOrgEncryptionKey(orgCode) {
+  if (!orgCode) return null;
+  try {
+    const row = await dbGet('SELECT org_encryption_key FROM organizations WHERE org_code = ? LIMIT 1', [String(orgCode).trim()]);
+    return row?.org_encryption_key || null;
+  } catch (_) { return null; }
+}
 
 // === 사용량 추적 ===
 const usageStats = {
@@ -3537,10 +3578,14 @@ io.on('connection', (socket) => {
               [roomId, finalText]
             ).catch(() => null);
             if (!recentDup) {
+              const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
+              const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+              const encOriginal = encryptText(finalText, keyHex);
+              const encTranslated = encryptText(translated || '', keyHex);
               await dbRun(
                 `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [msgId, activeSession?.id || null, roomId, senderRole, fromLang, finalText, translated || '', toLang, pToken]
+                [msgId, activeSession?.id || null, roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken]
               );
             }
           } catch (dbErr) { console.warn('[hospital:msg-save]', dbErr?.message); trackUsageError(dbErr, { source: 'hospital:msg-save' }); }
@@ -3849,10 +3894,14 @@ io.on('connection', (socket) => {
             [roomId, normalized]
           ).catch(() => null);
           if (!recentDup) {
+            const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
+            const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+            const encOriginal = encryptText(normalized, keyHex);
+            const encTranslated = encryptText(translatedText, keyHex);
             await dbRun(
               `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [msgId, activeSession?.id || null, roomId, senderRole, fromLang, normalized, translatedText, toLang, pToken]
+              [msgId, activeSession?.id || null, roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken]
             );
           }
           const senderSocketId = socket.id;
@@ -4081,10 +4130,14 @@ io.on('connection', (socket) => {
             [roomId, trimmedText]
           ).catch(() => null);
           if (!recentDup) {
+            const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
+            const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+            const encOriginal = encryptText(trimmedText, keyHex);
+            const encTranslated = encryptText(draft || '', keyHex);
             await dbRun(
               `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [id, activeSession2?.id || null, roomId, senderRole, fromLang, trimmedText, draft || '', toLang, pToken2]
+              [id, activeSession2?.id || null, roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken2]
             );
           }
         } catch (dbErr2) { console.warn('[hospital:msg-save2]', dbErr2?.message); trackUsageError(dbErr2, { source: 'hospital:msg-save2' }); }
@@ -4924,7 +4977,23 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE organizations ADD COLUMN crm_label TEXT");
         console.log('[admin] ✅ added organizations.crm_label');
       }
+      if (!orgCols.some(c => c.name === 'org_encryption_key')) {
+        await dbRun("ALTER TABLE organizations ADD COLUMN org_encryption_key TEXT");
+        console.log('[admin] ✅ added organizations.org_encryption_key');
+      }
     } catch (_) {}
+
+    // 기관별 메시지 암호화 키: 키가 없는 org에 32바이트 랜덤 키 생성
+    try {
+      const orgsWithoutKey = await dbAll(
+        "SELECT org_code FROM organizations WHERE org_encryption_key IS NULL OR org_encryption_key = ''"
+      );
+      for (const row of orgsWithoutKey || []) {
+        const keyHex = crypto.randomBytes(32).toString('hex');
+        await dbRun('UPDATE organizations SET org_encryption_key = ? WHERE org_code = ?', [keyHex, row.org_code]);
+        console.log('[admin] ✅ generated org_encryption_key for', row.org_code);
+      }
+    } catch (e) { console.warn('[admin] org_encryption_key init:', e?.message); }
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
@@ -5642,7 +5711,7 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
     );
 
     const sessionRow = await dbGet(
-      `SELECT s.guest_lang, s.patient_id, p.name
+      `SELECT s.guest_lang, s.patient_id, p.name, s.org_code
        FROM hospital_sessions s
        LEFT JOIN hospital_patients p ON s.patient_id = p.patient_id
        WHERE s.room_id = ?
@@ -5651,9 +5720,16 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
       [roomId]
     ).catch(() => null);
 
+    const keyHex = await getOrgEncryptionKey(sessionRow?.org_code || null);
+    const decryptedMessages = (messages || []).map((m) => ({
+      ...m,
+      original_text: decryptText(m.original_text, keyHex),
+      translated_text: decryptText(m.translated_text, keyHex),
+    }));
+
     res.json({
       success: true,
-      messages: messages || [],
+      messages: decryptedMessages,
       patient_lang: sessionRow?.guest_lang ?? null,
       patient_name: sessionRow?.name ?? null,
     });
@@ -5672,16 +5748,19 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!originalText) return res.status(400).json({ error: 'text_required' });
 
     const session = await dbGet(
-      `SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
+      `SELECT id, room_id, org_code FROM hospital_sessions WHERE patient_token = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
       [token]
     );
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
+    const keyHex = await getOrgEncryptionKey(session.org_code || null);
+    const encOriginal = encryptText(originalText, keyHex);
+    const encTranslated = encryptText(originalText, keyHex);
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
-      [msgId, session.id, session.room_id, originalText, originalText, token]
+      [msgId, session.id, session.room_id, encOriginal, encTranslated, token]
     );
     res.json({ ok: true, roomId: session.room_id, delivered: false });
   } catch (e) {
@@ -5699,10 +5778,20 @@ app.get('/api/hospital/patient/:patientToken/pending-messages', async (req, res)
        FROM hospital_messages WHERE patient_token = ? AND offline = 1 AND delivered = 0 ORDER BY created_at ASC`,
       [token]
     );
+    let keyHex = null;
+    if (rows.length > 0 && rows[0].session_id) {
+      const sess = await dbGet('SELECT org_code FROM hospital_sessions WHERE id = ? LIMIT 1', [rows[0].session_id]).catch(() => null);
+      keyHex = await getOrgEncryptionKey(sess?.org_code || null);
+    }
+    const decrypted = (rows || []).map((m) => ({
+      ...m,
+      original_text: decryptText(m.original_text, keyHex),
+      translated_text: decryptText(m.translated_text, keyHex),
+    }));
     if (rows.length > 0) {
       await dbRun(`UPDATE hospital_messages SET delivered = 1 WHERE patient_token = ? AND offline = 1 AND delivered = 0`, [token]);
     }
-    res.json({ ok: true, messages: rows });
+    res.json({ ok: true, messages: decrypted });
   } catch (e) {
     console.error('[hospital:pending-messages]', e?.message);
     res.status(500).json({ error: 'pending_messages_failed' });
@@ -5793,6 +5882,7 @@ app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
 app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
   try {
     const orgId = req.hospitalOrgId;
+    const orgCode = req.hospitalOrgCode || null;
     const { sessionId, roomId, senderRole, senderLang, originalText, translatedText, translatedLang } = req.body || {};
     if (!sessionId || !roomId || !originalText) {
       return res.status(400).json({ error: 'missing_fields' });
@@ -5801,10 +5891,13 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
+    const keyHex = await getOrgEncryptionKey(orgCode);
+    const encOriginal = encryptText(originalText, keyHex);
+    const encTranslated = encryptText(translatedText || '', keyHex);
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', originalText, translatedText || '', translatedLang || '', orgId, sessionType]
+      [msgId, sessionId, roomId, senderRole || 'guest', senderLang || '', encOriginal, encTranslated, translatedLang || '', orgId, sessionType]
     );
     res.json({ success: true, id: msgId });
   } catch (e) {
@@ -5996,7 +6089,12 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
     sql += ' ORDER BY hs.created_at DESC LIMIT ?';
     params.push(Number(lim) || 50);
     const sessions = await dbAll(sql, params);
-    res.json({ success: true, sessions });
+    const keyHex = await getOrgEncryptionKey(orgCode || null);
+    const withDecryptedLastMessage = (sessions || []).map((s) => ({
+      ...s,
+      last_message: s.last_message ? decryptText(s.last_message, keyHex) : s.last_message,
+    }));
+    res.json({ success: true, sessions: withDecryptedLastMessage });
   } catch (e) {
     res.status(500).json({ error: 'sessions_query_failed' });
   }
@@ -6016,7 +6114,13 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
     const messagesQuery = 'SELECT * FROM hospital_messages WHERE room_id = ? ORDER BY created_at ASC';
     console.log('[hospital:sessions:messages]', { sessionId, roomId, query: messagesQuery });
     const messages = await dbAll(messagesQuery, [roomId]);
-    res.json({ success: true, session, messages: messages || [] });
+    const keyHex = await getOrgEncryptionKey(orgCode || null);
+    const decrypted = (messages || []).map((m) => ({
+      ...m,
+      original_text: decryptText(m.original_text, keyHex),
+      translated_text: decryptText(m.translated_text, keyHex),
+    }));
+    res.json({ success: true, session, messages: decrypted });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
   }
@@ -6320,7 +6424,13 @@ app.get('/api/hospital/records/:identifier', async (req, res) => {
         'SELECT * FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
         [s.id]
       );
-      return { ...s, messages };
+      const keyHex = await getOrgEncryptionKey(s.org_code || null);
+      const decrypted = (messages || []).map((m) => ({
+        ...m,
+        original_text: decryptText(m.original_text, keyHex),
+        translated_text: decryptText(m.translated_text, keyHex),
+      }));
+      return { ...s, messages: decrypted };
     }));
     res.json({ success: true, patient: patient || null, sessions: sessionsWithMessages });
   } catch (e) {
