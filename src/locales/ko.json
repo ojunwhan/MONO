@@ -230,6 +230,8 @@
     "terms": "이용약관",
     "privacy": "개인정보처리방침",
     "instantQR": "QR코드로 즉시 통역",
+    "startWithoutLogin": "QR 통역 바로 시작",
+    "hospitalAdminLink": "병원·기관 관리자이신가요?",
     "purposeTitle": "어떤 용도로 사용하시나요?",
     "personal": "개인 사용자",
     "personalDesc": "일반 MONO 메신저·통역",

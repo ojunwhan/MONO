@@ -22,7 +22,6 @@ import HospitalPatientJoin from "./pages/HospitalPatientJoin";
 import HospitalStaffQr from "./pages/HospitalStaffQr";
 import HospitalAesthetic from "./pages/HospitalAesthetic";
 import HospitalConversations from "./pages/HospitalConversations";
-import OrgSetup from "./pages/OrgSetup";
 import FixedRoom from "./pages/FixedRoom";
 import FixedRoomVAD from "./pages/FixedRoomVAD";
 import AdminLogin from "./pages/Admin/AdminLogin";
@@ -77,10 +76,6 @@ const router = createBrowserRouter([
     path: "/hospital/join/:orgCode",
     loader: () => null,
     element: <HospitalPatientJoin />,
-  },
-  {
-    path: "/org-setup",
-    element: <OrgSetup />,
   },
   {
     path: "/setup",

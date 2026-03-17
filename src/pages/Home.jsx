@@ -65,14 +65,14 @@ export default function Home() {
         if (i === 0) await sleep(250);
       }
       if (cancelled) return;
-      setAuthOk(false);
+      // Allow unauthenticated access so "QR 통역 바로 시작" from login can use /interpret
+      setAuthOk(true);
       setAuthReady(true);
-      navigate("/login", { replace: true });
     })();
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (!authReady || !authOk) return;

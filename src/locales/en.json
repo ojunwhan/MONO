@@ -230,6 +230,8 @@
     "terms": "Terms",
     "privacy": "Privacy Policy",
     "instantQR": "Instant interpretation with QR",
+    "startWithoutLogin": "Start interpretation with QR (no login)",
+    "hospitalAdminLink": "Hospital or organization admin?",
     "purposeTitle": "How will you use MONO?",
     "personal": "Personal",
     "personalDesc": "MONO messenger & interpretation",

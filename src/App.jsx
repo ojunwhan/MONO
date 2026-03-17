@@ -1,27 +1,12 @@
 import React, { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 import router from "./router";
-import InAppBlocker from "./components/InAppBlocker"; // ✅ 추가
-import OnboardingSlides from "./components/OnboardingSlides";
+import InAppBlocker from "./components/InAppBlocker";
 import socket from "./socket";
 import { getMyIdentity } from "./db";
 import { subscribeToPush } from "./push";
 
 const App = () => {
-  const [showOnboarding, setShowOnboarding] = React.useState(
-    () => localStorage.getItem("mono.onboardingDone") !== "1"
-  );
-  const pathname = window.location.pathname;
-  const isGuestJoinRoute = pathname.startsWith("/join/")
-    || pathname.startsWith("/hospital/kiosk/")
-    || pathname.startsWith("/hospital/join/")
-    || pathname.startsWith("/kiosk")
-    || pathname.startsWith("/hospital")
-    || pathname.startsWith("/fixed-room/")
-    || pathname.startsWith("/fixed/")
-    || pathname.startsWith("/admin")
-    || pathname.startsWith("/org/");
-
   useEffect(() => {
     const theme = localStorage.getItem("mono.theme");
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -64,17 +49,8 @@ const App = () => {
 
   return (
     <>
-      <InAppBlocker />   {/* ✅ 인앱 브라우저 차단 */}
+      <InAppBlocker />
       <RouterProvider router={router} />
-      {!isGuestJoinRoute ? (
-        <OnboardingSlides
-          open={showOnboarding}
-          onClose={() => {
-            localStorage.setItem("mono.onboardingDone", "1");
-            setShowOnboarding(false);
-          }}
-        />
-      ) : null}
     </>
   );
 };
