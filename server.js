@@ -3573,9 +3573,9 @@ io.on('connection', (socket) => {
             ).catch(() => null);
             if (!recentDup) {
               const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
-              const encKey = await getOrgEncryptionKey(orgRow?.org_code || null);
-              const encOriginal = encryptText(finalText, encKey);
-              const encTranslated = encryptText(translated || '', encKey);
+              const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+              const encOriginal = encryptText(finalText, keyHex);
+              const encTranslated = encryptText(translated || '', keyHex);
               await dbRun(
                 `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -4125,9 +4125,9 @@ io.on('connection', (socket) => {
           ).catch(() => null);
           if (!recentDup) {
             const orgRow = await dbGet('SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]).catch(() => null);
-            const encKey = await getOrgEncryptionKey(orgRow?.org_code || null);
-            const encOriginal = encryptText(trimmedText, encKey);
-            const encTranslated = encryptText(draft || '', encKey);
+            const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+            const encOriginal = encryptText(trimmedText, keyHex);
+            const encTranslated = encryptText(draft || '', keyHex);
             await dbRun(
               `INSERT OR IGNORE INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -5744,9 +5744,9 @@ app.post('/api/hospital/patient/:patientToken/message', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'no_session', message: '해당 환자의 세션이 없습니다.' });
 
     const msgId = uuidv4();
-    const encKey = await getOrgEncryptionKey(session.org_code || null);
-    const encOriginal = encryptText(originalText, encKey);
-    const encTranslated = encryptText(originalText, encKey);
+    const keyHex = await getOrgEncryptionKey(session.org_code || null);
+    const encOriginal = encryptText(originalText, keyHex);
+    const encTranslated = encryptText(originalText, keyHex);
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token, offline, delivered)
        VALUES (?, ?, ?, 'host', 'ko', ?, ?, '', ?, 1, 0)`,
@@ -5881,9 +5881,9 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'session_not_found' });
     const sessionType = session.assigned_room ? 'consultation' : 'reception';
     const msgId = uuidv4();
-    const encKey = await getOrgEncryptionKey(orgCode);
-    const encOriginal = encryptText(originalText, encKey);
-    const encTranslated = encryptText(translatedText || '', encKey);
+    const keyHex = await getOrgEncryptionKey(orgCode);
+    const encOriginal = encryptText(originalText, keyHex);
+    const encTranslated = encryptText(translatedText || '', keyHex);
     await dbRun(
       `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, org_id, session_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
