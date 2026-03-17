@@ -232,14 +232,14 @@ export default function HospitalDashboard() {
           </div>
         </div>
 
-        {/* Menu */}
-        <nav className="flex-1 py-3 overflow-y-auto">
-          {MENU_ITEMS.map((item) => {
+        {/* Menu — render all MENU_ITEMS with index-stable keys so every item mounts */}
+        <nav className="flex-1 py-3 overflow-y-auto" aria-label="대시보드 메뉴">
+          {MENU_ITEMS.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeMenu === item.id;
             return (
               <button
-                key={item.id}
+                key={`sidebar-${index}-${item.id}`}
                 type="button"
                 onClick={() => setActiveMenu(item.id)}
                 className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-medium transition-colors ${
@@ -248,7 +248,7 @@ export default function HospitalDashboard() {
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text)]"
                 }`}
               >
-                <Icon size={18} />
+                {Icon ? <Icon size={18} /> : null}
                 {item.label}
               </button>
             );
