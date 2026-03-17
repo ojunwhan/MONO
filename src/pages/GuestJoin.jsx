@@ -6,6 +6,7 @@ import MonoLogo from "../components/MonoLogo";
 import { getLanguageByCode } from "../constants/languages";
 import { detectUserLanguage } from "../constants/languageProfiles";
 import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 
 function detectBrowserLanguage() {
   const detected = detectUserLanguage();
@@ -222,6 +223,7 @@ export default function GuestJoinPage() {
               onSelect={(code) => {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
+                i18n.changeLanguage(code);
                 setLangConfirmed(true);
                 setShowLangGrid(false);
               }}

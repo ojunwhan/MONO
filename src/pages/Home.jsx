@@ -8,6 +8,7 @@ import { ChevronLeft } from "lucide-react";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { fetchAuthMe } from "../auth/session";
 import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 
 function MonoLogo() {
   return (
@@ -164,6 +165,7 @@ export default function Home() {
               if (isGuest) {
                 setSelectedLang(code);
                 localStorage.setItem("myLang", code);
+                i18n.changeLanguage(code);
                 setShowLangGrid(false);
               } else {
                 handleHostLangChange(code);
