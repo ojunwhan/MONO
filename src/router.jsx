@@ -32,6 +32,8 @@ import VisualPipelineBuilder from "./pages/Admin/VisualPipelineBuilder";
 import OrgKiosk from "./pages/Org/OrgKiosk";
 import OrgStaff from "./pages/Org/OrgStaff";
 import OrgJoin from "./pages/Org/OrgJoin";
+import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
+
 async function rootRedirectLoader({ request }) {
   const url = new URL(request.url);
   const pathname = url.pathname || "/";
@@ -42,9 +44,15 @@ async function rootRedirectLoader({ request }) {
     return redirect(`/join/${encodeURIComponent(roomId)}?siteContext=${encodeURIComponent(siteContext)}&roomType=${encodeURIComponent(roomType)}`);
   }
 
-  // Root "/" always shows login/landing first (QR 통역 바로 시작, hospital-login, social login).
-  if (pathname === "/") return redirect("/login");
-  return null;
+  // Only run auth redirect for exact root "/". Other paths (e.g. /hospital-login) are public — no redirect.
+  if (pathname !== "/") return null;
+
+  const me = await fetchAuthMe();
+  if (me.authenticated) {
+    await syncAuthUserToLocalIdentity();
+    return redirect("/interpret");
+  }
+  return redirect("/login");
 }
 
 async function hospitalDashboardLoader() {
