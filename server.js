@@ -36,45 +36,39 @@ const cron = require('node-cron');
 const { generateCostReport } = require('./server/cost-report');
 const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/db/sqlite');
 const crypto = require('crypto');
-
-// === 병원 메시지 암호화 (기관별 AES-256-GCM) ===
 const ALGO = 'aes-256-gcm';
 
 function encryptText(text, keyHex) {
   if (!text || !keyHex) return text;
-  try {
-    const key = Buffer.from(keyHex, 'hex');
-    if (key.length !== 32) return text;
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv(ALGO, key, iv);
-    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('hex');
-  } catch (_) { return text; }
+  const key = Buffer.from(keyHex, 'hex');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ALGO, key, iv);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('hex');
 }
 
 function decryptText(encrypted, keyHex) {
   if (!encrypted || !keyHex || !encrypted.includes(':')) return encrypted;
   try {
     const [ivHex, tagHex, dataHex] = encrypted.split(':');
-    if (!ivHex || !tagHex || !dataHex) return encrypted;
     const key = Buffer.from(keyHex, 'hex');
-    if (key.length !== 32) return encrypted;
     const iv = Buffer.from(ivHex, 'hex');
     const tag = Buffer.from(tagHex, 'hex');
     const data = Buffer.from(dataHex, 'hex');
     const decipher = crypto.createDecipheriv(ALGO, key, iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
-  } catch (_) { return encrypted; }
+  } catch { return encrypted; }
 }
 
 async function getOrgEncryptionKey(orgCode) {
-  if (!orgCode) return null;
-  try {
-    const row = await dbGet('SELECT org_encryption_key FROM organizations WHERE org_code = ? LIMIT 1', [String(orgCode).trim()]);
-    return row?.org_encryption_key || null;
-  } catch (_) { return null; }
+  return new Promise((resolve) => {
+    if (!orgCode) { resolve(null); return; }
+    dbGet('SELECT org_encryption_key FROM organizations WHERE org_code = ?', [String(orgCode).trim()])
+      .then((row) => resolve(row?.org_encryption_key || null))
+      .catch(() => resolve(null));
+  });
 }
 
 // === 사용량 추적 ===
@@ -4977,23 +4971,19 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE organizations ADD COLUMN crm_label TEXT");
         console.log('[admin] ✅ added organizations.crm_label');
       }
-      if (!orgCols.some(c => c.name === 'org_encryption_key')) {
-        await dbRun("ALTER TABLE organizations ADD COLUMN org_encryption_key TEXT");
-        console.log('[admin] ✅ added organizations.org_encryption_key');
-      }
     } catch (_) {}
 
-    // 기관별 메시지 암호화 키: 키가 없는 org에 32바이트 랜덤 키 생성
-    try {
-      const orgsWithoutKey = await dbAll(
-        "SELECT org_code FROM organizations WHERE org_encryption_key IS NULL OR org_encryption_key = ''"
-      );
-      for (const row of orgsWithoutKey || []) {
-        const keyHex = crypto.randomBytes(32).toString('hex');
-        await dbRun('UPDATE organizations SET org_encryption_key = ? WHERE org_code = ?', [keyHex, row.org_code]);
-        console.log('[admin] ✅ generated org_encryption_key for', row.org_code);
+    // org_encryption_key 컬럼 추가 후 키가 없는 기관에 32바이트 랜덤 키 생성
+    await dbRun("ALTER TABLE organizations ADD COLUMN org_encryption_key TEXT").catch(() => {});
+    const orgRows = await dbAll("SELECT org_code, org_encryption_key FROM organizations");
+    if (orgRows) {
+      for (const row of orgRows) {
+        if (!row.org_encryption_key) {
+          const key = crypto.randomBytes(32).toString('hex');
+          await dbRun("UPDATE organizations SET org_encryption_key = ? WHERE org_code = ?", [key, row.org_code]);
+        }
       }
-    } catch (e) { console.warn('[admin] org_encryption_key init:', e?.message); }
+    }
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
