@@ -97,6 +97,23 @@ export default function HospitalPatientJoin() {
   const [patientName, setPatientName] = useState("");
   const [returningPatient, setReturningPatient] = useState(() => getReturningPatient());
   const returningAutoJoinDoneRef = useRef(false);
+  const [hospitalName, setHospitalName] = useState(null);
+  const [hospitalNameLoading, setHospitalNameLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orgCode) {
+      setHospitalNameLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setHospitalNameLoading(true);
+    fetch(`/api/hospital/org/${encodeURIComponent(orgCode)}`)
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled && data?.name) setHospitalName(data.name); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setHospitalNameLoading(false); });
+    return () => { cancelled = true; };
+  }, [orgCode]);
 
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
@@ -341,17 +358,17 @@ export default function HospitalPatientJoin() {
           <MonoLogo />
         </div>
 
-        {/* Department */}
+        {/* Department / Hospital name */}
         {dept && (
           <div style={{ textAlign: "center", marginBottom: "20px" }}>
             <span style={{ fontSize: "40px", display: "block", marginBottom: "4px" }}>
               {dept.icon}
             </span>
             <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#1a1a1a", margin: 0 }}>
-              {dept.labelKo}
+              {hospitalNameLoading ? "..." : (hospitalName || dept.labelKo)}
             </h2>
             <p style={{ fontSize: "13px", color: "#6b7280", margin: "2px 0 0" }}>
-              {dept.label}
+              {hospitalNameLoading ? "..." : (hospitalName ? orgCode : dept.label)}
             </p>
           </div>
         )}

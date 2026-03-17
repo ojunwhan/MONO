@@ -447,8 +447,19 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const [qrLinkCopied, setQrLinkCopied] = useState(false);
   const [staffLinkCopied, setStaffLinkCopied] = useState(false);
   const [tabletLinkCopied, setTabletLinkCopied] = useState(false);
+  const [hospitalName, setHospitalName] = useState(null);
   const joinedRef = useRef(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    if (!orgCode) return;
+    let cancelled = false;
+    fetch(`/api/hospital/org/${encodeURIComponent(orgCode)}`)
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled && data?.name) setHospitalName(data.name); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [orgCode]);
   useEffect(() => {
     const h = () => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", h);
@@ -661,6 +672,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {}); }, []);
 
   const displayTitle = roomName || selectedDept.labelKo;
+  const headerHospitalName = hospitalName || displayTitle;
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
@@ -685,8 +697,8 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh",maxWidth: isMobile ? "100%" : "480px",padding: isMobile ? "12px" : isTablet ? "24px" : "32px"}}>
         <div className="text-center mb-6">
-          <div style={{display:"flex",justifyContent:"center",marginBottom:"12px"}}><svg style={{width:"clamp(40px, 8vw, 56px)",height:"clamp(40px, 8vw, 56px)"}} viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-          <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px"}}>{displayTitle}</h2>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:"12px",fontSize:"clamp(40px, 8vw, 56px)",lineHeight:1}}>{"\uD83C\uDFE5"}</div>
+          <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px"}}>{headerHospitalName}</h2>
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
         </div>
         <div className="w-full mb-2" style={{maxWidth:"400px"}}>

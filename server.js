@@ -5130,6 +5130,23 @@ app.get('/api/hospital/org-settings', async (req, res) => {
   }
 });
 
+// GET /api/hospital/org/:orgCode — 병원 이름 조회 (환자/직원 화면 헤더용, 인증 불필요)
+app.get('/api/hospital/org/:orgCode', async (req, res) => {
+  try {
+    const orgCode = String(req.params.orgCode || '').trim();
+    if (!orgCode) return res.status(400).json({ error: 'org_code_required' });
+    const row = await dbGet(
+      'SELECT name FROM organizations WHERE org_code = ? AND is_active = 1 LIMIT 1',
+      [orgCode]
+    );
+    if (!row || !row.name) return res.status(404).json({ error: 'org_not_found' });
+    res.json({ name: row.name });
+  } catch (e) {
+    console.error('[hospital:org]', e?.message);
+    res.status(500).json({ error: 'org_lookup_failed' });
+  }
+});
+
 // POST /api/hospital/auth/logout — 병원 관리자 로그아웃 (쿠키 삭제)
 app.post('/api/hospital/auth/logout', (req, res) => {
   res.clearCookie(HOSPITAL_TOKEN_COOKIE, {
