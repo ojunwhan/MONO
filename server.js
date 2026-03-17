@@ -5280,53 +5280,69 @@ app.post('/api/hospital/join', async (req, res) => {
       }
     }
 
-    // 2) Persistent PT room per patient: use hospital_patients.room_id if set, else create new and save
+    // 2) Visit count per org (for display only)
     let visitCount = 0;
     if (pToken) {
       try {
-        const vcRow = await dbGet('SELECT COUNT(*) as c FROM hospital_sessions WHERE patient_token = ?', [pToken]);
+        const vcRow = await dbGet('SELECT COUNT(*) as c FROM hospital_sessions WHERE patient_token = ? AND org_code = ?', [pToken, orgCode]);
         visitCount = vcRow?.c || 0;
       } catch (_) {}
     }
 
-    const patientRow = pToken ? await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [pToken]).catch(() => null) : null;
+    // 3) Reuse existing active session for this patient_token + org_code, else create new room/session
+    const existingSession = pToken
+      ? await dbGet(
+          'SELECT id, room_id FROM hospital_sessions WHERE patient_token = ? AND org_code = ? AND status = ? ORDER BY started_at DESC LIMIT 1',
+          [pToken, orgCode, 'active']
+        ).catch(() => null)
+      : null;
+
     let roomId;
+    let sessionId;
     let isExistingSession = false;
 
-    if (patientRow && patientRow.room_id) {
-      roomId = patientRow.room_id;
+    let createdAt;
+    if (existingSession) {
+      roomId = existingSession.room_id;
+      sessionId = existingSession.id;
       isExistingSession = true;
+      createdAt = new Date().toISOString();
     } else {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let candidate;
-      let exists;
-      do {
-        candidate = 'PT-';
-        for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
-        exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
-        if (!exists) exists = await dbGet('SELECT 1 FROM hospital_patients WHERE room_id = ? LIMIT 1', [candidate]);
-      } while (exists);
-      roomId = candidate;
-      if (pToken) {
-        try {
-          await dbRun('UPDATE hospital_patients SET room_id = ?, last_visit_at = datetime(\'now\'), dept = ? WHERE patient_token = ?', [roomId, dept, pToken]);
-        } catch (dbErr) {
-          console.warn('[hospital:join] patient room_id update warning:', dbErr?.message);
+      const patientRow = pToken ? await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [pToken]).catch(() => null) : null;
+      if (patientRow && patientRow.room_id) {
+        roomId = patientRow.room_id;
+        isExistingSession = true;
+      } else {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let candidate;
+        let exists;
+        do {
+          candidate = 'PT-';
+          for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
+          exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
+          if (!exists) exists = await dbGet('SELECT 1 FROM hospital_patients WHERE room_id = ? LIMIT 1', [candidate]);
+        } while (exists);
+        roomId = candidate;
+        if (pToken) {
+          try {
+            await dbRun('UPDATE hospital_patients SET room_id = ?, last_visit_at = datetime(\'now\'), dept = ? WHERE patient_token = ?', [roomId, dept, pToken]);
+          } catch (dbErr) {
+            console.warn('[hospital:join] patient room_id update warning:', dbErr?.message);
+          }
         }
       }
-    }
-
-    const createdAt = new Date().toISOString();
-    const sessionId = uuidv4();
-    try {
-      await dbRun(
-        `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-        [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode]
-      );
-    } catch (dbErr) {
-      console.warn('[hospital:join] session insert warning:', dbErr?.message);
-      trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
+      sessionId = uuidv4();
+      createdAt = new Date().toISOString();
+      try {
+        await dbRun(
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode]
+        );
+      } catch (dbErr) {
+        console.warn('[hospital:join] session insert warning:', dbErr?.message);
+        trackUsageError(dbErr, { source: 'hospital:join:session-insert' });
+      }
     }
 
     if (!ROOMS.has(roomId)) {

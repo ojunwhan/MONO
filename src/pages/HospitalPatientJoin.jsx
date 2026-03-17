@@ -25,31 +25,38 @@ function getPatientLabel(langCode) {
   return PATIENT_LABEL[code] || "Patient";
 }
 
-// ── patientToken / name / lang localStorage 관리 ──
-const PATIENT_TOKEN_KEY = "mono_hospital_patient_token";
-const PATIENT_NAME_KEY = "mono_hospital_patient_name";
-const PATIENT_LANG_KEY = "mono_hospital_patient_lang";
+// ── patientToken / name / lang localStorage 관리 (orgCode별 격리) ──
+function patientTokenKey(orgCode) {
+  return `mono_hospital_patient_token_${orgCode || "general"}`;
+}
+function patientNameKey(orgCode) {
+  return `mono_hospital_patient_name_${orgCode || "general"}`;
+}
+function patientLangKey(orgCode) {
+  return `mono_hospital_patient_lang_${orgCode || "general"}`;
+}
 
-function getOrCreatePatientToken() {
-  const existing = localStorage.getItem(PATIENT_TOKEN_KEY);
+function getOrCreatePatientToken(orgCode) {
+  const key = patientTokenKey(orgCode);
+  const existing = localStorage.getItem(key);
   if (existing) return existing;
   const token = `pt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  localStorage.setItem(PATIENT_TOKEN_KEY, token);
+  localStorage.setItem(key, token);
   return token;
 }
 
-function getReturningPatient() {
-  const token = localStorage.getItem(PATIENT_TOKEN_KEY);
-  const name = localStorage.getItem(PATIENT_NAME_KEY);
-  const lang = localStorage.getItem(PATIENT_LANG_KEY);
+function getReturningPatient(orgCode) {
+  const token = localStorage.getItem(patientTokenKey(orgCode));
+  const name = localStorage.getItem(patientNameKey(orgCode));
+  const lang = localStorage.getItem(patientLangKey(orgCode));
   if (token && name && lang) return { token: token.trim(), name: name.trim(), lang: lang.trim() };
   return null;
 }
 
-function clearReturningPatientStorage() {
-  localStorage.removeItem(PATIENT_TOKEN_KEY);
-  localStorage.removeItem(PATIENT_NAME_KEY);
-  localStorage.removeItem(PATIENT_LANG_KEY);
+function clearReturningPatientStorage(orgCode) {
+  localStorage.removeItem(patientTokenKey(orgCode));
+  localStorage.removeItem(patientNameKey(orgCode));
+  localStorage.removeItem(patientLangKey(orgCode));
 }
 
 // Flag emoji for welcome-back (common hospital languages)
@@ -95,7 +102,7 @@ export default function HospitalPatientJoin() {
   const [localHistoryOpen, setLocalHistoryOpen] = useState(false);
   const [localHistoryList, setLocalHistoryList] = useState([]);
   const [patientName, setPatientName] = useState("");
-  const [returningPatient, setReturningPatient] = useState(() => getReturningPatient());
+  const [returningPatient, setReturningPatient] = useState(() => getReturningPatient(orgCode));
   const returningAutoJoinDoneRef = useRef(false);
   const [hospitalName, setHospitalName] = useState(null);
   const [hospitalNameLoading, setHospitalNameLoading] = useState(true);
@@ -129,8 +136,8 @@ export default function HospitalPatientJoin() {
     setError("");
 
     try {
-      const patientToken = urlToken ? String(urlToken).trim() : getOrCreatePatientToken();
-      if (urlToken) localStorage.setItem(PATIENT_TOKEN_KEY, patientToken);
+      const patientToken = urlToken ? String(urlToken).trim() : getOrCreatePatientToken(orgCode);
+      if (urlToken) localStorage.setItem(patientTokenKey(orgCode), patientToken);
       const lang = selectedLang;
 
       await fetch("/api/hospital/patient", {
@@ -162,8 +169,8 @@ export default function HospitalPatientJoin() {
 
       localStorage.setItem("myLang", lang);
       if (typeof localStorage !== "undefined") localStorage.setItem("mono_hospital_current_pt", roomId);
-      localStorage.setItem(PATIENT_NAME_KEY, (patientName || "").trim() || cleanName);
-      localStorage.setItem(PATIENT_LANG_KEY, lang);
+      localStorage.setItem(patientNameKey(orgCode), (patientName || "").trim() || cleanName);
+      localStorage.setItem(patientLangKey(orgCode), lang);
 
       let pendingMessages = [];
       try {
@@ -318,7 +325,7 @@ export default function HospitalPatientJoin() {
         <button
           type="button"
           onClick={() => {
-            clearReturningPatientStorage();
+            clearReturningPatientStorage(orgCode);
             setReturningPatient(null);
           }}
           style={{
