@@ -13,6 +13,14 @@
     "copied": "已复制！",
     "guestJoined": "对方已加入。"
   },
+  "home": {
+    "showToPartner": "请向对方出示此二维码",
+    "copyLink": "复制链接",
+    "guestAutoRedirect": "访客加入后，将自动跳转到聊天室。",
+    "connected": "已连接",
+    "selectLanguage": "选择语言",
+    "startInterpret": "开始"
+  },
   "chat": {
     "messageInput": "输入消息...",
     "recording": "录音中",

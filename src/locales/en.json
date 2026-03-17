@@ -13,6 +13,14 @@
     "copied": "Copied!",
     "guestJoined": "Your partner has joined."
   },
+  "home": {
+    "showToPartner": "Show this to your partner",
+    "copyLink": "Copy Link",
+    "guestAutoRedirect": "When a guest joins, you'll be redirected to the chat room automatically.",
+    "connected": "Connected",
+    "selectLanguage": "Select Your Language",
+    "startInterpret": "Start"
+  },
   "chat": {
     "messageInput": "Type a message...",
     "recording": "Recording",

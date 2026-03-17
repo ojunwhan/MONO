@@ -13,6 +13,14 @@
     "copied": "コピーしました！",
     "guestJoined": "相手が参加しました。"
   },
+  "home": {
+    "showToPartner": "相手にこのQRコードを見せてください",
+    "copyLink": "リンクをコピー",
+    "guestAutoRedirect": "ゲストが参加すると、自動的にチャットルームに移動します。",
+    "connected": "接続されました",
+    "selectLanguage": "言語を選択",
+    "startInterpret": "スタート"
+  },
   "chat": {
     "messageInput": "メッセージを入力...",
     "recording": "録音中",

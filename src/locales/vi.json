@@ -13,6 +13,14 @@
     "copied": "Đã sao chép!",
     "guestJoined": "Đối tác của bạn đã tham gia."
   },
+  "home": {
+    "showToPartner": "Cho đối tác xem mã QR này",
+    "copyLink": "Sao chép liên kết",
+    "guestAutoRedirect": "Khi khách tham gia, bạn sẽ được chuyển đến phòng chat tự động.",
+    "connected": "Đã kết nối",
+    "selectLanguage": "Chọn ngôn ngữ",
+    "startInterpret": "Bắt đầu"
+  },
   "chat": {
     "messageInput": "Nhập tin nhắn...",
     "recording": "Đang ghi",

@@ -13,6 +13,14 @@
     "copied": "تم النسخ!",
     "guestJoined": "انضم شريكك."
   },
+  "home": {
+    "showToPartner": "اعرض هذا لشريكك",
+    "copyLink": "نسخ الرابط",
+    "guestAutoRedirect": "عند انضمام الضيف، سيتم تحويلك تلقائياً إلى غرفة الدردشة.",
+    "connected": "متصل",
+    "selectLanguage": "اختر اللغة",
+    "startInterpret": "ابدأ"
+  },
   "chat": {
     "messageInput": "اكتب رسالة...",
     "recording": "جاري التسجيل",

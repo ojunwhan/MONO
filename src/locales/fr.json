@@ -13,6 +13,14 @@
     "copied": "Copié !",
     "guestJoined": "Votre partenaire a rejoint."
   },
+  "home": {
+    "showToPartner": "Montrez ceci à votre partenaire",
+    "copyLink": "Copier le lien",
+    "guestAutoRedirect": "Quand un invité rejoindra, vous serez redirigé automatiquement vers la salle de chat.",
+    "connected": "Connecté",
+    "selectLanguage": "Sélectionner la langue",
+    "startInterpret": "Démarrer"
+  },
   "chat": {
     "messageInput": "Saisissez un message...",
     "recording": "Enregistrement",

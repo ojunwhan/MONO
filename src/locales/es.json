@@ -13,6 +13,14 @@
     "copied": "¡Copiado!",
     "guestJoined": "Tu compañero se ha unido."
   },
+  "home": {
+    "showToPartner": "Muéstralo a tu compañero",
+    "copyLink": "Copiar enlace",
+    "guestAutoRedirect": "Cuando un invitado se una, serás redirigido automáticamente a la sala de chat.",
+    "connected": "Conectado",
+    "selectLanguage": "Seleccionar idioma",
+    "startInterpret": "Iniciar"
+  },
   "chat": {
     "messageInput": "Escribe un mensaje...",
     "recording": "Grabando",

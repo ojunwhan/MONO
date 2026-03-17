@@ -203,7 +203,7 @@ export default function Home() {
               onClick={handleGuestStart}
               className="mono-btn w-full h-[48px] px-4 text-[16px] font-medium border bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
             >
-              {me.startLabel}
+              {t("home.startInterpret")}
             </button>
           </div>
         ) : null}

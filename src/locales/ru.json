@@ -13,6 +13,14 @@
     "copied": "Скопировано!",
     "guestJoined": "Ваш партнёр присоединился."
   },
+  "home": {
+    "showToPartner": "Покажите это партнёру",
+    "copyLink": "Копировать ссылку",
+    "guestAutoRedirect": "Когда гость присоединится, вы автоматически перейдёте в чат.",
+    "connected": "Подключено",
+    "selectLanguage": "Выберите язык",
+    "startInterpret": "Начать"
+  },
   "chat": {
     "messageInput": "Введите сообщение...",
     "recording": "Запись",

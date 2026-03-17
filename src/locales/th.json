@@ -13,6 +13,14 @@
     "copied": "คัดลอกแล้ว!",
     "guestJoined": "คู่สนทนาของคุณได้เข้าร่วมแล้ว"
   },
+  "home": {
+    "showToPartner": "แสดงให้คู่สนทนาดู",
+    "copyLink": "คัดลอกลิงก์",
+    "guestAutoRedirect": "เมื่อแขกเข้าร่วม คุณจะถูกเปลี่ยนไปยังห้องแชทโดยอัตโนมัติ",
+    "connected": "เชื่อมต่อแล้ว",
+    "selectLanguage": "เลือกภาษา",
+    "startInterpret": "เริ่ม"
+  },
   "chat": {
     "messageInput": "พิมพ์ข้อความ...",
     "recording": "กำลังบันทึก",
