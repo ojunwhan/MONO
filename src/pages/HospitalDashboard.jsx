@@ -31,7 +31,6 @@ import {
   Tablet,
   Mic,
   MicOff,
-  CreditCard,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import {
@@ -55,7 +54,7 @@ const MENU_ITEMS = [
   { id: "departments", label: "진료과별 현황", icon: Building2 },
   { id: "rooms", label: "방 관리", icon: LayoutGrid },
   { id: "reports", label: "보고서 출력", icon: FileText },
-  { id: "usage-billing", label: "사용량 & 요금", icon: CreditCard },
+  { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
 ];
 
 const LANG_LABELS = {
