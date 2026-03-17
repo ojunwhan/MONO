@@ -141,11 +141,11 @@ export default function ChatScreen() {
   const hospitalDept = location.state?.hospitalDept || null;
   const chartNumber = location.state?.chartNumber || "";
   // 병원 모드에서 환자(게스트)가 보는 상대방 이름 — 나중에 병원 이름으로 교체 가능
-  const HOSPITAL_DISPLAY_NAME = hospitalDept?.labelKo || "병원";
+  const HOSPITAL_DISPLAY_NAME = hospitalDept?.labelKo || t("chat.hospitalName");
 
   // 병원 모드 초기 상대방 이름: 게스트(환자)→"병원", 호스트(직원)→"환자"
   const hospitalInitialPartnerName = isHospitalMode
-    ? (isGuestMode ? HOSPITAL_DISPLAY_NAME : "환자")
+    ? (isGuestMode ? HOSPITAL_DISPLAY_NAME : t("chat.patientName"))
     : "";
 
   // ── Identity: call sign (broadcast) or partner name (1:1) ──
@@ -222,32 +222,11 @@ export default function ChatScreen() {
   const resolvedPartnerShort = partnerShort || peerInfo?.peerLabel || "";
 
   const localizeWarning = useCallback((msg) => {
-    const code = String(fromLangRef.current || "en").toLowerCase();
     if (!msg) return "";
-    if (msg.includes("quota") || msg.includes("429")) {
-      const table = {
-        ko: "잠시 후 다시 시도해주세요.",
-        vi: "Vui long thu lai sau it phut.",
-        zh: "qing shao hou zai shi yi ci.",
-        ja: "shibaraku ato de mou ichido oshite kudasai.",
-        th: "proat long mai ik khrang nai mai kii naa thii.",
-        en: "Please try again in a moment.",
-      };
-      return table[code] || table.en;
-    }
-    if (!isOnline || !isSocketConnected) {
-      const table = {
-        ko: "인터넷 연결을 확인해주세요.",
-        vi: "Vui long kiem tra ket noi internet.",
-        zh: "qing jian cha wang luo lian jie.",
-        ja: "intanetto setsuzoku o kakunin shite kudasai.",
-        th: "proat truat sop kan chueam to internet.",
-        en: "Please check your internet connection.",
-      };
-      return table[code] || table.en;
-    }
+    if (msg.includes("quota") || msg.includes("429")) return t("chat.retryLater");
+    if (!isOnline || !isSocketConnected) return t("chat.checkConnection");
     return msg;
-  }, [isOnline, isSocketConnected]);
+  }, [isOnline, isSocketConnected, t]);
 
   // ── TTS auto-play toggle: OFF by default ──
   const voiceEnabledRef = useRef(localStorage.getItem("mono.voice") === "1");
@@ -366,7 +345,7 @@ export default function ChatScreen() {
         senderId: "",
         status: "translated",
         timestamp: ts,
-        senderDisplayName: mine ? "" : (hospitalDept?.labelKo || "병원"),
+        senderDisplayName: mine ? "" : (hospitalDept?.labelKo || t("chat.hospitalName")),
         senderFlagUrl: "",
         senderLabel: "",
       };
@@ -411,7 +390,7 @@ export default function ChatScreen() {
             senderId: mine ? participantIdRef.current : "",
             status: "translated",
             timestamp: ts,
-            senderDisplayName: mine ? "" : (hospitalDept?.labelKo || "병원"),
+            senderDisplayName: mine ? "" : (hospitalDept?.labelKo || t("chat.hospitalName")),
             senderFlagUrl: "",
             senderLabel: "",
             session_id: m.session_id != null ? String(m.session_id) : null,
@@ -440,7 +419,7 @@ export default function ChatScreen() {
       });
     }, 400);
     return () => clearTimeout(t);
-  }, [roomId, hospitalDept?.labelKo]);
+  }, [roomId, hospitalDept?.labelKo, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1544,7 +1523,7 @@ export default function ChatScreen() {
       await navigator.clipboard.writeText(text);
       setCopyFeedback(kind);
       setTimeout(() => setCopyFeedback(null), 2000);
-      showToast("복사됨 ✓");
+      showToast(t("chat.copyDoneCheck"));
     } catch {
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -1554,9 +1533,9 @@ export default function ChatScreen() {
       document.body.removeChild(ta);
       setCopyFeedback(kind);
       setTimeout(() => setCopyFeedback(null), 2000);
-      showToast("복사됨 ✓");
+      showToast(t("chat.copyDoneCheck"));
     }
-  }, [getTranscriptCopyText, showToast]);
+  }, [getTranscriptCopyText, showToast, t]);
 
   const formatDateDivider = useCallback((ts) => {
     if (!ts) return "";
@@ -1618,12 +1597,12 @@ export default function ChatScreen() {
     if (!canWebShare) return;
     try {
       await navigator.share({
-        title: "MONO 통역 대화방",
-        text: "MONO에서 실시간 통역 대화에 참여하세요",
+        title: t("chat.shareTitle"),
+        text: t("chat.shareText"),
         url: inviteUrl,
       });
     } catch {}
-  }, [canWebShare, inviteUrl]);
+  }, [canWebShare, inviteUrl, t]);
 
   return (
     <div className="relative">
@@ -1705,13 +1684,13 @@ export default function ChatScreen() {
                       {orgCopySettings.emr_enabled && (
                         <button type="button" onClick={() => { setRoomMenuOpen(false); handleCopyForTool("emr"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)] flex items-center gap-2">
                           <Copy size={14} />
-                          {copyFeedback === "emr" ? "복사됨 ✓" : `${orgCopySettings.emr_label || "EMR"}에 복사`}
+                          {copyFeedback === "emr" ? t("chat.copyDoneCheck") : `${orgCopySettings.emr_label || "EMR"} ${t("chat.copy")}`}
                         </button>
                       )}
                       {orgCopySettings.crm_enabled && (
                         <button type="button" onClick={() => { setRoomMenuOpen(false); handleCopyForTool("crm"); }} className="w-full h-[42px] px-3 text-left text-[14px] hover:bg-[var(--color-bg-secondary)] flex items-center gap-2">
                           <Copy size={14} />
-                          {copyFeedback === "crm" ? "복사됨 ✓" : `${orgCopySettings.crm_label || "CRM"}에 복사`}
+                          {copyFeedback === "crm" ? t("chat.copyDoneCheck") : `${orgCopySettings.crm_label || "CRM"} ${t("chat.copy")}`}
                         </button>
                       )}
                     </>

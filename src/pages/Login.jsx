@@ -36,7 +36,7 @@ export default function LoginPage() {
           {purpose == null ? (
             <>
               <p className="text-[15px] font-semibold text-[var(--color-text)] mb-4">
-                어떤 용도로 사용하시나요?
+                {t("login.purposeTitle")}
               </p>
               <div className="w-full max-w-[348px] space-y-3">
                 <button
@@ -61,8 +61,8 @@ export default function LoginPage() {
                     <Building2 size={24} className="text-[#3B82F6]" />
                   </span>
                   <div className="flex-1 text-left">
-                    <span className="block text-[15px] font-semibold text-[var(--color-text)]">기관 (병원·기업)</span>
-                    <span className="block text-[12px] text-[var(--color-text-secondary)]">병원 대시보드·키오스크 등</span>
+                    <span className="block text-[15px] font-semibold text-[var(--color-text)]">{t("login.org")}</span>
+                    <span className="block text-[12px] text-[var(--color-text-secondary)]">{t("login.orgDesc")}</span>
                   </div>
                 </button>
               </div>
@@ -74,7 +74,7 @@ export default function LoginPage() {
                 onClick={() => setPurpose(null)}
                 className="text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] mb-2"
               >
-                ← 다른 용도 선택
+                {t("login.backToPurpose")}
               </button>
               <a
                 href={`/auth/google?next=${encodeURIComponent(nextPath)}`}

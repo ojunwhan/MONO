@@ -4,6 +4,7 @@
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import MonoLogo from "../components/MonoLogo";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
@@ -71,6 +72,7 @@ function getFlagEmoji(langCode) {
 }
 
 export default function HospitalPatientJoin() {
+  const { t, i18n } = useTranslation();
   const { orgCode } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -125,8 +127,9 @@ export default function HospitalPatientJoin() {
   const handleLangSelect = useCallback((code) => {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
+    i18n.changeLanguage(code);
     setShowLangGrid(false);
-  }, []);
+  }, [i18n]);
 
   // ── 통역 시작: 기존 PT 재사용 또는 새 roomId 발급 → ChatScreen PTT 입장 ──
   const handleJoin = useCallback(async () => {
@@ -159,7 +162,7 @@ export default function HospitalPatientJoin() {
       });
       const data = await res.json();
       if (!data.success || !data.roomId) {
-        throw new Error(data.error || "연결에 실패했습니다");
+        throw new Error(data.error || t("hospitalPatientJoin.connectFailed"));
       }
 
       setIsExistingSession(data.isExistingSession === true);
@@ -207,11 +210,11 @@ export default function HospitalPatientJoin() {
       });
     } catch (e) {
       console.error("[hospital:patient-join] error:", e);
-      setError(e?.message || "연결에 실패했습니다. 다시 시도해주세요.");
+      setError(e?.message || t("hospitalPatientJoin.connectFailed"));
       setStep("error");
       joinCalledRef.current = false;
     }
-  }, [orgCode, navigate, selectedLang, urlToken, urlOrg, patientName]);
+  }, [orgCode, navigate, selectedLang, urlToken, urlOrg, patientName, t]);
 
   // Returning patient: auto-proceed after 1.5s (call join then navigate)
   useEffect(() => {
@@ -239,7 +242,7 @@ export default function HospitalPatientJoin() {
           body: JSON.stringify(joinBody),
         });
         const data = await res.json();
-        if (!data.success || !data.roomId) throw new Error(data.error || "연결에 실패했습니다");
+        if (!data.success || !data.roomId) throw new Error(data.error || t("hospitalPatientJoin.connectFailed"));
         const roomId = data.roomId;
         const guestId = `guest_${uuidv4().slice(0, 8)}`;
         const cleanName = getPatientLabel(savedLang);
@@ -278,7 +281,7 @@ export default function HospitalPatientJoin() {
       } catch (e) {
         console.error("[hospital:returning-join] error:", e);
         setReturningPatient(null);
-        setError(e?.message || "연결에 실패했습니다. 다시 시도해주세요.");
+        setError(e?.message || t("hospitalPatientJoin.connectFailed"));
         setStep("error");
         returningAutoJoinDoneRef.current = false;
       }
@@ -306,7 +309,7 @@ export default function HospitalPatientJoin() {
           {getFlagEmoji(returningPatient.lang)}
         </div>
         <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1a1a1a", margin: 0, textAlign: "center" }}>
-          Welcome back, {returningPatient.name}!
+          {t("hospitalPatientJoin.welcomeBackName", { name: returningPatient.name })}
         </h2>
         <p style={{ fontSize: "15px", color: "#6b7280", marginTop: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
           <span
@@ -319,7 +322,7 @@ export default function HospitalPatientJoin() {
               animation: "spin 0.8s linear infinite",
             }}
           />
-          Connecting you now...
+          {t("hospitalPatientJoin.connectingSubtitle")}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <button
@@ -339,7 +342,7 @@ export default function HospitalPatientJoin() {
             cursor: "pointer",
           }}
         >
-          Not {returningPatient.name}? Tap here
+          {t("hospitalPatientJoin.notMeTap", { name: returningPatient.name })}
         </button>
       </div>
     );
@@ -390,7 +393,7 @@ export default function HospitalPatientJoin() {
             fontWeight: 500,
           }}
         >
-          언어를 선택해주세요 / Select your language
+          {t("hospitalPatientJoin.selectLanguagePrompt")}
         </p>
 
         {/* Language Picker */}
@@ -408,13 +411,13 @@ export default function HospitalPatientJoin() {
           <>
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 14, color: "#666", marginBottom: 6, textAlign: "center" }}>
-                Please enter your name (as shown on passport)
+                {t("hospitalPatientJoin.namePrompt")}
               </p>
               <input
                 type="text"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
-                placeholder="e.g. John Smith"
+                placeholder={t("hospitalPatientJoin.namePlaceholder")}
                 style={{
                   width: "100%",
                   padding: "12px 16px",
@@ -446,7 +449,7 @@ export default function HospitalPatientJoin() {
                 opacity: !patientName.trim() ? 0.5 : 1,
               }}
             >
-              통역 시작 / Start Interpretation
+              {t("hospitalPatientJoin.startInterpret")}
             </button>
           </>
         )}
@@ -471,7 +474,7 @@ export default function HospitalPatientJoin() {
             cursor: "pointer",
           }}
         >
-          내 통역 기록 보기
+          {t("hospitalPatientJoin.myHistory")}
         </button>
         {localHistoryOpen && (
           <div
@@ -507,7 +510,7 @@ export default function HospitalPatientJoin() {
               </div>
               <div style={{ overflowY: "auto", flex: 1, padding: "12px" }}>
                 {localHistoryList.length === 0 ? (
-                  <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", padding: "24px" }}>저장된 통역 기록이 없습니다.</p>
+                  <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", padding: "24px" }}>{t("hospitalPatientJoin.noHistory")}</p>
                 ) : (
                   localHistoryList.map((item) => (
                     <div
@@ -571,7 +574,7 @@ export default function HospitalPatientJoin() {
           }}
         />
         <p style={{ marginTop: "16px", fontSize: "16px", color: "#374151", fontWeight: 500 }}>
-          {isExistingSession ? "이전 상담 채널에 다시 연결합니다" : "통역을 시작합니다"}
+          {isExistingSession ? t("hospitalPatientJoin.reconnectingOrStarting") : t("hospitalPatientJoin.starting")}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -627,7 +630,7 @@ export default function HospitalPatientJoin() {
             cursor: "pointer",
           }}
         >
-          다시 시도 / Retry
+          {t("hospitalPatientJoin.retry")}
         </button>
       </div>
     </div>

@@ -70,7 +70,14 @@
     "copyInviteLink": "Copy invite link",
     "inviteCopied": "Link copied",
     "showQr": "Show QR code",
-    "share": "Share"
+    "share": "Share",
+    "shareTitle": "MONO Interpretation Chat",
+    "shareText": "Join the real-time interpretation on MONO",
+    "copyDoneCheck": "Copied ✓",
+    "retryLater": "Please try again in a moment.",
+    "checkConnection": "Please check your internet connection.",
+    "hospitalName": "Hospital",
+    "patientName": "Patient"
   },
   "contacts": {
     "addContact": "Add Contact",
@@ -214,7 +221,13 @@
     "termsAgree": "By signing in, you agree to the Terms and Privacy Policy.",
     "terms": "Terms",
     "privacy": "Privacy Policy",
-    "instantQR": "Instant interpretation with QR"
+    "instantQR": "Instant interpretation with QR",
+    "purposeTitle": "How will you use MONO?",
+    "personal": "Personal",
+    "personalDesc": "MONO messenger & interpretation",
+    "org": "Organization (Hospital / Business)",
+    "orgDesc": "Hospital dashboard, kiosk, etc.",
+    "backToPurpose": "← Choose another"
   },
   "network": {
     "offline": "Internet connection lost",
@@ -239,6 +252,25 @@
     "addFriendsInContacts": "Please add friends in Contacts tab.",
     "deleteRoom": "Delete room",
     "deleteRoomConfirm": "Are you sure you want to delete this room?"
+  },
+  "hospitalPatientJoin": {
+    "selectLanguagePrompt": "Select your language",
+    "namePrompt": "Enter your name (as on passport)",
+    "namePlaceholder": "e.g. John Smith",
+    "startInterpret": "Start Interpretation",
+    "connectFailed": "Connection failed",
+    "retry": "Retry",
+    "welcomeBack": "Welcome back",
+    "welcomeBackName": "Welcome back, {{name}}!",
+    "connectingSubtitle": "Connecting you now...",
+    "notMeTap": "Not {{name}}? Tap here",
+    "connecting": "Connecting...",
+    "reconnectingOrStarting": "Reconnecting to previous session",
+    "starting": "Starting interpretation",
+    "myHistory": "My interpretation history",
+    "myHistoryTitle": "My interpretation history",
+    "noHistory": "No saved interpretation history.",
+    "conversationCount": "{{count}} messages"
   },
   "hospital": {
     "mode": "Hospital Mode",

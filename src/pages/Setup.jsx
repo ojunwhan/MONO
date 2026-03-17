@@ -48,7 +48,7 @@ export default function Setup() {
   if (loading) {
     return (
       <div className="mono-shell min-h-screen flex items-center justify-center">
-        <div className="text-[14px] text-[#555]">Loading...</div>
+        <div className="text-[14px] text-[#555]">{t("common.loading")}</div>
       </div>
     );
   }

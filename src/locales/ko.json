@@ -70,7 +70,14 @@
     "copyInviteLink": "초대 링크 복사",
     "inviteCopied": "링크가 복사되었습니다",
     "showQr": "QR 코드 보기",
-    "share": "공유하기"
+    "share": "공유하기",
+    "shareTitle": "MONO 통역 대화방",
+    "shareText": "MONO에서 실시간 통역 대화에 참여하세요",
+    "copyDoneCheck": "복사됨 ✓",
+    "retryLater": "잠시 후 다시 시도해주세요.",
+    "checkConnection": "인터넷 연결을 확인해주세요.",
+    "hospitalName": "병원",
+    "patientName": "환자"
   },
   "contacts": {
     "addContact": "연락처 추가",
@@ -214,7 +221,13 @@
     "termsAgree": "로그인 시 이용약관 및 개인정보처리방침에 동의합니다",
     "terms": "이용약관",
     "privacy": "개인정보처리방침",
-    "instantQR": "QR코드로 즉시 통역"
+    "instantQR": "QR코드로 즉시 통역",
+    "purposeTitle": "어떤 용도로 사용하시나요?",
+    "personal": "개인 사용자",
+    "personalDesc": "일반 MONO 메신저·통역",
+    "org": "기관 (병원·기업)",
+    "orgDesc": "병원 대시보드·키오스크 등",
+    "backToPurpose": "← 다른 용도 선택"
   },
   "network": {
     "offline": "인터넷 연결이 끊어졌습니다",
@@ -239,6 +252,25 @@
     "addFriendsInContacts": "연락처 탭에서 친구를 추가해주세요.",
     "deleteRoom": "대화방 삭제",
     "deleteRoomConfirm": "이 대화방을 삭제하시겠습니까?"
+  },
+  "hospitalPatientJoin": {
+    "selectLanguagePrompt": "언어를 선택해주세요",
+    "namePrompt": "이름을 입력해주세요 (여권 표기)",
+    "namePlaceholder": "예: 홍길동",
+    "startInterpret": "통역 시작",
+    "connectFailed": "연결에 실패했습니다",
+    "retry": "다시 시도",
+    "welcomeBack": "다시 만나서 반갑습니다",
+    "welcomeBackName": "{{name}}님, 다시 만나서 반갑습니다!",
+    "connectingSubtitle": "연결 중입니다...",
+    "notMeTap": "{{name}}이(가) 아니신가요? 탭하세요",
+    "connecting": "연결 중...",
+    "reconnectingOrStarting": "이전 상담 채널에 다시 연결합니다",
+    "starting": "통역을 시작합니다",
+    "myHistory": "내 통역 기록 보기",
+    "myHistoryTitle": "내 통역 기록",
+    "noHistory": "저장된 통역 기록이 없습니다.",
+    "conversationCount": "대화 {{count}}건"
   },
   "hospital": {
     "mode": "병원 모드",
