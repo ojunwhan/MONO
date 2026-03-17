@@ -93,6 +93,13 @@ export default function Home() {
     setHostPid(pid);
   }, [authOk, authReady, location.search]);
 
+  useEffect(() => {
+    const storedLang = localStorage.getItem("myLang");
+    if (storedLang) {
+      i18n.changeLanguage(storedLang);
+    }
+  }, []);
+
   const handleHostLangChange = (code) => {
     setSelectedLang(code);
     localStorage.setItem("myLang", code);
