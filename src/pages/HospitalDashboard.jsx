@@ -216,7 +216,7 @@ export default function HospitalDashboard() {
       <aside
         className={`${
           sidebarOpen ? "w-[240px]" : "w-0 overflow-hidden"
-        } transition-all duration-300 bg-[var(--color-bg)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col`}
+        } transition-all duration-300 bg-[var(--color-bg)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col h-[100dvh]`}
       >
         {/* Logo */}
         <div className="p-5 border-b border-[var(--color-border)]">
