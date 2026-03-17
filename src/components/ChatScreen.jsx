@@ -410,6 +410,7 @@ export default function ChatScreen() {
             senderDisplayName: mine ? "" : (hospitalDept?.labelKo || "병원"),
             senderFlagUrl: "",
             senderLabel: "",
+            session_id: m.session_id != null ? String(m.session_id) : null,
           };
         });
         console.log("[ChatScreen PT history] mapped count:", mapped.length);
@@ -1774,9 +1775,22 @@ export default function ChatScreen() {
               ((prev.mine === m.mine) ||
                 (String(prev.senderId || "") && String(prev.senderId || "") === String(m.senderId || "")));
             const needDateDivider = !prev || !sameCalendarDay(prev.timestamp, m.timestamp);
+            const needSessionDivider = roomId.startsWith("PT-") && prev && prev.session_id != null && m.session_id != null && prev.session_id !== m.session_id;
+            const sessionDividerDate = needSessionDivider && m.timestamp
+              ? (() => {
+                  const d = new Date(m.timestamp);
+                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                })()
+              : "";
             return (
               <React.Fragment key={m.id}>
-                {needDateDivider ? (
+                {needSessionDivider ? (
+                  <div className="my-3 flex w-full items-center gap-2">
+                    <span className="h-px flex-1 bg-[#e0e0e0]" />
+                    <span className="text-[12px] text-[#999]">New Session{sessionDividerDate ? ` · ${sessionDividerDate}` : ""}</span>
+                    <span className="h-px flex-1 bg-[#e0e0e0]" />
+                  </div>
+                ) : needDateDivider ? (
                   <div className="my-3 flex items-center gap-2">
                     <span className="h-px flex-1 bg-[var(--color-border)]" />
                     <span className="text-[12px] text-[#8E8E93]">{formatDateDivider(m.timestamp)}</span>

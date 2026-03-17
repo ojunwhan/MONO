@@ -5617,7 +5617,7 @@ app.get('/api/hospital/patient-by-room/:roomId/history', async (req, res) => {
     if (!roomId) return res.json({ success: false, message: 'Missing roomId' });
 
     const messages = await dbAll(
-      `SELECT id, room_id, sender_role, original_text, translated_text, sender_lang, translated_lang, created_at
+      `SELECT id, session_id, room_id, sender_role, original_text, translated_text, sender_lang, translated_lang, created_at
        FROM hospital_messages
        WHERE room_id = ?
        ORDER BY id ASC
