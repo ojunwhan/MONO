@@ -5377,9 +5377,10 @@ app.post('/api/hospital/join', async (req, res) => {
       isExistingSession = true;
       createdAt = new Date().toISOString();
     } else {
-      const patientRow = pToken ? await dbGet('SELECT room_id FROM hospital_patients WHERE patient_token = ?', [pToken]).catch(() => null) : null;
-      if (patientRow && patientRow.room_id) {
-        roomId = patientRow.room_id;
+      // Resolve room_id from hospital_sessions only (hospital_patients may not have room_id column)
+      const priorSession = pToken ? await dbGet('SELECT room_id FROM hospital_sessions WHERE patient_token = ? AND status = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1', [pToken, 'active']).catch(() => null) : null;
+      if (priorSession && priorSession.room_id) {
+        roomId = priorSession.room_id;
         isExistingSession = true;
       } else {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -5389,12 +5390,11 @@ app.post('/api/hospital/join', async (req, res) => {
           candidate = 'PT-';
           for (let i = 0; i < 6; i++) candidate += chars[Math.floor(Math.random() * chars.length)];
           exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [candidate]);
-          if (!exists) exists = await dbGet('SELECT 1 FROM hospital_patients WHERE room_id = ? LIMIT 1', [candidate]);
         } while (exists);
         roomId = candidate;
         if (pToken) {
           try {
-            await dbRun('UPDATE hospital_patients SET room_id = ?, last_visit_at = datetime(\'now\'), dept = ? WHERE patient_token = ?', [roomId, dept, pToken]);
+            await dbRun('UPDATE hospital_patients SET last_visit_at = datetime(\'now\'), dept = ? WHERE patient_token = ?', [dept, pToken]);
           } catch (dbErr) {
             console.warn('[hospital:join] patient room_id update warning:', dbErr?.message);
           }
