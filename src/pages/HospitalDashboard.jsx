@@ -243,7 +243,7 @@ export default function HospitalDashboard() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveMenu(item.id)}
-                className={`w-full flex items-center gap-3 px-5 py-3 text-left text-[13px] font-medium transition-colors ${
+                className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-medium transition-colors ${
                   isActive
                     ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#2563EB] border-r-2 border-[#2563EB]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text)]"
