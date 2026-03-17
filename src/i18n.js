@@ -1,18 +1,18 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
-import ko from "./locales/ko.json";
-import en from "./locales/en.json";
-import ja from "./locales/ja.json";
-import zh from "./locales/zh.json";
-import vi from "./locales/vi.json";
-import th from "./locales/th.json";
-import ru from "./locales/ru.json";
-import ar from "./locales/ar.json";
-import fr from "./locales/fr.json";
-import es from "./locales/es.json";
 
-const SUPPORTED_LANGS = ["ko", "en", "ja", "zh", "vi", "th", "ru", "ar", "fr", "es"];
+const localeModules = import.meta.glob("./locales/*.json", { eager: true });
+const resources = {};
+for (const path in localeModules) {
+  const lang = path.match(/\.\/locales\/(.+)\.json/)?.[1];
+  if (lang) {
+    const mod = localeModules[path];
+    resources[lang] = { translation: mod.default ?? mod };
+  }
+}
+
+const SUPPORTED_LANGS = Object.keys(resources);
 const normalizeLang = (lng) => {
   const raw = String(lng || "").toLowerCase().split("-")[0];
   if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -32,20 +32,9 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: {
-      ko: { translation: ko },
-      en: { translation: en },
-      ja: { translation: ja },
-      zh: { translation: zh },
-      vi: { translation: vi },
-      th: { translation: th },
-      ru: { translation: ru },
-      ar: { translation: ar },
-      fr: { translation: fr },
-      es: { translation: es },
-    },
+    resources,
     fallbackLng: "en",
-    supportedLngs: SUPPORTED_LANGS,
+    supportedLngs: SUPPORTED_LANGS.length ? SUPPORTED_LANGS : ["en"],
     nonExplicitSupportedLngs: true,
     detection: {
       order: ["localStorage", "navigator", "htmlTag"],
