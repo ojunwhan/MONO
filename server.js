@@ -38,9 +38,6 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
 const crypto = require('crypto');
 const ALGO = 'aes-256-gcm';
 
-const translationCache = new Map();
-const CACHE_MAX_SIZE = 5000;
-
 function encryptText(text, keyHex) {
   if (!text || !keyHex) return text;
   const key = Buffer.from(keyHex, 'hex');
@@ -1945,8 +1942,10 @@ async function generateNameAdaptations(roomId) {
 async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   const cacheKey = `${from}:${to}:${siteContext || ''}:${text.trim()}`;
-  if (translationCache.has(cacheKey)) {
-    return translationCache.get(cacheKey);
+  const cached = await dbGet('SELECT translated_text FROM translation_cache WHERE cache_key = ?', [cacheKey]);
+  if (cached?.translated_text != null) {
+    await dbRun('UPDATE translation_cache SET hit_count = hit_count + 1, last_used_at = datetime(\'now\') WHERE cache_key = ?', [cacheKey]).catch(() => {});
+    return cached.translated_text;
   }
   resetDailyStats();
   usageStats.translationRequests += 1;
@@ -1983,11 +1982,7 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
         }
       }
       const streamResult = full.trim() || text;
-      if (translationCache.size >= CACHE_MAX_SIZE) {
-        const firstKey = translationCache.keys().next().value;
-        translationCache.delete(firstKey);
-      }
-      translationCache.set(cacheKey, streamResult);
+      await dbRun('INSERT OR REPLACE INTO translation_cache (cache_key, translated_text) VALUES (?, ?)', [cacheKey, streamResult]).catch(() => {});
       return streamResult;
     }
     const r = await openai.chat.completions.create({
@@ -2001,11 +1996,7 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
       ],
     });
     const result = r.choices?.[0]?.message?.content?.trim() || text;
-    if (translationCache.size >= CACHE_MAX_SIZE) {
-      const firstKey = translationCache.keys().next().value;
-      translationCache.delete(firstKey);
-    }
-    translationCache.set(cacheKey, result);
+    await dbRun('INSERT OR REPLACE INTO translation_cache (cache_key, translated_text) VALUES (?, ?)', [cacheKey, result]).catch(() => {});
     return result;
   } catch (e) {
     markOpenAIQuotaBlocked(e);
@@ -4977,6 +4968,15 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+    `);
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS translation_cache (
+        cache_key TEXT PRIMARY KEY,
+        translated_text TEXT NOT NULL,
+        hit_count INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT (datetime('now')),
+        last_used_at DATETIME DEFAULT (datetime('now'))
+      )
     `);
     // organizations 테이블에 EMR/CRM 통합 도구 설정 컬럼 추가
     try {
