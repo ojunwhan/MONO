@@ -88,6 +88,7 @@ export default function DualConsultation() {
     const pt = String(ptNumber).trim();
     const pid = "dc-" + crypto.randomUUID();
     participantIdRef.current = pid;
+    console.log("[Dual] handleConnect pid set:", participantIdRef.current);
     connectedRef.current = true;
     setRoomId(pt);
     const siteContext = "hospital_plastic_surgery";
@@ -217,6 +218,7 @@ export default function DualConsultation() {
       console.log("[Dual] sendWhisper called, isStaff:", isStaff, "connected:", connected, "roomId:", roomId);
       const pid = participantIdRef.current;
       const rid = roomIdRef.current;
+      console.log("[Dual] sendWhisper pid:", pid, "rid:", rid);
       if (!pid || !rid) return;
       pendingSenderRef.current = asStaff ? "staff" : "patient";
       socket.emit(
