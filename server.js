@@ -38,6 +38,9 @@ const { run: dbRun, get: dbGet, all: dbAll, exec: dbExec } = require('./server/d
 const crypto = require('crypto');
 const ALGO = 'aes-256-gcm';
 
+const translationCache = new Map();
+const CACHE_MAX_SIZE = 5000;
+
 function encryptText(text, keyHex) {
   if (!text || !keyHex) return text;
   const key = Buffer.from(keyHex, 'hex');
@@ -1941,6 +1944,10 @@ async function generateNameAdaptations(roomId) {
 
 async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
+  const cacheKey = `${from}:${to}:${siteContext || ''}:${text.trim()}`;
+  if (translationCache.has(cacheKey)) {
+    return translationCache.get(cacheKey);
+  }
   resetDailyStats();
   usageStats.translationRequests += 1;
   usageStats.openaiTranslations += 1;
@@ -1975,7 +1982,13 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
           opts.onChunk(delta);
         }
       }
-      return full.trim() || text;
+      const streamResult = full.trim() || text;
+      if (translationCache.size >= CACHE_MAX_SIZE) {
+        const firstKey = translationCache.keys().next().value;
+        translationCache.delete(firstKey);
+      }
+      translationCache.set(cacheKey, streamResult);
+      return streamResult;
     }
     const r = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -1987,7 +2000,13 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
         { role: 'user', content: `Translate the following from ${label(from)} to ${label(to)}:\n\n${text}` },
       ],
     });
-    return r.choices?.[0]?.message?.content?.trim() || text;
+    const result = r.choices?.[0]?.message?.content?.trim() || text;
+    if (translationCache.size >= CACHE_MAX_SIZE) {
+      const firstKey = translationCache.keys().next().value;
+      translationCache.delete(firstKey);
+    }
+    translationCache.set(cacheKey, result);
+    return result;
   } catch (e) {
     markOpenAIQuotaBlocked(e);
     throw e;
