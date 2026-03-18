@@ -213,6 +213,8 @@ export default function DualConsultation() {
 
   const sendWhisper = useCallback(
     (base64Audio, mimeType, fromLang, asStaff) => {
+      const isStaff = asStaff;
+      console.log("[Dual] sendWhisper called, isStaff:", isStaff, "connected:", connected, "roomId:", roomId);
       const pid = participantIdRef.current;
       const rid = roomIdRef.current;
       if (!pid || !rid) return;
@@ -225,10 +227,11 @@ export default function DualConsultation() {
         }
       );
     },
-    []
+    [connected, roomId]
   );
 
   const startStaffRecording = useCallback(async () => {
+    console.log("[Dual] startStaffRecording called, staffRecording:", staffRecording, "connected:", connected);
     if (staffRecording) {
       stopStaffRecording();
       return;
@@ -260,9 +263,9 @@ export default function DualConsultation() {
       staffRecorderRef.current = recorder;
       setStaffRecording(true);
     } catch (e) {
-      console.warn("[DualConsultation] staff mic error:", e?.message);
+      console.error("[DualConsultation] staff mic error:", e);
     }
-  }, [staffRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording]);
+  }, [staffRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording, connected]);
 
   const startPatientRecording = useCallback(async () => {
     if (patientRecording) {
