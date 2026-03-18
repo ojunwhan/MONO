@@ -3855,10 +3855,12 @@ io.on('connection', (socket) => {
 
     const normalized = String(text || "").trim();
     if (!normalized || isGarbageText(normalized) || isWhisperHallucinationText(normalized)) {
+      console.warn("[stt:whisper] filtered normalized:", JSON.stringify(normalized));
       ackReply({ ok: true, text: "" });
       return;
     }
     if (normalized.length <= 2) {
+      console.warn("[stt:whisper] too short normalized:", JSON.stringify(normalized));
       ackReply({ ok: true, text: "" });
       return;
     }
