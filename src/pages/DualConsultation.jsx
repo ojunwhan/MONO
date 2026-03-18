@@ -182,13 +182,38 @@ export default function DualConsultation() {
       setTimeout(scrollToBottom, 50);
     };
 
+    const onSttResult = (payload) => {
+      const { roomId: incomingRoomId, text, final } = payload || {};
+      if (incomingRoomId && incomingRoomId !== rid) return;
+      if (!text || !final) return;
+      const isStaff = pendingSenderRef.current === "staff";
+      if (pendingSenderRef.current) pendingSenderRef.current = null;
+      const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      seenIdsRef.current.add(msgId);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: msgId,
+          originalText: text,
+          translatedText: text,
+          isStaff,
+          senderPid: participantIdRef.current,
+          timestamp: Date.now(),
+          streaming: false,
+        },
+      ]);
+      setTimeout(scrollToBottom, 50);
+    };
+
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
+    socket.on("stt:result", onSttResult);
     return () => {
       socket.off("receive-message", onReceiveMessage);
       socket.off("receive-message-stream", onStream);
       socket.off("receive-message-stream-end", onStreamEnd);
+      socket.off("stt:result", onSttResult);
     };
   }, [roomId, scrollToBottom]);
 
