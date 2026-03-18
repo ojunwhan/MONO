@@ -3846,6 +3846,7 @@ io.on('connection', (socket) => {
     try {
       text = await transcribeEncodedAudioBuffer(audioBuffer, mimeType || "audio/webm", lang, { hospitalMode: whisperHospitalMode });
       text = normalizeRepeats(text);
+      console.log("[stt:whisper] transcribed text:", JSON.stringify(text), "len:", text?.length);
     } catch (e) {
       console.warn("[stt:whisper] transcribe error:", e?.message || e);
       if (isQuotaExceededError(e)) emitQuotaWarning(socket);
