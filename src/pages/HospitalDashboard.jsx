@@ -167,6 +167,13 @@ function monthStartStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+/** Append org_code to URL for org-scoped dashboard API requests. */
+function urlWithOrg(url, orgCode) {
+  if (!orgCode) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}org_code=${encodeURIComponent(orgCode)}`;
+}
+
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
@@ -282,11 +289,11 @@ export default function HospitalDashboard() {
         {/* Content */}
         <div className="p-6">
           {activeMenu === "overview" && <OverviewPanel authUser={authUser} />}
-          {activeMenu === "history" && <HistoryPanel />}
-          {activeMenu === "departments" && <DepartmentsPanel />}
+          {activeMenu === "history" && <HistoryPanel authUser={authUser} />}
+          {activeMenu === "departments" && <DepartmentsPanel authUser={authUser} />}
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
-          {activeMenu === "reports" && <ReportsPanel />}
-          {activeMenu === "usage-billing" && <UsageBillingTab />}
+          {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
+          {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
         </div>
       </main>
     </div>
@@ -311,7 +318,8 @@ function RoomsPanel({ authUser }) {
   const fetchRooms = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const url = urlWithOrg("/api/hospital/rooms", authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
       const data = await r.json();
       if (data.success) setRooms(data.rooms || []);
     } catch (e) {
@@ -319,7 +327,7 @@ function RoomsPanel({ authUser }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authUser?.org_code]);
 
   useEffect(() => {
     fetchRooms();
@@ -353,7 +361,8 @@ function RoomsPanel({ authUser }) {
     if (!name) return;
     setSubmitting(true);
     try {
-      const r = await fetch("/api/hospital/rooms", {
+      const url = urlWithOrg("/api/hospital/rooms", authUser?.org_code);
+      const r = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -448,6 +457,7 @@ function RoomsPanel({ authUser }) {
           <RoomCard
             key={room.id}
             room={room}
+            orgCode={authUser?.org_code}
             staffUrl={buildRoomUrl(room, false)}
             kioskUrl={buildRoomUrl(room, true)}
             qrUrl={buildPatientJoinUrl(room)}
@@ -465,7 +475,7 @@ function RoomsPanel({ authUser }) {
   );
 }
 
-function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
+function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
   const [copied, setCopied] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -488,7 +498,8 @@ function RoomCard({ room, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
     if (!window.confirm(`"${room.name}" 방을 삭제하시겠습니까?`)) return;
     setDeleting(true);
     try {
-      const r = await fetch(`/api/hospital/rooms/${encodeURIComponent(room.id)}`, {
+      const url = urlWithOrg(`/api/hospital/rooms/${encodeURIComponent(room.id)}`, orgCode);
+      const r = await fetch(url, {
         method: "DELETE",
         credentials: "include",
       });
@@ -582,7 +593,8 @@ function OverviewPanel({ authUser }) {
   const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/hospital/dashboard/stats", { credentials: "include" });
+      const url = urlWithOrg("/api/hospital/dashboard/stats", authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
       const data = await r.json();
       if (data.success) setStats(data);
     } catch (e) {
@@ -590,7 +602,7 @@ function OverviewPanel({ authUser }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authUser?.org_code]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -598,7 +610,8 @@ function OverviewPanel({ authUser }) {
     if (!authUser?.org_code) return null;
     setRoomsLoading(true);
     try {
-      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const roomsUrl = urlWithOrg("/api/hospital/rooms", authUser?.org_code);
+      const r = await fetch(roomsUrl, { credentials: "include" });
       const data = await r.json();
       if (!data.success || !data.rooms) return null;
       const existing = (data.rooms || []).find((x) => x.template === "reception");
@@ -607,7 +620,7 @@ function OverviewPanel({ authUser }) {
         setStartModal("reception");
         return existing;
       }
-      const createRes = await fetch("/api/hospital/rooms", {
+      const createRes = await fetch(roomsUrl, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -631,7 +644,8 @@ function OverviewPanel({ authUser }) {
     if (!authUser?.org_code) return null;
     setRoomsLoading(true);
     try {
-      const r = await fetch("/api/hospital/rooms", { credentials: "include" });
+      const roomsUrl = urlWithOrg("/api/hospital/rooms", authUser?.org_code);
+      const r = await fetch(roomsUrl, { credentials: "include" });
       const data = await r.json();
       if (!data.success || !data.rooms) return null;
       const existing = (data.rooms || []).find((x) => x.template === "consultation");
@@ -640,7 +654,7 @@ function OverviewPanel({ authUser }) {
         setStartModal("consultation-qr");
         return existing;
       }
-      const createRes = await fetch("/api/hospital/rooms", {
+      const createRes = await fetch(roomsUrl, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -966,7 +980,7 @@ function OverviewPanel({ authUser }) {
 // ═══════════════════════════════════════════
 // 2. HISTORY PANEL — 환자 통역 이력
 // ═══════════════════════════════════════════
-function HistoryPanel() {
+function HistoryPanel({ authUser }) {
   const [sessions, setSessions] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -999,7 +1013,8 @@ function HistoryPanel() {
       if (language) params.set("language", language);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
-      const r = await fetch(`/api/hospital/dashboard/sessions?${params}`, { credentials: "include" });
+      const url = urlWithOrg(`/api/hospital/dashboard/sessions?${params}`, authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
       const data = await r.json();
       if (data.success) {
         setSessions(data.sessions || []);
@@ -1012,14 +1027,15 @@ function HistoryPanel() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, department, language, searchQuery]);
+  }, [startDate, endDate, department, language, searchQuery, authUser?.org_code]);
 
   useEffect(() => { fetchSessions(1); }, [fetchSessions]);
 
   const handleDeleteSession = useCallback(async (session) => {
     if (!window.confirm("이 기록을 삭제하시겠습니까?")) return;
     try {
-      const r = await fetch(`/api/hospital/sessions/${session.id}`, {
+      const url = urlWithOrg(`/api/hospital/sessions/${session.id}`, authUser?.org_code);
+      const r = await fetch(url, {
         method: "DELETE",
         credentials: "include",
       });
@@ -1028,14 +1044,15 @@ function HistoryPanel() {
     } catch (e) {
       console.error("session delete failed:", e);
     }
-  }, [page, fetchSessions]);
+  }, [page, fetchSessions, authUser?.org_code]);
 
   const openDetail = async (session) => {
     setSelectedSession(session);
     setModalLoading(true);
     setModalMessages([]);
     try {
-      const r = await fetch(`/api/hospital/sessions/${session.id}/messages`, { credentials: "include" });
+      const url = urlWithOrg(`/api/hospital/sessions/${session.id}/messages`, authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
       const data = await r.json();
       if (data.success) setModalMessages(data.messages || []);
     } catch (e) {
@@ -1279,24 +1296,27 @@ function HistoryPanel() {
 // ═══════════════════════════════════════════
 // 3. DEPARTMENTS PANEL — 진료과별 현황
 // ═══════════════════════════════════════════
-function DepartmentsPanel() {
+function DepartmentsPanel({ authUser }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const r = await fetch("/api/hospital/dashboard/stats", { credentials: "include" });
+        const url = urlWithOrg("/api/hospital/dashboard/stats", authUser?.org_code);
+        const r = await fetch(url, { credentials: "include" });
         const data = await r.json();
-        if (data.success) setStats(data);
+        if (!cancelled && data.success) setStats(data);
       } catch (e) {
-        console.error("dept stats failed:", e);
+        if (!cancelled) console.error("dept stats failed:", e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [authUser?.org_code]);
 
   if (loading) return <LoadingSpinner />;
   if (!stats?.deptStats?.length) return <EmptyState text="진료과별 데이터가 없습니다." />;
@@ -1383,7 +1403,7 @@ function DepartmentsPanel() {
 // ═══════════════════════════════════════════
 // 4. REPORTS PANEL — 보고서 출력
 // ═══════════════════════════════════════════
-function ReportsPanel() {
+function ReportsPanel({ authUser }) {
   const [startDate, setStartDate] = useState(monthStartStr());
   const [endDate, setEndDate] = useState(todayStr());
   const [generating, setGenerating] = useState(false);
@@ -1391,12 +1411,12 @@ function ReportsPanel() {
   const handleGenerateReport = async () => {
     setGenerating(true);
     try {
-      // Fetch stats for the period
-      const statsR = await fetch(`/api/hospital/dashboard/stats?startDate=${startDate}&endDate=${endDate}`, { credentials: "include" });
+      const statsUrl = urlWithOrg(`/api/hospital/dashboard/stats?startDate=${startDate}&endDate=${endDate}`, authUser?.org_code);
+      const statsR = await fetch(statsUrl, { credentials: "include" });
       const statsData = await statsR.json();
 
-      // Fetch sessions for the period
-      const sessR = await fetch(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=100`, { credentials: "include" });
+      const sessUrl = urlWithOrg(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=100`, authUser?.org_code);
+      const sessR = await fetch(sessUrl, { credentials: "include" });
       const sessData = await sessR.json();
 
       // Generate a printable report
@@ -1412,7 +1432,8 @@ function ReportsPanel() {
   const handleDownloadCSV = async () => {
     setGenerating(true);
     try {
-      const r = await fetch(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=1000`, { credentials: "include" });
+      const url = urlWithOrg(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=1000`, authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
       const data = await r.json();
       if (!data.success || !data.sessions?.length) {
         alert("내보낼 데이터가 없습니다.");
@@ -1586,13 +1607,14 @@ const USAGE_BILLING_MOCK = {
   ],
 };
 
-function UsageBillingTab() {
+function UsageBillingTab({ authUser }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/hospital/usage-stats", { credentials: "include" })
+    const url = urlWithOrg("/api/hospital/usage-stats", authUser?.org_code);
+    fetch(url, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
         if (!cancelled && d && (d.sessions || d.trialDaysLeft !== undefined)) setData(d);
@@ -1603,7 +1625,7 @@ function UsageBillingTab() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [authUser?.org_code]);
 
   if (loading || !data) {
     return (
