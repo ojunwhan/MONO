@@ -6093,7 +6093,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
-         LEFT JOIN hospital_patients hp ON hp.room_id = hs.room_id
+         LEFT JOIN hospital_patients hp ON hp.chart_number = hs.chart_number
          WHERE hs.room_id = ? AND (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC`,
         [ptNumber, orgCode]
@@ -6104,7 +6104,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
-         LEFT JOIN hospital_patients hp ON hp.room_id = hs.room_id
+         LEFT JOIN hospital_patients hp ON hp.chart_number = hs.chart_number
          WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC
          LIMIT 30`,
