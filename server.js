@@ -3800,6 +3800,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType } = {}, ack) => {
+    console.log("[stt:whisper] received roomId:", roomId, "pid:", participantId);
     const ackReply = (payload) => {
       if (typeof ack === "function") {
         try { ack(payload); } catch {}
