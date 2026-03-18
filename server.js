@@ -5908,7 +5908,10 @@ Return exactly this structure:
     });
     const raw = r.choices?.[0]?.message?.content?.trim();
     if (raw) {
-      const cleanJson = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let cleanJson = raw.trim();
+      if (cleanJson.startsWith('```')) {
+        cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      }
       await dbRun('UPDATE hospital_sessions SET ai_summary = ? WHERE id = ?', [cleanJson, sessionId]);
       console.log('[hospital] ai_summary saved for session', sessionId);
     }
@@ -6103,15 +6106,17 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
       );
     }
 
-    const summaries = (rows || []).map((r) => {
-      let parsed = r.ai_summary;
-      if (typeof r.ai_summary === 'string') {
-        try {
-          parsed = JSON.parse(r.ai_summary);
-        } catch {
-          parsed = r.ai_summary;
-        }
+    function safeParseSummary(raw) {
+      if (!raw) return null;
+      let s = (typeof raw === 'string' ? raw : String(raw)).trim();
+      if (s.startsWith('```')) {
+        s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
       }
+      try { return JSON.parse(s); } catch (e) { return raw; }
+    }
+
+    const summaries = (rows || []).map((r) => {
+      const parsed = typeof r.ai_summary === 'string' ? safeParseSummary(r.ai_summary) : r.ai_summary;
       return {
         session_id: r.id,
         pt_number: r.room_id,
