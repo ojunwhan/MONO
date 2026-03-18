@@ -4341,6 +4341,7 @@ io.on('connection', (socket) => {
                 [activeSess.id]
               );
               console.log(`[hospital] 🔚 Session ${activeSess.id} auto-ended (room empty)`);
+              extractMedicalSummary(activeSess.id).catch(() => {});
             }
           } catch (e) { console.warn('[hospital:auto-end]', e?.message); trackUsageError(e, { source: 'hospital:auto-end' }); }
           ROOMS.delete(capturedRoomId);
@@ -4378,6 +4379,7 @@ io.on('connection', (socket) => {
                   [activeSessHost.id]
                 );
                 console.log(`[hospital] 🔚 Session ${activeSessHost.id} ended (host left)`);
+                extractMedicalSummary(activeSessHost.id).catch(() => {});
               }
             } catch (e) { console.warn('[hospital:host-left-end]', e?.message); trackUsageError(e, { source: 'hospital:host-left-end' }); }
           })();
@@ -4989,6 +4991,8 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         }
       }
     }
+
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN ai_summary TEXT").catch(() => {});
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
@@ -5841,6 +5845,53 @@ app.post('/api/hospital/session', async (req, res) => {
   }
 });
 
+/** GPT-4o medical data extraction when a hospital session ends. Fetches messages, decrypts, calls GPT-4o, saves JSON to hospital_sessions.ai_summary. */
+async function extractMedicalSummary(sessionId) {
+  if (!openai || isOpenAIBlocked()) return;
+  try {
+    const session = await dbGet('SELECT org_code FROM hospital_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    if (!session) return;
+    const keyHex = await getOrgEncryptionKey(session.org_code || null);
+    const rows = await dbAll(
+      'SELECT sender_role, original_text, translated_text, created_at FROM hospital_messages WHERE session_id = ? ORDER BY created_at ASC',
+      [sessionId]
+    );
+    if (!rows || rows.length === 0) return;
+    const lines = rows.map((m) => {
+      const orig = decryptText(m.original_text, keyHex);
+      const trans = decryptText(m.translated_text, keyHex);
+      const role = m.sender_role === 'host' ? 'Staff' : 'Patient';
+      return `[${role}] Original: ${orig || ''} | Translated: ${trans || ''}`;
+    });
+    const transcript = lines.join('\n');
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0,
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'system',
+          content: `Analyze this medical interpretation session and extract:
+- chief_complaint: patient's main symptom or reason for visit
+- procedures_mentioned: any procedures or treatments discussed
+- patient_requests: specific requests made by patient
+- special_notes: any important notes for medical staff
+Return as JSON only, no other text. Use keys: chief_complaint, procedures_mentioned, patient_requests, special_notes.`,
+        },
+        { role: 'user', content: transcript },
+      ],
+    });
+    const content = r.choices?.[0]?.message?.content?.trim();
+    if (content) {
+      await dbRun('UPDATE hospital_sessions SET ai_summary = ? WHERE id = ?', [content, sessionId]);
+      console.log('[hospital] ai_summary saved for session', sessionId);
+    }
+  } catch (e) {
+    console.warn('[hospital:extractMedicalSummary]', e?.message);
+    trackUsageError(e, { source: 'hospital:extractMedicalSummary' });
+  }
+}
+
 // POST /api/hospital/session/:sessionId/end — 세션 종료
 app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
   try {
@@ -5852,6 +5903,8 @@ app.post('/api/hospital/session/:sessionId/end', async (req, res) => {
       `UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?`,
       [sessionId]
     );
+
+    extractMedicalSummary(sessionId).catch(() => {});
 
     // 환자 폰에 종료 안내 메시지 전송
     const roomId = session.room_id;
