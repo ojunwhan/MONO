@@ -583,6 +583,7 @@ export default function FixedRoomVAD() {
   const participantIdRef = useRef(null);
   const stepRef = useRef(step);
   const lastJoinTsRef = useRef(0);
+  const [socketReconnecting, setSocketReconnecting] = useState(false);
 
   useEffect(() => {
     stepRef.current = step;
@@ -768,10 +769,11 @@ export default function FixedRoomVAD() {
     };
   }, [roomId, participantId, fromLang, siteContext, roleHint, isCreator, isGuest, saveMessages, summaryOnly, inputMode, state.guestId, state.localName]);
 
-  // ── 소켓: 재연결 시 방 재입장 + VAD 세션 복원 ──
+  // ── 소켓: 재연결 시 방 재입장 + VAD 세션 복원 + 재연결 표시 및 히스토리 재요청 ──
   useEffect(() => {
     const onDisconnect = () => {
       wasConnectedRef.current = true;
+      if (roomIdRef.current && participantIdRef.current) setSocketReconnecting(true);
     };
 
     const onConnect = () => {
@@ -784,20 +786,63 @@ export default function FixedRoomVAD() {
 
       const rid = roomIdRef.current;
       const pid = participantIdRef.current;
-      if (!rid || !pid) return;
+      if (!rid || !pid) {
+        setSocketReconnecting(false);
+        return;
+      }
       const now = Date.now();
-      if (now - lastJoinTsRef.current < 3000) return;
+      if (now - lastJoinTsRef.current < 3000) {
+        setSocketReconnecting(false);
+        return;
+      }
       lastJoinTsRef.current = now;
 
       const payload = joinPayloadRef.current;
-      if (!payload) return;
+      if (!payload) {
+        setSocketReconnecting(false);
+        return;
+      }
 
       console.log("[FixedRoomVAD] Socket reconnected, rejoining room:", rid);
       socket.emit("join", payload);
+      setSocketReconnecting(false);
 
       if (stepRef.current === "interpreting") {
         socket.emit("fixed-room:start", { roomId: rid });
       }
+
+      // Fetch missed messages from server
+      fetch(`/api/hospital/patient-by-room/${encodeURIComponent(rid)}/history`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const rows = Array.isArray(data?.messages) ? data.messages : [];
+          if (rows.length === 0) return;
+          const liveFromPrev = (prev) => prev.filter((p) => !p._separator);
+          const separator = { id: HISTORY_SEPARATOR_ID, _separator: true, _labelKey: "previousMessages" };
+          const mapped = rows.map((m) => {
+            const isHost = m.sender_role === "host";
+            const ts = m.created_at ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime()) : Date.now();
+            return {
+              id: m.id != null && m.id !== "" ? String(m.id) : `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+              originalText: (m.original_text != null && m.original_text !== "") ? m.original_text : "",
+              translatedText: (m.translated_text != null && m.translated_text !== "") ? m.translated_text : (m.original_text || ""),
+              mine: isHost,
+              senderId: isHost ? "self" : "partner",
+              timestamp: ts,
+              isFromHistory: true,
+            };
+          });
+          mapped.sort((a, b) => a.timestamp - b.timestamp);
+          setMessages((prev) => {
+            const live = liveFromPrev(prev);
+            const filteredMapped = mapped.filter(
+              (m) => !live.some((p) => p.id === m.id || (String(p.originalText) === String(m.originalText) && p.timestamp === m.timestamp))
+            );
+            if (filteredMapped.length === 0 && live.length === 0) return prev;
+            return [...filteredMapped, separator, ...live];
+          });
+        })
+        .catch(() => {});
     };
 
     socket.on("connect", onConnect);
@@ -1306,6 +1351,20 @@ export default function FixedRoomVAD() {
           fontWeight: 600,
         }}>
           {roomAssignedBanner}(으)로 배정되었습니다.
+        </div>
+      )}
+
+      {/* 소켓 재연결 중 표시 */}
+      {socketReconnecting && (
+        <div style={{
+          padding: "8px 16px",
+          background: "#EFF6FF",
+          borderBottom: "1px solid #2563EB",
+          color: "#1E40AF",
+          textAlign: "center",
+          fontSize: "13px",
+        }}>
+          연결이 끊어졌습니다. 재연결 중...
         </div>
       )}
 

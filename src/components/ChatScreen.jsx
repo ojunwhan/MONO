@@ -267,6 +267,10 @@ export default function ChatScreen() {
   const readSentRef = useRef(new Set());
   const messagesRef = useRef([]);
   const joinStateRef = useRef({});
+  const joinPayloadRef = useRef(null);
+  const hadJoinedRef = useRef(false);
+  const wasDisconnectedRef = useRef(false);
+  const [socketReconnecting, setSocketReconnecting] = useState(false);
 
   useEffect(() => {
     roomTypeRef.current = roomType;
@@ -530,6 +534,7 @@ export default function ChatScreen() {
       role: selectedRole,
       localName: localName || "",
       roleHint,
+      siteContext: siteContext || "",
     };
     if (state.saveMessages !== undefined) joinPayload.saveMessages = state.saveMessages;
     if (state.summaryOnly !== undefined) joinPayload.summaryOnly = state.summaryOnly;
@@ -540,10 +545,12 @@ export default function ChatScreen() {
       summaryOnly: state.summaryOnly,
       contextInject: state.contextInject,
     };
+    joinPayloadRef.current = joinPayload;
 
     const timer = setTimeout(() => {
       console.log("[MONO] join →", roomId, participantId, selectedRole, roleHint);
       socket.emit("join", joinPayload);
+      hadJoinedRef.current = true;
       touchRoom(roomId).catch(() => {});
       subscribeToPush(participantId).catch(() => {});
     }, 0);
@@ -555,7 +562,73 @@ export default function ChatScreen() {
         reason: "chat-screen-cleanup",
       });
     };
-  }, [roomId, participantId]);
+  }, [roomId, participantId, fromLang, selectedRole, localName, roleHint, siteContext]);
+
+  // ─── Socket reconnect: re-join and fetch missed messages ───
+  useEffect(() => {
+    const onDisconnect = () => {
+      if (hadJoinedRef.current) {
+        wasDisconnectedRef.current = true;
+        setSocketReconnecting(true);
+      }
+    };
+    const onConnect = () => {
+      if (!wasDisconnectedRef.current || !joinPayloadRef.current) return;
+      wasDisconnectedRef.current = false;
+      const payload = joinPayloadRef.current;
+      console.log("[MONO] Socket reconnected, rejoining room:", payload.roomId);
+      socket.emit("join", payload);
+      setSocketReconnecting(false);
+      const rid = payload.roomId;
+      if (rid?.startsWith("PT-")) {
+        fetch(`/api/hospital/patient-by-room/${encodeURIComponent(rid)}/history`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            const rows = Array.isArray(data?.messages) ? data.messages : [];
+            if (rows.length === 0) return;
+            const mapped = rows.map((m) => {
+              const mine = String(m.sender_role || "").toLowerCase() === "guest";
+              const ts = m.created_at ? (typeof m.created_at === "number" ? m.created_at : new Date(m.created_at).getTime()) : Date.now();
+              return {
+                id: m.id || `hist-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+                text: mine ? (m.original_text || "") : (m.translated_text || m.original_text || ""),
+                originalText: m.original_text || "",
+                translatedText: m.translated_text || m.original_text || "",
+                mine,
+                senderId: mine ? participantIdRef.current : "",
+                status: "translated",
+                timestamp: ts,
+              };
+            });
+            setMessages((prev) => {
+              const existingIds = new Set(prev.map((x) => x.id));
+              const newOnes = mapped.filter((m) => !existingIds.has(m.id));
+              if (newOnes.length === 0) return prev;
+              return [...prev, ...newOnes].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            });
+          })
+          .catch(() => {});
+      } else {
+        getMessages(rid, 100, 0).then((prevMessages) => {
+          if (prevMessages.length === 0) return;
+          const hydrated = prevMessages.map((m) => ({
+            ...m,
+            mine: m.senderId === participantIdRef.current,
+            text: m.translatedText || m.originalText || m.text || "",
+            senderFlagUrl: m.senderFlagUrl || "",
+            senderLabel: m.senderLabel || "",
+          }));
+          setMessages(hydrated);
+        }).catch(() => {});
+      }
+    };
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
+    return () => {
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
+    };
+  }, []);
 
   // ─── Notification permission ───
   useEffect(() => {
@@ -1735,7 +1808,12 @@ export default function ChatScreen() {
 
         {/* ─── Messages ─── */}
         <div className="mono-scroll flex-1 overflow-y-auto px-3 pb-[112px] pt-[64px] bg-[var(--color-bg-secondary)]">
-          {reconnectState === "disconnected" && (
+          {socketReconnecting && (
+            <div className="mb-2 w-full rounded-lg border border-[#2563EB] bg-[#EFF6FF] px-3 py-2 text-[12px] text-[#1E40AF]">
+              연결이 끊어졌습니다. 재연결 중...
+            </div>
+          )}
+          {reconnectState === "disconnected" && !socketReconnecting && (
             <button
               type="button"
               onClick={() => socket.connect()}
