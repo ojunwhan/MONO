@@ -1,5 +1,5 @@
 // src/pages/HospitalDashboard.jsx — 병원 전용 관리 대시보드
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
@@ -32,7 +32,7 @@ import {
   Mic,
   MicOff,
 } from "lucide-react";
-import QRCode from "react-qr-code";
+const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
   BarChart,
   Bar,
@@ -533,7 +533,9 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
         {templateLabel}
       </span>
       <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
-        <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+        <Suspense fallback={<span className="inline-block w-[160px] h-[160px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
+          <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+        </Suspense>
       </div>
       <div className="flex flex-wrap gap-2 w-full justify-center">
         <button
@@ -785,7 +787,9 @@ function OverviewPanel({ authUser }) {
               <div className="flex flex-col items-center">
                 <p className="text-[13px] text-slate-600 dark:text-slate-400 mb-2">태블릿용 QR</p>
                 <div className="p-3 bg-white rounded-xl inline-block">
-                  <QRCode value={buildStaffUrl(receptionRoom, true)} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                  <Suspense fallback={<span className="inline-block w-[200px] h-[200px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
+                    <QRCode value={buildStaffUrl(receptionRoom, true)} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                  </Suspense>
                 </div>
                 <button
                   type="button"
@@ -843,7 +847,9 @@ function OverviewPanel({ authUser }) {
               <div className="flex flex-col items-center">
                 <p className="text-[11px] text-slate-500 mb-1">환자 스캔용 QR (태블릿에 띄우세요)</p>
                 <div className="p-3 bg-white rounded-xl inline-block">
-                  <QRCode value={buildPatientJoinUrl(consultationRoom, { inputMode: consultationInputMode })} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                  <Suspense fallback={<span className="inline-block w-[200px] h-[200px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
+                    <QRCode value={buildPatientJoinUrl(consultationRoom, { inputMode: consultationInputMode })} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                  </Suspense>
                 </div>
                 <button
                   type="button"
