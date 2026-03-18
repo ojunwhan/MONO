@@ -20,6 +20,19 @@ const LANG_OPTIONS = [
   { value: "fr", label: "Français" },
 ];
 
+const LANG_FLAGS = {
+  ko: "🇰🇷",
+  en: "🇺🇸",
+  ja: "🇯🇵",
+  zh: "🇨🇳",
+  vi: "🇻🇳",
+  th: "🇹🇭",
+  id: "🇮🇩",
+  ru: "🇷🇺",
+  es: "🇪🇸",
+  fr: "🇫🇷",
+};
+
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
   const u8 = new Uint8Array(buf);
@@ -183,10 +196,10 @@ export default function DualConsultation() {
     };
 
     const onSttResult = (payload) => {
-      const { roomId: incomingRoomId, text, final } = payload || {};
+      const { roomId: incomingRoomId, participantId: incomingPid, text, translatedText: payloadTranslated, final } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!text || !final) return;
-      const isStaff = pendingSenderRef.current === "staff";
+      const isStaff = incomingPid === participantIdRef.current;
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       seenIdsRef.current.add(msgId);
@@ -195,9 +208,9 @@ export default function DualConsultation() {
         {
           id: msgId,
           originalText: text,
-          translatedText: text,
+          translatedText: payloadTranslated ?? text,
           isStaff,
-          senderPid: participantIdRef.current,
+          senderPid: incomingPid,
           timestamp: Date.now(),
           streaming: false,
         },
@@ -334,15 +347,21 @@ export default function DualConsultation() {
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       {/* Top bar */}
       <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <input
             type="text"
             placeholder="PT 번호"
             value={ptNumber}
             onChange={(e) => setPtNumber(e.target.value)}
-            style={{ flex: 1, borderRadius: "8px", border: "1px solid #d1d5db", padding: "8px 12px", fontSize: "14px" }}
+            style={{ flex: "1 1 120px", minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "8px 12px", fontSize: "14px" }}
             disabled={connected}
           />
+          {connected && (
+            <span style={{ fontSize: "12px", color: "#4b5563", display: "flex", alignItems: "center", gap: "4px" }}>
+              <span>{LANG_FLAGS[patientLang] || "🌐"}</span>
+              <span>{LANG_OPTIONS.find((o) => o.value === patientLang)?.label ?? patientLang}</span>
+            </span>
+          )}
           <button
             type="button"
             onClick={handleConnect}
@@ -437,14 +456,14 @@ export default function DualConsultation() {
                 boxShadow: m.isStaff ? "none" : "0 1px 3px 0 rgba(0,0,0,0.1)",
               }}
             >
-              <div style={{ fontWeight: 600, fontSize: "16px" }}>
-                {m.translatedText || (m.streaming ? "…" : "")}
-              </div>
               {(m.originalText || "").trim() && (
-                <div style={{ marginTop: "4px", fontSize: "12px", color: m.isStaff ? "#bfdbfe" : "#6b7280" }}>
+                <div style={{ fontSize: "0.85rem", color: m.isStaff ? "rgba(255,255,255,0.85)" : "#6b7280", marginBottom: "4px" }}>
                   {m.originalText}
                 </div>
               )}
+              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: m.isStaff ? "#fff" : "#111827" }}>
+                {m.translatedText || (m.streaming ? "…" : "")}
+              </div>
             </div>
           </div>
         ))}
@@ -462,8 +481,9 @@ export default function DualConsultation() {
             padding: "16px",
             fontSize: "14px",
             fontWeight: 500,
-            background: staffRecording ? "#ef4444" : "#f3f4f6",
+            background: staffRecording ? "#ef4444" : "#EEF2FF",
             color: staffRecording ? "#fff" : "#1f2937",
+            borderLeft: "4px solid #6366F1",
           }}
         >
           {staffRecording ? "녹음 중…" : "🎤 직원"}
@@ -477,8 +497,9 @@ export default function DualConsultation() {
             padding: "16px",
             fontSize: "14px",
             fontWeight: 500,
-            background: patientRecording ? "#ef4444" : "#f3f4f6",
+            background: patientRecording ? "#ef4444" : "#F0FDF4",
             color: patientRecording ? "#fff" : "#1f2937",
+            borderLeft: "4px solid #22C55E",
           }}
         >
           {patientRecording ? "녹음 중…" : "🎤 환자"}

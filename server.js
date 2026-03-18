@@ -3866,6 +3866,9 @@ io.on('connection', (socket) => {
       return;
     }
 
+    let translatedText = normalized;
+    const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
+
     // 병원 모드 + 미디어레코드(마이크 눌렀다 뗐을 때) 경로: hospital_messages 저장 (send-message와 동일하게 SOCKET_ROLES로 sender_role 결정)
     if (whisperHospitalMode && roomId) {
       try {
@@ -3896,7 +3899,7 @@ io.on('connection', (socket) => {
           const siteCtx = meta.siteContext || "general";
           const roomContext = getRoomContext(roomId);
           addToRoomContext(roomId, { text: normalized, lang: fromLang, role: 'user' });
-          let translatedText = normalized;
+          translatedText = normalized;
           if (fromLang !== toLang) {
             try {
               if (await canTranslateForUser(socket, participantId)) {
@@ -3906,7 +3909,6 @@ io.on('connection', (socket) => {
             } catch (e) { console.warn("[stt:whisper][translate]:", e?.message); }
           }
           // Strip ALL leading [tag] (e.g. [Korean], [Professional Medical Korean]) before every use
-          const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
           translatedText = stripBracketTag(translatedText);
           const msgId = uuidv4();
           // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt)
@@ -3933,7 +3935,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    socket.emit("stt:result", { roomId, participantId, text: normalized, final: true });
+    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: stripBracketTag(translatedText), fromLang: lang, final: true });
     ackReply({ ok: true, text: normalized });
   });
 
