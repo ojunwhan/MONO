@@ -43,6 +43,7 @@ export default function DualConsultation() {
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
+  const connectedRef = useRef(false);
   const messagesEndRef = useRef(null);
   const seenIdsRef = useRef(new Set());
   const staffStreamRef = useRef(null);
@@ -81,12 +82,13 @@ export default function DualConsultation() {
     roomIdRef.current = roomId;
   }, [roomId]);
 
-  // Socket: join on Connect
+  // Socket: join only when user clicks Connect (never on mount)
   const handleConnect = useCallback(() => {
+    if (!ptNumber.trim()) return;
     const pt = String(ptNumber).trim();
-    if (!pt) return;
     const pid = "dc-" + crypto.randomUUID();
     participantIdRef.current = pid;
+    connectedRef.current = true;
     setRoomId(pt);
     const siteContext = "hospital_plastic_surgery";
     socket.emit("join", {
@@ -99,6 +101,16 @@ export default function DualConsultation() {
     });
     setConnected(true);
   }, [ptNumber, staffLang]);
+
+  // Unmount: leave room if we had connected
+  useEffect(() => {
+    return () => {
+      if (connectedRef.current && roomIdRef.current) {
+        socket.emit("leave-room", { roomId: roomIdRef.current });
+      }
+      connectedRef.current = false;
+    };
+  }, []);
 
   // Socket: receive-message, receive-message-stream, receive-message-stream-end
   useEffect(() => {
