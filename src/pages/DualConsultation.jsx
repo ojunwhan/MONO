@@ -6,36 +6,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
-
-const LANG_OPTIONS = [
-  { value: "ko", label: "한국어" },
-  { value: "en", label: "English" },
-  { value: "ja", label: "日本語" },
-  { value: "zh", label: "中文" },
-  { value: "vi", label: "Tiếng Việt" },
-  { value: "th", label: "ภาษาไทย" },
-  { value: "id", label: "Bahasa" },
-  { value: "ru", label: "Русский" },
-  { value: "es", label: "Español" },
-  { value: "fr", label: "Français" },
-  { value: "ar", label: "العربية" },
-  { value: "mn", label: "Монгол" },
-];
-
-const LANG_FLAGS = {
-  ko: "🇰🇷",
-  en: "🇺🇸",
-  ja: "🇯🇵",
-  zh: "🇨🇳",
-  vi: "🇻🇳",
-  th: "🇹🇭",
-  id: "🇮🇩",
-  ru: "🇷🇺",
-  es: "🇪🇸",
-  fr: "🇫🇷",
-  ar: "🇸🇦",
-  mn: "🇲🇳",
-};
+import { getTier1Languages, getLanguageByCode } from "../constants/languages";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -58,6 +29,10 @@ export default function DualConsultation() {
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
+  const [settingsExpanded, setSettingsExpanded] = useState(true);
+
+  const LANG_OPTIONS = getTier1Languages();
+  const patientProfile = getLanguageByCode(patientLang);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -397,8 +372,8 @@ export default function DualConsultation() {
             />
             {connected && (
               <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderLeft: "1px solid #e5e7eb" }}>
-                <span>{LANG_FLAGS[patientLang] || "🌐"}</span>
-                <span>{LANG_OPTIONS.find((o) => o.value === patientLang)?.label ?? patientLang}</span>
+                <span>{patientProfile?.flag || "🌐"}</span>
+                <span>{patientProfile?.nativeName ?? patientLang}</span>
                 <span style={{ color: "#9ca3af" }}>환자</span>
               </span>
             )}
@@ -411,8 +386,18 @@ export default function DualConsultation() {
           >
             {connected ? "연결됨" : "Connect"}
           </button>
+          {connected && (
+            <button
+              type="button"
+              onClick={() => setSettingsExpanded((p) => !p)}
+              title={settingsExpanded ? "설정 접기" : "설정 펼치기"}
+              style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
+            >
+              {settingsExpanded ? "▼" : "▲"}
+            </button>
+          )}
         </div>
-        {connected && (
+        {connected && settingsExpanded && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
@@ -453,7 +438,7 @@ export default function DualConsultation() {
                   style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
                 >
                   {LANG_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
                   ))}
                 </select>
               </div>
@@ -465,7 +450,7 @@ export default function DualConsultation() {
                   style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
                 >
                   {LANG_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
                   ))}
                 </select>
               </div>
@@ -474,52 +459,35 @@ export default function DualConsultation() {
         )}
       </header>
 
-      {/* Message area with center divider */}
-      <main style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-        <div style={{ display: "flex", minHeight: "100%" }}>
-          <div style={{ flex: 1, padding: "12px", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-            <div style={{ fontSize: "12px", fontWeight: 600, color: "#6366F1", marginBottom: "8px" }}>직원</div>
-            {messages.filter((m) => m.isStaff).map((m) => (
-              <div key={m.id} style={{ marginBottom: "12px", maxWidth: "95%", width: "100%" }}>
-                <div
-                  style={{
-                    borderRadius: "16px",
-                    padding: "8px 16px",
-                    background: "#2563EB",
-                    color: "#fff",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  {(m.originalText || "").trim() && (
-                    <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", marginBottom: "4px" }}>{m.originalText}</div>
-                  )}
-                  <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
-                </div>
-              </div>
-            ))}
+      {/* Single unified chat area */}
+      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            style={{
+              marginBottom: "12px",
+              display: "flex",
+              justifyContent: m.isStaff ? "flex-start" : "flex-end",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "70%",
+                width: "fit-content",
+                borderRadius: "16px",
+                padding: "8px 16px",
+                background: m.isStaff ? "#2563EB" : "#22C55E",
+                color: "#fff",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+              }}
+            >
+              {(m.originalText || "").trim() && (
+                <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
+              )}
+              <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
+            </div>
           </div>
-          <div style={{ flex: 1, padding: "12px", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-            <div style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", marginBottom: "8px", alignSelf: "stretch", textAlign: "right" }}>환자</div>
-            {messages.filter((m) => !m.isStaff).map((m) => (
-              <div key={m.id} style={{ marginBottom: "12px", maxWidth: "95%", width: "100%", display: "flex", justifyContent: "flex-end" }}>
-                <div
-                  style={{
-                    borderRadius: "16px",
-                    padding: "8px 16px",
-                    background: "#22C55E",
-                    color: "#fff",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  {(m.originalText || "").trim() && (
-                    <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", marginBottom: "4px" }}>{m.originalText}</div>
-                  )}
-                  <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
       </main>
 
