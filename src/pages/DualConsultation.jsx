@@ -13,11 +13,13 @@ const LANG_OPTIONS = [
   { value: "ja", label: "日本語" },
   { value: "zh", label: "中文" },
   { value: "vi", label: "Tiếng Việt" },
-  { value: "th", label: "ไทย" },
+  { value: "th", label: "ภาษาไทย" },
   { value: "id", label: "Bahasa" },
   { value: "ru", label: "Русский" },
   { value: "es", label: "Español" },
   { value: "fr", label: "Français" },
+  { value: "ar", label: "العربية" },
+  { value: "mn", label: "Монгол" },
 ];
 
 const LANG_FLAGS = {
@@ -31,6 +33,8 @@ const LANG_FLAGS = {
   ru: "🇷🇺",
   es: "🇪🇸",
   fr: "🇫🇷",
+  ar: "🇸🇦",
+  mn: "🇲🇳",
 };
 
 async function toBase64FromBlob(blob) {
@@ -53,6 +57,7 @@ export default function DualConsultation() {
   const [messages, setMessages] = useState([]);
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
+  const [textInputValue, setTextInputValue] = useState("");
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -272,6 +277,10 @@ export default function DualConsultation() {
 
   const startStaffRecording = useCallback(async () => {
     console.log("[Dual] startStaffRecording called, staffRecording:", staffRecording, "connected:", connected);
+    if (patientRecording) {
+      stopPatientRecording();
+      return;
+    }
     if (staffRecording) {
       stopStaffRecording();
       return;
@@ -305,9 +314,13 @@ export default function DualConsultation() {
     } catch (e) {
       console.error("[DualConsultation] staff mic error:", e);
     }
-  }, [staffRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording, connected]);
+  }, [staffRecording, patientRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording, stopPatientRecording, connected]);
 
   const startPatientRecording = useCallback(async () => {
+    if (staffRecording) {
+      stopStaffRecording();
+      return;
+    }
     if (patientRecording) {
       stopPatientRecording();
       return;
@@ -341,27 +354,54 @@ export default function DualConsultation() {
     } catch (e) {
       console.warn("[DualConsultation] patient mic error:", e?.message);
     }
-  }, [patientRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording]);
+  }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
+
+  const handleSendText = useCallback(() => {
+    const trimmed = textInputValue.trim();
+    if (!trimmed || !connected || !roomIdRef.current || !participantIdRef.current) return;
+    const msgId = `dc-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: msgId,
+        originalText: trimmed,
+        translatedText: trimmed,
+        isStaff: true,
+        senderPid: participantIdRef.current,
+        timestamp: Date.now(),
+        streaming: false,
+      },
+    ]);
+    setTextInputValue("");
+    socket.emit("send-message", {
+      roomId: roomIdRef.current,
+      participantId: participantIdRef.current,
+      message: { id: msgId, text: trimmed },
+    });
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  }, [textInputValue, connected]);
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       {/* Top bar */}
       <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <input
-            type="text"
-            placeholder="PT 번호"
-            value={ptNumber}
-            onChange={(e) => setPtNumber(e.target.value)}
-            style={{ flex: "1 1 120px", minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "8px 12px", fontSize: "14px" }}
-            disabled={connected}
-          />
-          {connected && (
-            <span style={{ fontSize: "12px", color: "#4b5563", display: "flex", alignItems: "center", gap: "4px" }}>
-              <span>{LANG_FLAGS[patientLang] || "🌐"}</span>
-              <span>{LANG_OPTIONS.find((o) => o.value === patientLang)?.label ?? patientLang}</span>
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, gap: "6px" }}>
+            <input
+              type="text"
+              placeholder="PT 번호"
+              value={ptNumber}
+              onChange={(e) => setPtNumber(e.target.value)}
+              style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "8px 12px", fontSize: "14px" }}
+              disabled={connected}
+            />
+            {connected && (
+              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "4px", background: "#f3f4f6", padding: "4px 8px", borderRadius: "6px" }}>
+                <span>{LANG_FLAGS[patientLang] || "🌐"}</span>
+                <span>{LANG_OPTIONS.find((o) => o.value === patientLang)?.label ?? patientLang}</span>
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleConnect}
@@ -470,20 +510,46 @@ export default function DualConsultation() {
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Bottom bar: two mic buttons */}
-      <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
+      {/* Text input bar */}
+      {connected && (
+        <div style={{ flexShrink: 0, display: "flex", gap: "8px", padding: "8px 12px", borderTop: "1px solid #e5e7eb", background: "#fff" }}>
+          <input
+            type="text"
+            value={textInputValue}
+            onChange={(e) => setTextInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSendText()}
+            placeholder="메시지 입력..."
+            style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "10px 12px", fontSize: "14px" }}
+            disabled={!connected}
+          />
+          <button
+            type="button"
+            onClick={handleSendText}
+            disabled={!connected || !textInputValue.trim()}
+            style={{ borderRadius: "8px", background: "#2563EB", color: "#fff", padding: "10px 16px", fontSize: "14px", fontWeight: 500 }}
+          >
+            →
+          </button>
+        </div>
+      )}
+
+      {/* Bottom bar: two mic buttons (card style) */}
+      <footer style={{ display: "flex", flexShrink: 0, gap: "12px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px", justifyContent: "center", flexWrap: "wrap" }}>
         <button
           type="button"
           onClick={startStaffRecording}
           style={{
-            flex: 1,
+            flex: "1 1 140px",
+            maxWidth: "220px",
             borderRadius: "12px",
-            padding: "16px",
+            padding: "16px 20px",
             fontSize: "14px",
             fontWeight: 500,
             background: staffRecording ? "#ef4444" : "#EEF2FF",
             color: staffRecording ? "#fff" : "#1f2937",
+            border: "none",
             borderLeft: "4px solid #6366F1",
+            boxShadow: staffRecording ? "none" : "0 1px 3px rgba(0,0,0,0.08)",
           }}
         >
           {staffRecording ? "녹음 중…" : "🎤 직원"}
@@ -492,14 +558,17 @@ export default function DualConsultation() {
           type="button"
           onClick={startPatientRecording}
           style={{
-            flex: 1,
+            flex: "1 1 140px",
+            maxWidth: "220px",
             borderRadius: "12px",
-            padding: "16px",
+            padding: "16px 20px",
             fontSize: "14px",
             fontWeight: 500,
             background: patientRecording ? "#ef4444" : "#F0FDF4",
             color: patientRecording ? "#fff" : "#1f2937",
+            border: "none",
             borderLeft: "4px solid #22C55E",
+            boxShadow: patientRecording ? "none" : "0 1px 3px rgba(0,0,0,0.08)",
           }}
         >
           {patientRecording ? "녹음 중…" : "🎤 환자"}

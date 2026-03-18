@@ -3935,7 +3935,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: stripBracketTag(translatedText), fromLang: lang, final: true });
+    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: translatedText ? translatedText.replace(/^\[.*?\]\s*/, '').trim() : normalized, fromLang: lang, final: true });
     ackReply({ ok: true, text: normalized });
   });
 
