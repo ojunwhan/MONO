@@ -3811,6 +3811,7 @@ io.on('connection', (socket) => {
       return;
     }
     if (!roomId || !participantId || typeof audio !== "string" || !audio.trim()) {
+      console.warn("[stt:whisper] invalid_payload roomId:", roomId, "pid:", participantId, "audioType:", typeof audio, "audioLen:", audio?.length);
       ackReply({ ok: false, error: "invalid_payload" });
       return;
     }
@@ -3833,6 +3834,7 @@ io.on('connection', (socket) => {
       return;
     }
     if (!audioBuffer?.length) {
+      console.warn("[stt:whisper] empty_audio roomId:", roomId);
       ackReply({ ok: false, error: "empty_audio" });
       return;
     }
