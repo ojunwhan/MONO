@@ -25,7 +25,6 @@ import HospitalAesthetic from "./pages/HospitalAesthetic";
 import HospitalConversations from "./pages/HospitalConversations";
 import FixedRoom from "./pages/FixedRoom";
 import FixedRoomVAD from "./pages/FixedRoomVAD";
-import DualConsultation from "./pages/DualConsultation";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminLayout from "./pages/Admin/AdminLayout";
 import AdminOrgs from "./pages/Admin/AdminOrgs";
