@@ -373,8 +373,25 @@ export default function HospitalDashboard() {
                           {item.created_at ? new Date(item.created_at).toLocaleString("ko-KR") : ""}
                         </span>
                       </div>
-                      {item.patient_lang && (
-                        <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px" }}>언어: {item.patient_lang}</div>
+                      {(item.patient_name || item.patient_lang) && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          {item.patient_lang && (
+                            <img
+                              src={`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${(() => { const flag = { en: '1f1fa-1f1f8', zh: '1f1e8-1f1f3', ja: '1f1ef-1f1f5', vi: '1f1fb-1f1f3', th: '1f1f9-1f1ed', ko: '1f1f0-1f1f7', ru: '1f1f7-1f1fa', es: '1f1ea-1f1f8', fr: '1f1eb-1f1f7', de: '1f1e9-1f1ea', pt: '1f1e7-1f1f7', ar: '1f1f8-1f1e6', hi: '1f1ee-1f1f3', id: '1f1ee-1f1e9', ms: '1f1f2-1f1fe', tl: '1f1f5-1f1ed', mn: '1f1f2-1f1f3', my: '1f1f2-1f1f2', km: '1f1f0-1f1ed', lo: '1f1f1-1f1e6', ne: '1f1f3-1f1f5', bn: '1f1e7-1f1e9', ur: '1f1f5-1f1f0', tr: '1f1f9-1f1f7', uk: '1f1fa-1f1e6', pl: '1f1f5-1f1f1', it: '1f1ee-1f1f9', nl: '1f1f3-1f1f1', sv: '1f1f8-1f1ea', ka: '1f1ec-1f1ea' }; return flag[item.patient_lang] || '1f310'; })()}.svg`}
+                              alt={item.patient_lang}
+                              width={20}
+                              height={18}
+                              style={{ borderRadius: "2px", objectFit: "cover" }}
+                              onError={(e) => { e.target.style.display = "none"; }}
+                            />
+                          )}
+                          <span style={{ fontSize: "13px", color: "#374151", fontWeight: 500 }}>
+                            {item.patient_name || "-"}
+                          </span>
+                          {item.patient_lang && (
+                            <span style={{ fontSize: "12px", color: "#9ca3af" }}>{item.patient_lang}</span>
+                          )}
+                        </div>
                       )}
                       {item.ai_summary && typeof item.ai_summary === "object" ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

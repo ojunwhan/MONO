@@ -6089,16 +6089,22 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     let rows;
     if (ptNumber) {
       rows = await dbAll(
-        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at, hs.guest_lang
+        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at,
+         COALESCE(hs.guest_lang, hp.language, '') AS language,
+         COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
+         LEFT JOIN hospital_patients hp ON hp.room_id = hs.room_id
          WHERE hs.room_id = ? AND (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC`,
         [ptNumber, orgCode]
       );
     } else {
       rows = await dbAll(
-        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at, hs.guest_lang
+        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at,
+         COALESCE(hs.guest_lang, hp.language, '') AS language,
+         COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
+         LEFT JOIN hospital_patients hp ON hp.room_id = hs.room_id
          WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC
          LIMIT 30`,
@@ -6123,7 +6129,8 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
         ai_summary: parsed,
         created_at: r.created_at,
         ended_at: r.ended_at,
-        patient_lang: r.guest_lang,
+        patient_lang: r.language || '',
+        patient_name: r.name || '',
       };
     });
 
