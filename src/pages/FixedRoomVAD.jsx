@@ -281,7 +281,7 @@ function InterpretingVAD({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang ?? historyGuestLang ?? patientData?.language ?? "en"); return (
             <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
               {getFlagImg(fc)} {fc.toUpperCase()}
               <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
@@ -419,7 +419,7 @@ function InterpretingPTT({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang); return (
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang ?? historyGuestLang ?? patientData?.language ?? "en"); return (
             <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
               {getFlagImg(fc)} {fc.toUpperCase()}
               <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
