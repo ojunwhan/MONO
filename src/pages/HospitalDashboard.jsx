@@ -31,6 +31,7 @@ import {
   Tablet,
   Mic,
   MicOff,
+  Sparkles,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
@@ -55,6 +56,7 @@ const MENU_ITEMS = [
   { id: "rooms", label: "방 관리", icon: LayoutGrid },
   { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
+  { id: "ai-summary", label: "AI 요약", icon: Sparkles },
 ];
 
 const LANG_LABELS = {
@@ -183,6 +185,10 @@ export default function HospitalDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("pending");
+  const [aiSummaries, setAiSummaries] = useState([]);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummarySearch, setAiSummarySearch] = useState("");
+  const [aiSummarySearchInput, setAiSummarySearchInput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -205,6 +211,25 @@ export default function HospitalDashboard() {
     })();
     return () => { cancelled = true; };
   }, [navigate]);
+
+  const fetchAiSummaries = useCallback(async (ptNumber = "") => {
+    setAiSummaryLoading(true);
+    try {
+      let url = urlWithOrg("/api/hospital/ai-summaries", authUser?.org_code);
+      if (ptNumber.trim()) url += `&pt_number=${encodeURIComponent(ptNumber.trim())}`;
+      const res = await fetch(url, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) setAiSummaries(data.summaries || []);
+    } catch (e) {
+      console.error("ai-summaries fetch error", e);
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  }, [authUser?.org_code]);
+
+  useEffect(() => {
+    if (activeMenu === "ai-summary") fetchAiSummaries();
+  }, [activeMenu, fetchAiSummaries]);
 
   if (authStatus === "pending") {
     return (
@@ -294,6 +319,83 @@ export default function HospitalDashboard() {
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
           {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
           {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
+          {activeMenu === "ai-summary" && (
+            <div style={{ padding: "24px" }}>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
+                <input
+                  type="text"
+                  placeholder="PT 번호 검색 (예: PT-XXXXXX)"
+                  value={aiSummarySearchInput}
+                  onChange={(e) => setAiSummarySearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setAiSummarySearch(aiSummarySearchInput);
+                      fetchAiSummaries(aiSummarySearchInput);
+                    }
+                  }}
+                  style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "14px" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiSummarySearch(aiSummarySearchInput);
+                    fetchAiSummaries(aiSummarySearchInput);
+                  }}
+                  style={{ padding: "8px 20px", borderRadius: "8px", background: "#6366f1", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}
+                >
+                  검색
+                </button>
+                {aiSummarySearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiSummarySearchInput("");
+                      setAiSummarySearch("");
+                      fetchAiSummaries("");
+                    }}
+                    style={{ padding: "8px 16px", borderRadius: "8px", background: "#f3f4f6", color: "#374151", border: "none", cursor: "pointer" }}
+                  >
+                    초기화
+                  </button>
+                )}
+              </div>
+              {aiSummaryLoading ? (
+                <div style={{ textAlign: "center", color: "#9ca3af", padding: "48px" }}>불러오는 중...</div>
+              ) : aiSummaries.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#9ca3af", padding: "48px" }}>아직 생성된 AI 요약이 없습니다</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {aiSummaries.map((item) => (
+                    <div key={item.session_id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <span style={{ fontWeight: 700, fontSize: "16px", color: "#111827" }}>{item.pt_number}</span>
+                        <span style={{ fontSize: "12px", color: "#6b7280" }}>
+                          {item.created_at ? new Date(item.created_at).toLocaleString("ko-KR") : ""}
+                        </span>
+                      </div>
+                      {item.patient_lang && (
+                        <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px" }}>언어: {item.patient_lang}</div>
+                      )}
+                      {item.ai_summary && typeof item.ai_summary === "object" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {Object.entries(item.ai_summary).map(([key, value]) =>
+                            value && String(value).trim() ? (
+                              <div key={key} style={{ background: "#f9fafb", borderRadius: "8px", padding: "10px 14px" }}>
+                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>{key.replace(/_/g, " ")}</div>
+                                <div style={{ fontSize: "14px", color: "#374151" }}>{Array.isArray(value) ? value.join(", ") : String(value)}</div>
+                              </div>
+                            ) : null
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ color: "#9ca3af", fontSize: "14px" }}>요약 없음</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

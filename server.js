@@ -6076,6 +6076,60 @@ app.get('/api/hospital/dashboard/stats', requireHospitalAdminJwt, async (req, re
   }
 });
 
+// GET /api/hospital/ai-summaries — AI 요약 목록 (org_code 필수, pt_number 선택)
+app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.query.org_code;
+    const ptNumber = req.query.pt_number ? String(req.query.pt_number).trim() : '';
+    if (!orgCode) return res.status(400).json({ error: 'org_code_required' });
+
+    let rows;
+    if (ptNumber) {
+      rows = await dbAll(
+        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at, hs.guest_lang
+         FROM hospital_sessions hs
+         WHERE hs.room_id = ? AND (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
+         ORDER BY hs.created_at DESC`,
+        [ptNumber, orgCode]
+      );
+    } else {
+      rows = await dbAll(
+        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at, hs.guest_lang
+         FROM hospital_sessions hs
+         WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
+         ORDER BY hs.created_at DESC
+         LIMIT 30`,
+        [orgCode]
+      );
+    }
+
+    const summaries = (rows || []).map((r) => {
+      let parsed = r.ai_summary;
+      if (typeof r.ai_summary === 'string') {
+        try {
+          parsed = JSON.parse(r.ai_summary);
+        } catch {
+          parsed = r.ai_summary;
+        }
+      }
+      return {
+        session_id: r.id,
+        pt_number: r.room_id,
+        ai_summary: parsed,
+        created_at: r.created_at,
+        ended_at: r.ended_at,
+        patient_lang: r.guest_lang,
+      };
+    });
+
+    res.json({ success: true, summaries });
+  } catch (e) {
+    console.error('[hospital:ai-summaries]', e?.message);
+    trackUsageError(e, { source: 'hospital:ai-summaries' });
+    res.status(500).json({ error: 'ai_summaries_failed' });
+  }
+});
+
 // GET /api/hospital/dashboard/sessions — 대시보드용 세션 목록 (hospital_sessions + message_count, JWT org_code로 필터)
 app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req, res) => {
   try {
