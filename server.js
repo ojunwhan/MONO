@@ -5890,19 +5890,26 @@ async function extractMedicalSummary(sessionId) {
       messages: [
         {
           role: 'system',
-          content: `Analyze this medical interpretation session and extract:
-- chief_complaint: patient's main symptom or reason for visit
-- procedures_mentioned: any procedures or treatments discussed
-- patient_requests: specific requests made by patient
-- special_notes: any important notes for medical staff
-Return as JSON only, no other text. Use keys: chief_complaint, procedures_mentioned, patient_requests, special_notes.`,
+          content: `You are a medical data extraction assistant for plastic surgery and aesthetic clinics. Extract structured data from this conversation and return ONLY valid JSON with no markdown, no code fences, no explanation.
+
+Return exactly this structure:
+{
+  "chief_complaint": "main reason for visit in one sentence",
+  "procedures_mentioned": ["list of procedures or treatments discussed"],
+  "patient_requests": ["specific requests or preferences from patient"],
+  "budget_mentioned": "budget if mentioned, else null",
+  "follow_up_required": true or false,
+  "special_notes": ["allergies, medical history, concerns, or anything important"],
+  "consultation_summary": "2-3 sentence summary of the entire consultation"
+}`,
         },
         { role: 'user', content: transcript },
       ],
     });
-    const content = r.choices?.[0]?.message?.content?.trim();
-    if (content) {
-      await dbRun('UPDATE hospital_sessions SET ai_summary = ? WHERE id = ?', [content, sessionId]);
+    const raw = r.choices?.[0]?.message?.content?.trim();
+    if (raw) {
+      const cleanJson = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      await dbRun('UPDATE hospital_sessions SET ai_summary = ? WHERE id = ?', [cleanJson, sessionId]);
       console.log('[hospital] ai_summary saved for session', sessionId);
     }
   } catch (e) {
