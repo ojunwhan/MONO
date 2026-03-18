@@ -1,3 +1,4 @@
+import React from "react";
 import { createBrowserRouter, redirect } from "react-router-dom";
 import Home from "./pages/Home";
 import Setup from "./pages/Setup";
@@ -24,6 +25,7 @@ import HospitalAesthetic from "./pages/HospitalAesthetic";
 import HospitalConversations from "./pages/HospitalConversations";
 import FixedRoom from "./pages/FixedRoom";
 import FixedRoomVAD from "./pages/FixedRoomVAD";
+import DualConsultation from "./pages/DualConsultation";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminLayout from "./pages/Admin/AdminLayout";
 import AdminOrgs from "./pages/Admin/AdminOrgs";
@@ -33,6 +35,8 @@ import OrgKiosk from "./pages/Org/OrgKiosk";
 import OrgStaff from "./pages/Org/OrgStaff";
 import OrgJoin from "./pages/Org/OrgJoin";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
+
+const DualConsultation = React.lazy(() => import("./pages/DualConsultation"));
 
 async function rootRedirectLoader({ request }) {
   const url = new URL(request.url);
@@ -164,6 +168,10 @@ const router = createBrowserRouter([
   {
     path: "/fixed-room/:roomId",
     element: <FixedRoomVAD />,
+  },
+  {
+    path: "/dual-consultation",
+    element: <React.Suspense fallback={<div>Loading...</div>}><DualConsultation /></React.Suspense>,
   },
   {
     path: "/admin",
