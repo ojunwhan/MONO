@@ -386,19 +386,20 @@ export default function DualConsultation() {
       {/* Top bar */}
       <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
             <input
               type="text"
               placeholder="PT 번호"
               value={ptNumber}
               onChange={(e) => setPtNumber(e.target.value)}
-              style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "8px 12px", fontSize: "14px" }}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
               disabled={connected}
             />
             {connected && (
-              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "4px", background: "#f3f4f6", padding: "4px 8px", borderRadius: "6px" }}>
+              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderLeft: "1px solid #e5e7eb" }}>
                 <span>{LANG_FLAGS[patientLang] || "🌐"}</span>
                 <span>{LANG_OPTIONS.find((o) => o.value === patientLang)?.label ?? patientLang}</span>
+                <span style={{ color: "#9ca3af" }}>환자</span>
               </span>
             )}
           </div>
@@ -473,44 +474,94 @@ export default function DualConsultation() {
         )}
       </header>
 
-      {/* Message area */}
-      <main style={{ flex: 1, overflowY: "auto", padding: "16px 12px" }}>
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            style={{
-              marginBottom: "12px",
-              marginLeft: m.isStaff ? "32px" : 0,
-              marginRight: m.isStaff ? 0 : "32px",
-              display: "flex",
-              justifyContent: m.isStaff ? "flex-end" : "flex-start",
-            }}
-          >
-            <div
-              style={{
-                maxWidth: "85%",
-                borderRadius: "16px",
-                padding: "8px 16px",
-                background: m.isStaff ? "#2563EB" : "#fff",
-                color: m.isStaff ? "#fff" : "#111827",
-                boxShadow: m.isStaff ? "none" : "0 1px 3px 0 rgba(0,0,0,0.1)",
-              }}
-            >
-              {(m.originalText || "").trim() && (
-                <div style={{ fontSize: "0.85rem", color: m.isStaff ? "rgba(255,255,255,0.85)" : "#6b7280", marginBottom: "4px" }}>
-                  {m.originalText}
+      {/* Message area with center divider */}
+      <main style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div style={{ display: "flex", minHeight: "100%" }}>
+          <div style={{ flex: 1, padding: "12px", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "#6366F1", marginBottom: "8px" }}>직원</div>
+            {messages.filter((m) => m.isStaff).map((m) => (
+              <div key={m.id} style={{ marginBottom: "12px", maxWidth: "95%", width: "100%" }}>
+                <div
+                  style={{
+                    borderRadius: "16px",
+                    padding: "8px 16px",
+                    background: "#2563EB",
+                    color: "#fff",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  {(m.originalText || "").trim() && (
+                    <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", marginBottom: "4px" }}>{m.originalText}</div>
+                  )}
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
                 </div>
-              )}
-              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: m.isStaff ? "#fff" : "#111827" }}>
-                {m.translatedText || (m.streaming ? "…" : "")}
               </div>
-            </div>
+            ))}
           </div>
-        ))}
-        <div ref={messagesEndRef} />
+          <div style={{ flex: 1, padding: "12px", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", marginBottom: "8px", alignSelf: "stretch", textAlign: "right" }}>환자</div>
+            {messages.filter((m) => !m.isStaff).map((m) => (
+              <div key={m.id} style={{ marginBottom: "12px", maxWidth: "95%", width: "100%", display: "flex", justifyContent: "flex-end" }}>
+                <div
+                  style={{
+                    borderRadius: "16px",
+                    padding: "8px 16px",
+                    background: "#22C55E",
+                    color: "#fff",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  {(m.originalText || "").trim() && (
+                    <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", marginBottom: "4px" }}>{m.originalText}</div>
+                  )}
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
       </main>
 
-      {/* Text input bar */}
+      {/* Mic buttons - full width */}
+      <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
+        <button
+          type="button"
+          onClick={startStaffRecording}
+          style={{
+            flex: 1,
+            minHeight: "48px",
+            borderRadius: "10px",
+            padding: "14px 16px",
+            fontSize: "14px",
+            fontWeight: 500,
+            background: staffRecording ? "#ef4444" : "#EEF2FF",
+            color: staffRecording ? "#fff" : "#1f2937",
+            border: "2px solid #6366F1",
+          }}
+        >
+          {staffRecording ? "녹음 중…" : "🎤 직원"}
+        </button>
+        <button
+          type="button"
+          onClick={startPatientRecording}
+          style={{
+            flex: 1,
+            minHeight: "48px",
+            borderRadius: "10px",
+            padding: "14px 16px",
+            fontSize: "14px",
+            fontWeight: 500,
+            background: patientRecording ? "#ef4444" : "#F0FDF4",
+            color: patientRecording ? "#fff" : "#1f2937",
+            border: "2px solid #22C55E",
+          }}
+        >
+          {patientRecording ? "녹음 중…" : "🎤 환자"}
+        </button>
+      </footer>
+
+      {/* Text input bar - at very bottom */}
       {connected && (
         <div style={{ flexShrink: 0, display: "flex", gap: "8px", padding: "8px 12px", borderTop: "1px solid #e5e7eb", background: "#fff" }}>
           <input
@@ -532,48 +583,6 @@ export default function DualConsultation() {
           </button>
         </div>
       )}
-
-      {/* Bottom bar: two mic buttons (card style) */}
-      <footer style={{ display: "flex", flexShrink: 0, gap: "12px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={startStaffRecording}
-          style={{
-            flex: "1 1 140px",
-            maxWidth: "220px",
-            borderRadius: "12px",
-            padding: "16px 20px",
-            fontSize: "14px",
-            fontWeight: 500,
-            background: staffRecording ? "#ef4444" : "#EEF2FF",
-            color: staffRecording ? "#fff" : "#1f2937",
-            border: "none",
-            borderLeft: "4px solid #6366F1",
-            boxShadow: staffRecording ? "none" : "0 1px 3px rgba(0,0,0,0.08)",
-          }}
-        >
-          {staffRecording ? "녹음 중…" : "🎤 직원"}
-        </button>
-        <button
-          type="button"
-          onClick={startPatientRecording}
-          style={{
-            flex: "1 1 140px",
-            maxWidth: "220px",
-            borderRadius: "12px",
-            padding: "16px 20px",
-            fontSize: "14px",
-            fontWeight: 500,
-            background: patientRecording ? "#ef4444" : "#F0FDF4",
-            color: patientRecording ? "#fff" : "#1f2937",
-            border: "none",
-            borderLeft: "4px solid #22C55E",
-            boxShadow: patientRecording ? "none" : "0 1px 3px rgba(0,0,0,0.08)",
-          }}
-        >
-          {patientRecording ? "녹음 중…" : "🎤 환자"}
-        </button>
-      </footer>
     </div>
   );
 }
