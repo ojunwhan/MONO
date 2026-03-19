@@ -35,6 +35,8 @@ export default function DualConsultation() {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
+  const [inputMode, setInputMode] = useState("ptt"); // "ptt" = dual mic, "vad" = single mic auto (manual start/stop for now)
+  const [vadActive, setVadActive] = useState(false);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -333,6 +335,16 @@ export default function DualConsultation() {
     }
   }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
+  const handleVADToggle = () => {
+    if (vadActive) {
+      if (staffRecording) stopStaffRecording();
+      setVadActive(false);
+    } else {
+      setVadActive(true);
+      startStaffRecording();
+    }
+  };
+
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
     if (!trimmed || !connected || !roomIdRef.current || !participantIdRef.current) return;
@@ -412,7 +424,41 @@ export default function DualConsultation() {
               {settingsOpen ? "Settings \u25BC" : "Settings \u25B6"}
             </div>
             <div style={{ maxHeight: settingsOpen ? "500px" : "0", overflow: "hidden", transition: "max-height 300ms ease" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "8px 0" }}>
+                <button
+                  type="button"
+                  onClick={() => setInputMode("ptt")}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 20,
+                    border: "1px solid #d1d5db",
+                    background: inputMode === "ptt" ? "#3B82F6" : "white",
+                    color: inputMode === "ptt" ? "white" : "#374151",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Dual Mic (PTT)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode("vad")}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 20,
+                    border: "1px solid #d1d5db",
+                    background: inputMode === "vad" ? "#3B82F6" : "white",
+                    color: inputMode === "vad" ? "white" : "#374151",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Single Mic (Auto)
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: inputMode === "vad" ? "1fr" : "1fr 1fr", gap: "12px", fontSize: "12px" }}>
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
                   <select
@@ -427,20 +473,22 @@ export default function DualConsultation() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
-                  <select
-                    value={patientDeviceId}
-                    onChange={(e) => setPatientDeviceId(e.target.value)}
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                  >
-                    {devices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {inputMode === "ptt" ? (
+                  <div>
+                    <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
+                    <select
+                      value={patientDeviceId}
+                      onChange={(e) => setPatientDeviceId(e.target.value)}
+                      style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                    >
+                      {devices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px", marginTop: "12px" }}>
                 <div>
@@ -513,40 +561,62 @@ export default function DualConsultation() {
 
       {/* Mic buttons - full width */}
       <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
-        <button
-          type="button"
-          onClick={startStaffRecording}
-          style={{
-            flex: 1,
-            minHeight: "48px",
-            borderRadius: "10px",
-            padding: "14px 16px",
-            fontSize: "14px",
-            fontWeight: 500,
-            background: staffRecording ? "#ef4444" : "#EEF2FF",
-            color: staffRecording ? "#fff" : "#1f2937",
-            border: "2px solid #6366F1",
-          }}
-        >
-          {staffRecording ? "Stop" : "Staff"}
-        </button>
-        <button
-          type="button"
-          onClick={startPatientRecording}
-          style={{
-            flex: 1,
-            minHeight: "48px",
-            borderRadius: "10px",
-            padding: "14px 16px",
-            fontSize: "14px",
-            fontWeight: 500,
-            background: patientRecording ? "#ef4444" : "#F0FDF4",
-            color: patientRecording ? "#fff" : "#1f2937",
-            border: "2px solid #22C55E",
-          }}
-        >
-          {patientRecording ? "Stop" : "Patient"}
-        </button>
+        {inputMode === "ptt" ? (
+          <>
+            <button
+              type="button"
+              onClick={startStaffRecording}
+              style={{
+                flex: 1,
+                minHeight: "48px",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                fontSize: "14px",
+                fontWeight: 500,
+                background: staffRecording ? "#ef4444" : "#EEF2FF",
+                color: staffRecording ? "#fff" : "#1f2937",
+                border: "2px solid #6366F1",
+              }}
+            >
+              {staffRecording ? "Stop" : "Staff"}
+            </button>
+            <button
+              type="button"
+              onClick={startPatientRecording}
+              style={{
+                flex: 1,
+                minHeight: "48px",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                fontSize: "14px",
+                fontWeight: 500,
+                background: patientRecording ? "#ef4444" : "#F0FDF4",
+                color: patientRecording ? "#fff" : "#1f2937",
+                border: "2px solid #22C55E",
+              }}
+            >
+              {patientRecording ? "Stop" : "Patient"}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={handleVADToggle}
+            style={{
+              width: "100%",
+              padding: "16px",
+              borderRadius: 12,
+              border: "none",
+              background: vadActive ? "#ef4444" : "#3B82F6",
+              color: "white",
+              fontSize: 16,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {vadActive ? "Stop Listening" : "Start Listening"}
+          </button>
+        )}
       </footer>
 
       {/* Text input bar - at very bottom */}
