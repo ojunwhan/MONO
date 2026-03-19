@@ -44,9 +44,9 @@ const DEFAULT_VAD_THRESHOLD = 0.01;
 const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
 
 /**
- * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string }} opts
+ * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string }} opts
  */
-export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
+export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId, vadStaffLang, vadPatientLang }) {
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
 
@@ -90,6 +90,8 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
         participantId,
         lang,
         sampleRateHz: 16000,
+        ...(vadStaffLang && { vadStaffLang }),
+        ...(vadPatientLang && { vadPatientLang }),
       });
 
       // 2. 소프트웨어 게인 적용
@@ -128,8 +130,23 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
         participantId,
       });
     },
-    [roomId, participantId, lang]
+    [roomId, participantId, lang, vadStaffLang, vadPatientLang]
   );
+
+  const getStreamFn = deviceId
+    ? async () => {
+        return navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId },
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      }
+    : undefined;
 
   const vad = useMicVAD({
     startOnLoad: false,
@@ -137,6 +154,8 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint }) {
     // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
     baseAssetPath: "/",
     onnxWASMBasePath: "/",
+
+    ...(getStreamFn && { getStream: getStreamFn }),
 
     onSpeechStart: () => {
       sessionActiveRef.current = true;
