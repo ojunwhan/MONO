@@ -167,7 +167,7 @@ export default function DualConsultation() {
               {
                 id: msgId,
                 originalText: transcript,
-                translatedText: transcript,
+                translatedText: "",
                 isStaff: true,
                 senderPid: pid,
                 timestamp: Date.now(),
@@ -342,6 +342,16 @@ export default function DualConsultation() {
       setTimeout(scrollToBottom, 50);
     };
 
+    const onReviseMessage = (payload) => {
+      const { id: messageId, translatedText: revisedText, roomId: incomingRoomId } = payload || {};
+      if (incomingRoomId && incomingRoomId !== rid) return;
+      if (!messageId || revisedText == null || String(revisedText).trim() === "") return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, translatedText: revisedText } : m))
+      );
+      setTimeout(scrollToBottom, 50);
+    };
+
     const onSttResult = (payload) => {
       const {
         roomId: incomingRoomId,
@@ -387,11 +397,13 @@ export default function DualConsultation() {
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
+    socket.on("revise-message", onReviseMessage);
     socket.on("stt:result", onSttResult);
     return () => {
       socket.off("receive-message", onReceiveMessage);
       socket.off("receive-message-stream", onStream);
       socket.off("receive-message-stream-end", onStreamEnd);
+      socket.off("revise-message", onReviseMessage);
       socket.off("stt:result", onSttResult);
     };
   }, [roomId, scrollToBottom]);
@@ -768,7 +780,7 @@ export default function DualConsultation() {
                     textDecoration: "underline",
                   }}
                 >
-                  ??: STT ?? ?? (webspeech ? groq)
+                  STT ?? ?? (webspeech ? groq)
                 </button>
               </div>
             </div>
@@ -807,7 +819,13 @@ export default function DualConsultation() {
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
               )}
               <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
-                {m.translatedText || (m.streaming ? "..." : "")}
+                {m.streaming
+                  ? "..."
+                  : (m.translatedText || "").trim()
+                    ? m.translatedText
+                    : (m.originalText || "").trim()
+                      ? "?? ?..."
+                      : ""}
               </div>
             </div>
           </div>
