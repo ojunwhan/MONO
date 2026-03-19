@@ -179,7 +179,8 @@ export default function DualConsultation() {
       const { roomId: incomingRoomId, participantId: incomingPid, text, translatedText: payloadTranslated, final } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!text || !final) return;
-      const isStaff = incomingPid === participantIdRef.current;
+      const pending = pendingSenderRef.current;
+      const isStaff = pending ? pending === "staff" : incomingPid === participantIdRef.current;
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       seenIdsRef.current.add(msgId);
@@ -473,9 +474,9 @@ export default function DualConsultation() {
               style={{
                 maxWidth: "70%",
                 width: "fit-content",
-                borderRadius: "16px",
+                borderRadius: m.isStaff ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
                 padding: "8px 16px",
-                background: m.isStaff ? "#2563EB" : "#22C55E",
+                background: m.isStaff ? "#3B82F6" : "#10B981",
                 color: "#fff",
                 boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
               }}
@@ -483,7 +484,9 @@ export default function DualConsultation() {
               {(m.originalText || "").trim() && (
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
               )}
-              <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{m.translatedText || (m.streaming ? "…" : "")}</div>
+              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
+                {m.translatedText || (m.streaming ? "…" : "")}
+              </div>
             </div>
           </div>
         ))}
