@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
+import { useVADPipeline } from "../hooks/useVADPipeline";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -68,6 +69,22 @@ export default function DualConsultation() {
   useEffect(() => {
     patientLangRef.current = patientLang;
   }, [patientLang]);
+
+  // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
+  // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
+  const {
+    loading: vadLoading,
+    userSpeaking: vadSpeaking,
+    start: vadStart,
+    pause: vadPause,
+  } = useVADPipeline({
+    roomId: roomId || undefined,
+    participantId: participantIdRef.current || undefined,
+    lang: "auto",
+    vadStaffLang: staffLang,
+    vadPatientLang: patientLang,
+    deviceId: staffDeviceId || undefined,
+  });
 
   // List audio devices
   useEffect(() => {
@@ -195,16 +212,26 @@ export default function DualConsultation() {
     };
 
     const onSttResult = (payload) => {
-      const { roomId: incomingRoomId, participantId: incomingPid, text, translatedText: payloadTranslated, final, fromLang } = payload || {};
+      const {
+        roomId: incomingRoomId,
+        participantId: incomingPid,
+        text,
+        translatedText: payloadTranslated,
+        final,
+        fromLang,
+        isStaff: serverIsStaff,
+      } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!text || !final) return;
       let isStaff;
       if (inputModeRef.current === "vad") {
-        const detected = (fromLang || "").toLowerCase();
-        const pLang = (patientLangRef.current || "en").toLowerCase();
-        isStaff = detected !== pLang;
-        // If detected language matches patient language ? patient spoke ? right side (green)
-        // If detected language does NOT match patient language ? staff spoke ? left side (blue)
+        if (serverIsStaff !== undefined && serverIsStaff !== null) {
+          isStaff = Boolean(serverIsStaff);
+        } else {
+          const detected = (fromLang || "").toLowerCase();
+          const pLang = (patientLangRef.current || "en").toLowerCase();
+          isStaff = detected !== pLang;
+        }
       } else {
         isStaff = pendingSenderRef.current === "staff";
       }
@@ -311,14 +338,6 @@ export default function DualConsultation() {
         staffStreamRef.current = null;
         staffRecorderRef.current = null;
         setStaffRecording(false);
-        // Auto-restart if VAD mode is still active
-        if (inputModeRef.current === "vad" && vadActiveRef.current) {
-          setTimeout(() => {
-            if (inputModeRef.current === "vad" && vadActiveRef.current) {
-              startStaffRecording(true);
-            }
-          }, 200);
-        }
       };
       recorder.start(100);
       staffRecorderRef.current = recorder;
@@ -368,17 +387,26 @@ export default function DualConsultation() {
     }
   }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
-  const handleVADToggle = () => {
+  const handleVADToggle = useCallback(() => {
     if (vadActive) {
+      vadPause();
       vadActiveRef.current = false;
-      if (staffRecording) stopStaffRecording();
       setVadActive(false);
     } else {
+      vadStart();
       vadActiveRef.current = true;
       setVadActive(true);
-      startStaffRecording();
     }
-  };
+  }, [vadActive, vadStart, vadPause]);
+
+  // Pause Silero VAD when switching back to PTT (hook always mounted).
+  useEffect(() => {
+    if (inputMode !== "vad") {
+      vadPause();
+      vadActiveRef.current = false;
+      setVadActive(false);
+    }
+  }, [inputMode, vadPause]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
@@ -634,23 +662,49 @@ export default function DualConsultation() {
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={handleVADToggle}
-            style={{
-              width: "100%",
-              padding: "16px",
-              borderRadius: 12,
-              border: "none",
-              background: vadActive ? "#ef4444" : "#3B82F6",
-              color: "white",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            {vadActive ? "Stop Listening" : "Start Listening"}
-          </button>
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+            {vadLoading && (
+              <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>Loading VAD model?</div>
+            )}
+            <button
+              type="button"
+              onClick={handleVADToggle}
+              disabled={!connected || vadLoading}
+              style={{
+                width: "100%",
+                padding: "16px",
+                borderRadius: 12,
+                border: "none",
+                background: vadActive ? (vadSpeaking ? "#b91c1c" : "#ef4444") : vadSpeaking ? "#2563eb" : "#3B82F6",
+                color: "white",
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: !connected || vadLoading ? "not-allowed" : "pointer",
+                opacity: !connected || vadLoading ? 0.55 : 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                boxShadow: vadSpeaking && vadActive ? "0 0 0 3px rgba(239,68,68,0.35)" : "none",
+                transition: "background 0.15s ease, box-shadow 0.15s ease",
+              }}
+            >
+              {vadSpeaking && vadActive ? (
+                <span
+                  aria-hidden
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: "#fff",
+                    animation: "dual-vad-pulse 1s ease-in-out infinite",
+                  }}
+                />
+              ) : null}
+              {vadLoading ? "Please wait?" : vadActive ? "Stop Listening" : "Start Listening"}
+            </button>
+            <style>{`@keyframes dual-vad-pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.2);} }`}</style>
+          </div>
         )}
       </footer>
 
