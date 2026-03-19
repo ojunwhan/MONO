@@ -266,8 +266,13 @@ export default function DualConsultation() {
   }, [roomId, scrollToBottom]);
 
   const stopStaffRecording = useCallback(() => {
+    staffRecordingRef.current = false;
     if (staffRecorderRef.current && staffRecorderRef.current.state !== "inactive") {
       staffRecorderRef.current.stop();
+    } else {
+      staffStreamRef.current?.getTracks?.().forEach((t) => t.stop());
+      staffStreamRef.current = null;
+      staffRecorderRef.current = null;
     }
     setStaffRecording(false);
   }, []);
@@ -337,13 +342,20 @@ export default function DualConsultation() {
         staffStreamRef.current?.getTracks?.().forEach((t) => t.stop());
         staffStreamRef.current = null;
         staffRecorderRef.current = null;
+        staffRecordingRef.current = false;
         setStaffRecording(false);
       };
       recorder.start(100);
       staffRecorderRef.current = recorder;
+      staffRecordingRef.current = true;
       setStaffRecording(true);
     } catch (e) {
       console.error("[DualConsultation] staff mic error:", e);
+      staffRecordingRef.current = false;
+      staffStreamRef.current?.getTracks?.().forEach((t) => t.stop());
+      staffStreamRef.current = null;
+      staffRecorderRef.current = null;
+      setStaffRecording(false);
     }
   }, [staffRecording, patientRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording, stopPatientRecording, connected]);
 
@@ -384,6 +396,10 @@ export default function DualConsultation() {
       setPatientRecording(true);
     } catch (e) {
       console.warn("[DualConsultation] patient mic error:", e?.message);
+      patientStreamRef.current?.getTracks?.().forEach((t) => t.stop());
+      patientStreamRef.current = null;
+      patientRecorderRef.current = null;
+      setPatientRecording(false);
     }
   }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
