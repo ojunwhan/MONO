@@ -564,6 +564,8 @@ const WHISPER_HALLUCINATION_PATTERNS = [
   "thanks for watching",
   "please subscribe",
   "subscribe and like",
+  "Live Global Village",
+  "global village",
 ];
 
 function isWhisperHallucinationText(text) {
