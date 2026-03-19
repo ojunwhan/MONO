@@ -34,11 +34,6 @@ async function toBase64FromBlob(blob) {
   return btoa(bin);
 }
 
-function bcp47ForStaffLang(code) {
-  const sl = String(code || "ko").toLowerCase().split("-")[0];
-  return { ko: "ko-KR", en: "en-US", zh: "zh-CN", ja: "ja-JP", vi: "vi-VN", th: "th-TH" }[sl] || `${sl}-KR`;
-}
-
 export default function DualConsultation() {
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
@@ -61,7 +56,6 @@ export default function DualConsultation() {
     }
   });
   const [patientDisplayName, setPatientDisplayName] = useState("");
-  const [staffInterimText, setStaffInterimText] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
@@ -73,9 +67,6 @@ export default function DualConsultation() {
   const webSpeechRef = useRef(null);
   const webSpeechActiveRef = useRef(false);
   const staffRecordingRef = useRef(false);
-  const staffRecognitionRef = useRef(null);
-  const staffPttFinalSegmentsRef = useRef([]);
-  const staffPttLiveLineRef = useRef("");
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -481,17 +472,6 @@ export default function DualConsultation() {
   }, [roomId, scrollToBottom]);
 
   const stopStaffRecording = useCallback(() => {
-    if (staffRecognitionRef.current) {
-      try {
-        staffRecognitionRef.current.stop();
-      } catch (e) {
-        staffRecognitionRef.current = null;
-        staffRecordingRef.current = false;
-        setStaffRecording(false);
-        setStaffInterimText("");
-      }
-      return;
-    }
     staffRecordingRef.current = false;
     if (staffRecorderRef.current && staffRecorderRef.current.state !== "inactive") {
       staffRecorderRef.current.stop();
@@ -536,7 +516,16 @@ export default function DualConsultation() {
     [connected, roomId, patientLang, staffLang]
   );
 
-  const startStaffRecordingWithMediaRecorder = useCallback(async () => {
+  const startStaffRecording = useCallback(async () => {
+    console.log("[Dual] startStaffRecording called, staffRecording:", staffRecording, "connected:", connected);
+    if (patientRecording) {
+      stopPatientRecording();
+      return;
+    }
+    if (staffRecordingRef.current) {
+      stopStaffRecording();
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: staffDeviceId ? { deviceId: { exact: staffDeviceId } } : true,
@@ -574,104 +563,7 @@ export default function DualConsultation() {
       staffRecorderRef.current = null;
       setStaffRecording(false);
     }
-  }, [staffDeviceId, staffLang, sendWhisper]);
-
-  const startStaffRecording = useCallback(async () => {
-    console.log("[Dual] startStaffRecording called, staffRecording:", staffRecording, "connected:", connected);
-    if (patientRecording) {
-      stopPatientRecording();
-      return;
-    }
-    if (staffRecordingRef.current) {
-      stopStaffRecording();
-      return;
-    }
-    const SpeechRecognition = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (SpeechRecognition) {
-      staffPttFinalSegmentsRef.current = [];
-      staffPttLiveLineRef.current = "";
-      setStaffInterimText("");
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = bcp47ForStaffLang(staffLangRef.current);
-      recognition.onresult = (event) => {
-        const finals = staffPttFinalSegmentsRef.current;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i];
-          const piece = (res[0]?.transcript || "").trim();
-          if (!piece) continue;
-          if (res.isFinal) finals.push(piece);
-        }
-        let interim = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (!event.results[i].isFinal) interim += event.results[i][0]?.transcript || "";
-        }
-        const line = [...finals, interim.trim()].filter(Boolean).join(" ");
-        setStaffInterimText(line);
-      };
-      recognition.onerror = (e) => {
-        if (e.error === "no-speech" || e.error === "aborted") return;
-        console.error("[StaffPTT WebSpeech] error:", e.error);
-      };
-      recognition.onend = () => {
-        staffRecognitionRef.current = null;
-        const segments = staffPttFinalSegmentsRef.current || [];
-        const transcript = (segments.join(" ").trim() || staffPttLiveLineRef.current || "").trim();
-        staffPttFinalSegmentsRef.current = [];
-        staffPttLiveLineRef.current = "";
-        setStaffInterimText("");
-        staffRecordingRef.current = false;
-        setStaffRecording(false);
-        const rid = roomIdRef.current;
-        const pid = participantIdRef.current;
-        if (transcript && rid && pid) {
-          pendingSenderRef.current = "staff";
-          const msgId = `msg-${Date.now()}`;
-          seenIdsRef.current.add(msgId);
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: msgId,
-              originalText: transcript,
-              translatedText: "",
-              isStaff: true,
-              senderPid: pid,
-              timestamp: Date.now(),
-              streaming: false,
-            },
-          ]);
-          socket.emit("send-message", {
-            roomId: rid,
-            participantId: pid,
-            message: { id: msgId, text: transcript },
-            toLang: patientLangRef.current || "en",
-          });
-          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-        }
-      };
-      try {
-        recognition.start();
-        staffRecognitionRef.current = recognition;
-        staffRecordingRef.current = true;
-        setStaffRecording(true);
-      } catch (e) {
-        console.error("[StaffPTT WebSpeech] start failed:", e);
-        staffRecognitionRef.current = null;
-        await startStaffRecordingWithMediaRecorder();
-      }
-      return;
-    }
-    alert("Browser does not support speech recognition");
-    await startStaffRecordingWithMediaRecorder();
-  }, [
-    staffRecording,
-    patientRecording,
-    connected,
-    stopStaffRecording,
-    stopPatientRecording,
-    startStaffRecordingWithMediaRecorder,
-  ]);
+  }, [staffRecording, patientRecording, staffDeviceId, staffLang, sendWhisper, stopStaffRecording, stopPatientRecording, connected]);
 
   const startPatientRecording = useCallback(async () => {
     if (staffRecording) {
@@ -866,6 +758,17 @@ export default function DualConsultation() {
                   type="text"
                   value={staffName}
                   onChange={(e) => setStaffName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const v = e.currentTarget.value;
+                      setStaffName(v);
+                      try {
+                        localStorage.setItem("mono_staff_name", v);
+                      } catch (_) {}
+                      e.currentTarget.blur();
+                    }
+                  }}
                   placeholder="Staff name (e.g. Dr. Kim)"
                   style={{ width: "100%", borderRadius: "6px", border: "1px solid #d1d5db", padding: "8px 10px", fontSize: "14px", boxSizing: "border-box" }}
                 />
@@ -985,30 +888,23 @@ export default function DualConsultation() {
       <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
         {inputMode === "ptt" ? (
           <>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-              <button
-                type="button"
-                onClick={startStaffRecording}
-                style={{
-                  width: "100%",
-                  minHeight: "48px",
-                  borderRadius: "10px",
-                  padding: "14px 16px",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  background: staffRecording ? "#ef4444" : "#EEF2FF",
-                  color: staffRecording ? "#fff" : "#1f2937",
-                  border: "2px solid #6366F1",
-                }}
-              >
-                {staffRecording ? "Stop" : staffName.trim() || "Staff"}
-              </button>
-              {staffRecording && staffInterimText ? (
-                <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", padding: "0 4px", lineHeight: 1.35, wordBreak: "break-word" }}>
-                  {staffInterimText}
-                </div>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              onClick={startStaffRecording}
+              style={{
+                flex: 1,
+                minHeight: "48px",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                fontSize: "14px",
+                fontWeight: 500,
+                background: staffRecording ? "#ef4444" : "#EEF2FF",
+                color: staffRecording ? "#fff" : "#1f2937",
+                border: "2px solid #6366F1",
+              }}
+            >
+              {staffRecording ? "Stop" : staffName.trim() || "Staff"}
+            </button>
             <button
               type="button"
               onClick={startPatientRecording}
