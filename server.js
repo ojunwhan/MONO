@@ -3913,7 +3913,7 @@ io.on('connection', (socket) => {
           const otherP = otherPid ? meta.participants[otherPid] : null;
           let toLang = otherP?.lang || clientToLang || "en";
           if (vadStaffLang && vadPatientLang) {
-            const detected = mapLang(lang || "en");
+            const detected = fromLang;
             if (detected === mapLang(vadStaffLang)) {
               toLang = mapLang(vadPatientLang);
             } else {
