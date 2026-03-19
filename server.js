@@ -3235,7 +3235,7 @@ io.on('connection', (socket) => {
   });
 
   // --- STT streaming (AudioWorklet + VAD) ---
-  socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000, roleHint }) => {
+  socket.on("stt:open", async ({ roomId, lang, participantId, sampleRateHz = 16000, roleHint, vadStaffLang, vadPatientLang }) => {
     if (!roomId || !participantId) return;
     socket._sttParticipantId = participantId;
     // ROOMS-DB 동기화: ROOMS에 없고 PT- 방이면 hospital_sessions에서 조회 후 ROOMS 재생성 후 인증 통과
@@ -3300,6 +3300,8 @@ io.on('connection', (socket) => {
       sampleRateHz,
       chunks: [],
       bytes: 0,
+      vadStaffLang: vadStaffLang || null,
+      vadPatientLang: vadPatientLang || null,
     });
   });
 
@@ -3383,6 +3385,87 @@ io.on('connection', (socket) => {
       return;
     }
     if (text.trim().length <= 2 && durationSec < 0.8) { console.log("[stt:segment] ⏭ too short text"); return; }
+
+    // --- DualConsultation VAD: speaker detection + translation (same heuristics as stt:whisper hospital block) ---
+    if (session.vadStaffLang && session.vadPatientLang) {
+      const staffL = mapLang(session.vadStaffLang);
+      const patientL = mapLang(session.vadPatientLang);
+      const hasKorean = /[\uAC00-\uD7AF\u1100-\u11FF]/.test(text);
+      let toLang;
+      if (hasKorean) {
+        toLang = (staffL === "ko") ? patientL : staffL;
+      } else {
+        toLang = (staffL === "ko") ? staffL : patientL;
+      }
+      const fromLang = hasKorean ? "ko" : (patientL !== "ko" ? patientL : staffL);
+      const isStaff = hasKorean ? (staffL === "ko") : (staffL !== "ko");
+
+      const vadMeta = ensureRoomMeta(session.roomId);
+      const siteCtx = vadMeta.siteContext || "general";
+      const roomContext = getRoomContext(session.roomId);
+      let translatedText = text;
+      if (fromLang !== toLang && text.trim()) {
+        try {
+          if (await canTranslateForUser(socket, session.participantId)) {
+            translatedText = await fastTranslate(text, fromLang, toLang, "", siteCtx, roomContext, { contextInject: vadMeta.contextInject });
+            await consumeTranslationUsage(session.participantId);
+          }
+        } catch (err) {
+          console.error("[stt:segment_end] translation error:", err?.message);
+          translatedText = text;
+        }
+      }
+      const stripBracketTagSeg = (s) => (typeof s === "string" ? s.replace(/^(\[.*?\]\s*)+/, "").trim() : s);
+      translatedText = stripBracketTagSeg(translatedText);
+
+      socket.emit("stt:result", {
+        roomId: session.roomId,
+        participantId: session.participantId,
+        text,
+        translatedText: translatedText ? translatedText.replace(/^\[.*?\]\s*/, "").trim() : text,
+        fromLang,
+        toLang,
+        isStaff,
+        final: true,
+      });
+
+      try {
+        const room = ROOMS.get(session.roomId);
+        if (room && String(room.siteContext || "").startsWith("hospital")) {
+          const roleLabel = isStaff ? "직원" : "환자";
+          appendHospitalSessionLog(session.roomId, roleLabel, text, translatedText);
+
+          const sessionRow = await dbGet(
+            "SELECT id, patient_token FROM hospital_sessions WHERE room_id = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1",
+            [session.roomId]
+          ).catch(() => null);
+          if (sessionRow?.id) {
+            const pToken = room.patientToken ?? sessionRow.patient_token ?? null;
+            const orgRow = await dbGet("SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1", [session.roomId]).catch(() => null);
+            const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
+            const msgId = uuidv4();
+            const senderRole = isStaff ? "host" : "guest";
+            const recentDup = await isRecentMessageDuplicate(session.roomId, text);
+            if (!recentDup) {
+              const encOriginal = encryptText(text, keyHex);
+              const encTranslated = encryptText(translatedText, keyHex);
+              await dbRun(
+                `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [msgId, sessionRow.id, session.roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken]
+              ).catch((e) => console.error("[stt:segment_end] hospital_messages insert error:", e?.message));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[stt:segment_end] hospital logging error:", err?.message);
+      }
+
+      session.chunks = [];
+      session.bytes = 0;
+      return;
+    }
+    // --- End DualConsultation VAD block ---
 
     const meta = ensureRoomMeta(roomId);
     const rec = SOCKET_ROLES.get(socket.id) || {};
@@ -6995,7 +7078,7 @@ app.get("/healthz", async (req, res) => {
 const distPath = path.resolve(__dirname, "dist");
 
 // ✅ COOP/COEP 헤더 — VAD 사용 경로에만 적용 (전체 적용 시 카카오 등 외부 리소스 차단됨)
-app.use(["/fixed-room", "/fixed"], (req, res, next) => {
+app.use(["/fixed-room", "/fixed", "/dual-consultation"], (req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   next();
