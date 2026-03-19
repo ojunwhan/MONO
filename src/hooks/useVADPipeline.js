@@ -12,7 +12,7 @@
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
 import { useMicVAD } from "@ricky0123/vad-react";
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -133,30 +133,12 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     [roomId, participantId, lang, vadStaffLang, vadPatientLang]
   );
 
-  const getStreamFn = useMemo(() => {
-    if (!deviceId) return undefined;
-    return async () => {
-      return navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: { exact: deviceId },
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-    };
-  }, [deviceId]);
-
   const vad = useMicVAD({
     startOnLoad: false,
 
     // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
     baseAssetPath: "/",
     onnxWASMBasePath: "/",
-
-    ...(getStreamFn && { getStream: getStreamFn }),
 
     onSpeechStart: () => {
       sessionActiveRef.current = true;
