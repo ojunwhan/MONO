@@ -119,21 +119,30 @@ export default function DualConsultation() {
   const handleConnect = useCallback(() => {
     if (!ptNumber.trim()) return;
     const pt = String(ptNumber).trim();
-    const pid = "dc-" + crypto.randomUUID();
+    const uuid =
+      typeof crypto !== "undefined" && crypto?.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const pid = "dc-" + uuid;
     participantIdRef.current = pid;
     console.log("[Dual] handleConnect pid set:", participantIdRef.current);
-    connectedRef.current = true;
-    setRoomId(pt);
     const siteContext = "hospital_plastic_surgery";
+    // 서버가 join 후 내보내는 room-context를 기준으로 connected 상태를 켭니다.
+    socket.once("room-context", () => {
+      connectedRef.current = true;
+      setRoomId(pt);
+      setConnected(true);
+    });
     socket.emit("join", {
       roomId: pt,
-      participantId: pid,
       fromLang: staffLang,
-      roleHint: "host",
+      participantId: pid,
+      role: "host",
+      roleHint: "owner",
       localName: "직원",
       siteContext,
+      inputMode: "ptt",
     });
-    setConnected(true);
   }, [ptNumber, staffLang]);
 
   // Unmount: leave room if we had connected
@@ -503,7 +512,7 @@ export default function DualConsultation() {
         {!connected && (
           <button
             type="button"
-            onClick={handleConnect}
+            onClick={() => handleConnect()}
             disabled={!ptNumber.trim()}
             style={{
               marginTop: 2,
