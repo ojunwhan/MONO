@@ -76,7 +76,7 @@ export default function LanguageSelector({ value, onChange, placeholder }) {
       </button>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 mt-1 bg-[var(--color-bg)] rounded-[8px] border border-[var(--color-border)] shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-[100] overflow-hidden">
+        <div className="absolute left-0 right-0 bottom-full mb-1 bg-[var(--color-bg)] rounded-[8px] border border-[var(--color-border)] shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-[100] overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)]">
             <Search size={16} className="text-[var(--color-text-secondary)]" />
             <input
