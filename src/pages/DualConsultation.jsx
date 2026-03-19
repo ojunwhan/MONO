@@ -214,9 +214,6 @@ export default function DualConsultation() {
     if (staffRecorderRef.current && staffRecorderRef.current.state !== "inactive") {
       staffRecorderRef.current.stop();
     }
-    staffStreamRef.current?.getTracks?.().forEach((t) => t.stop());
-    staffStreamRef.current = null;
-    staffRecorderRef.current = null;
     setStaffRecording(false);
   }, []);
 
@@ -239,15 +236,16 @@ export default function DualConsultation() {
       console.log("[Dual] sendWhisper pid:", pid, "rid:", rid);
       if (!pid || !rid) return;
       pendingSenderRef.current = asStaff ? "staff" : "patient";
+      const toLang = asStaff ? patientLang : staffLang;
       socket.emit(
         "stt:whisper",
-        { roomId: rid, participantId: pid, lang: fromLang, audio: base64Audio, mimeType },
+        { roomId: rid, participantId: pid, lang: fromLang, toLang, audio: base64Audio, mimeType },
         (ack) => {
           if (!ack?.ok && ack?.error) console.warn("[DualConsultation] stt ack:", ack.error);
         }
       );
     },
-    [connected, roomId]
+    [connected, roomId, patientLang, staffLang]
   );
 
   const startStaffRecording = useCallback(async () => {
@@ -281,9 +279,10 @@ export default function DualConsultation() {
         }
         staffStreamRef.current?.getTracks?.().forEach((t) => t.stop());
         staffStreamRef.current = null;
+        staffRecorderRef.current = null;
         setStaffRecording(false);
       };
-      recorder.start(300);
+      recorder.start(100);
       staffRecorderRef.current = recorder;
       setStaffRecording(true);
     } catch (e) {

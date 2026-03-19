@@ -3799,7 +3799,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType } = {}, ack) => {
+  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType, toLang: clientToLang } = {}, ack) => {
     console.log("[stt:whisper] received roomId:", roomId, "pid:", participantId);
     const ackReply = (payload) => {
       if (typeof ack === "function") {
@@ -3895,7 +3895,7 @@ io.on('connection', (socket) => {
           }
           const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
           const otherP = otherPid ? meta.participants[otherPid] : null;
-          const toLang = otherP?.lang || "en";
+          const toLang = otherP?.lang || clientToLang || "en";
           const siteCtx = meta.siteContext || "general";
           const roomContext = getRoomContext(roomId);
           addToRoomContext(roomId, { text: normalized, lang: fromLang, role: 'user' });
