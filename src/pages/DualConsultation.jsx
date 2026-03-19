@@ -1,5 +1,5 @@
 /**
- * DualConsultation — Standalone in-clinic bilingual interpretation page.
+ * DualConsultation ? Standalone in-clinic bilingual interpretation page.
  * Full-screen messenger: PT number + Connect, two mic selectors, two lang selectors,
  * scrollable message area (staff right, patient left), two bottom mic buttons.
  * Uses existing socket events: join, stt:whisper, receive-message, receive-message-stream, receive-message-stream-end.
@@ -92,7 +92,7 @@ export default function DualConsultation() {
       participantId: pid,
       fromLang: staffLang,
       roleHint: "host",
-      localName: "직원",
+      localName: "??",
       siteContext,
     });
     setConnected(true);
@@ -366,7 +366,7 @@ export default function DualConsultation() {
           <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
             <input
               type="text"
-              placeholder="PT 번호"
+              placeholder="PT ??"
               value={ptNumber}
               onChange={(e) => setPtNumber(e.target.value)}
               style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
@@ -379,13 +379,10 @@ export default function DualConsultation() {
               style={{ borderRadius: 2, marginLeft: 12 }}
               alt={`${LANG_TO_LABEL[patientLang] || "ENG"} flag`}
             />
-            <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {LANG_TO_LABEL[patientLang] || "ENG"}
             </span>
-            <span style={{ fontSize: 13, color: "#374151", marginLeft: 8 }}>Sarah Johnson</span>
-            <span style={{ fontSize: 13, fontWeight: 900, marginLeft: 8, color: connected ? "#047857" : "#B91C1C" }}>
-              {connected ? "? ???" : "? ????"}
-            </span>
+            <span style={{ fontSize: 13, color: "#374151", marginLeft: 8, flex: "1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Sarah Johnson</span>
           </div>
           <button
             type="button"
@@ -393,16 +390,16 @@ export default function DualConsultation() {
             disabled={connected || !ptNumber.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
           >
-            {connected ? "연결됨" : "Connect"}
+            {connected ? "???" : "Connect"}
           </button>
           {connected && (
             <button
               type="button"
               onClick={() => setSettingsExpanded((p) => !p)}
-              title={settingsExpanded ? "설정 접기" : "설정 펼치기"}
+              title={settingsExpanded ? "?? ??" : "?? ???"}
               style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
             >
-              {settingsExpanded ? "▼" : "▲"}
+              {settingsExpanded ? "?" : "?"}
             </button>
           )}
         </div>
@@ -410,7 +407,7 @@ export default function DualConsultation() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 마이크</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ???</label>
                 <select
                   value={staffDeviceId}
                   onChange={(e) => setStaffDeviceId(e.target.value)}
@@ -418,13 +415,13 @@ export default function DualConsultation() {
                 >
                   {devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
+                      {d.label || `??? ${d.deviceId.slice(0, 8)}`}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 마이크</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ???</label>
                 <select
                   value={patientDeviceId}
                   onChange={(e) => setPatientDeviceId(e.target.value)}
@@ -432,7 +429,7 @@ export default function DualConsultation() {
                 >
                   {devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
+                      {d.label || `??? ${d.deviceId.slice(0, 8)}`}
                     </option>
                   ))}
                 </select>
@@ -440,7 +437,7 @@ export default function DualConsultation() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 언어</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ??</label>
                 <select
                   value={staffLang}
                   onChange={(e) => setStaffLang(e.target.value)}
@@ -452,7 +449,7 @@ export default function DualConsultation() {
                 </select>
               </div>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 언어</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ??</label>
                 <select
                   value={patientLang}
                   onChange={(e) => setPatientLang(e.target.value)}
@@ -494,7 +491,7 @@ export default function DualConsultation() {
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
               )}
               <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
-                {m.translatedText || (m.streaming ? "…" : "")}
+                {m.translatedText || (m.streaming ? "?" : "")}
               </div>
             </div>
           </div>
@@ -519,7 +516,7 @@ export default function DualConsultation() {
             border: "2px solid #6366F1",
           }}
         >
-          {staffRecording ? "녹음 중…" : "🎤 직원"}
+          {staffRecording ? "?? ??" : "?? ??"}
         </button>
         <button
           type="button"
@@ -536,7 +533,7 @@ export default function DualConsultation() {
             border: "2px solid #22C55E",
           }}
         >
-          {patientRecording ? "녹음 중…" : "🎤 환자"}
+          {patientRecording ? "?? ??" : "?? ??"}
         </button>
       </footer>
 
@@ -548,7 +545,7 @@ export default function DualConsultation() {
             value={textInputValue}
             onChange={(e) => setTextInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendText()}
-            placeholder="메시지 입력..."
+            placeholder="??? ??..."
             style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "10px 12px", fontSize: "14px" }}
             disabled={!connected}
           />
@@ -558,7 +555,7 @@ export default function DualConsultation() {
             disabled={!connected || !textInputValue.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", color: "#fff", padding: "10px 16px", fontSize: "14px", fontWeight: 500 }}
           >
-            →
+            ?
           </button>
         </div>
       )}
