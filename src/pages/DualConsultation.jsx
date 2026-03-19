@@ -73,8 +73,8 @@ export default function DualConsultation() {
   // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
   // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
   const {
-    loading: vadLoading,
     userSpeaking: vadSpeaking,
+    listening: vadListening,
     start: vadStart,
     pause: vadPause,
   } = useVADPipeline({
@@ -474,7 +474,7 @@ export default function DualConsultation() {
               title={settingsExpanded ? "Collapse" : "Expand"}
               style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
             >
-              {settingsExpanded ? "?" : "?"}
+              {settingsExpanded ? "\u25BC" : "\u25B6"}
             </button>
           )}
         </div>
@@ -663,33 +663,54 @@ export default function DualConsultation() {
           </>
         ) : (
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
-            {vadLoading && (
-              <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>Loading VAD model?</div>
-            )}
+            {vadActive && !vadListening ? (
+              <div style={{ fontSize: 12, color: "#92400e", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: "2px solid #ca8a04",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "dual-vad-spin 0.7s linear infinite",
+                  }}
+                />
+                Initializing microphone?
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={handleVADToggle}
-              disabled={!connected || vadLoading}
+              disabled={!connected || (vadActive && !vadListening)}
               style={{
                 width: "100%",
                 padding: "16px",
                 borderRadius: 12,
                 border: "none",
-                background: vadActive ? (vadSpeaking ? "#b91c1c" : "#ef4444") : vadSpeaking ? "#2563eb" : "#3B82F6",
+                background: !connected
+                  ? "#9ca3af"
+                  : vadActive && !vadListening
+                    ? "#eab308"
+                    : vadActive && vadListening
+                      ? vadSpeaking
+                        ? "#b91c1c"
+                        : "#ef4444"
+                      : "#22c55e",
                 color: "white",
                 fontSize: 16,
                 fontWeight: 700,
-                cursor: !connected || vadLoading ? "not-allowed" : "pointer",
-                opacity: !connected || vadLoading ? 0.55 : 1,
+                cursor: !connected || (vadActive && !vadListening) ? "not-allowed" : "pointer",
+                opacity: !connected ? 0.65 : 1,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 10,
-                boxShadow: vadSpeaking && vadActive ? "0 0 0 3px rgba(239,68,68,0.35)" : "none",
+                boxShadow: vadSpeaking && vadActive && vadListening ? "0 0 0 3px rgba(239,68,68,0.35)" : "none",
                 transition: "background 0.15s ease, box-shadow 0.15s ease",
               }}
             >
-              {vadSpeaking && vadActive ? (
+              {vadSpeaking && vadActive && vadListening ? (
                 <span
                   aria-hidden
                   style={{
@@ -701,9 +722,15 @@ export default function DualConsultation() {
                   }}
                 />
               ) : null}
-              {vadLoading ? "Please wait?" : vadActive ? "Stop Listening" : "Start Listening"}
+              {!connected
+                ? "Start Listening"
+                : vadActive && !vadListening
+                  ? "Starting?"
+                  : vadActive && vadListening
+                    ? "Stop Listening"
+                    : "Start Listening"}
             </button>
-            <style>{`@keyframes dual-vad-pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.2);} }`}</style>
+            <style>{`@keyframes dual-vad-pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.2);} }@keyframes dual-vad-spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
       </footer>
