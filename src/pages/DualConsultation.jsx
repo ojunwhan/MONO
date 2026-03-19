@@ -31,6 +31,8 @@ export default function DualConsultation() {
   const [textInputValue, setTextInputValue] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
 
+  const LANG_TO_FLAG = { en: "us", ko: "kr", zh: "cn", ja: "jp", vi: "vn", th: "th", id: "id", ms: "my", tl: "ph", my: "mm", km: "kh", ne: "np", mn: "mn", uz: "uz", ru: "ru", es: "es", pt: "pt", fr: "fr", de: "de", ar: "sa" };
+  const LANG_TO_LABEL = { en: "ENG", ko: "KOR", zh: "CHN", ja: "JPN", vi: "VNM", th: "THA", id: "IDN", ms: "MYS", tl: "PHL", my: "MMR", km: "KHM", ne: "NPL", mn: "MNG", uz: "UZB", ru: "RUS", es: "ESP", pt: "PRT", fr: "FRA", de: "DEU", ar: "ARA" };
   const LANG_OPTIONS = getTier1Languages();
   const patientProfile = getLanguageByCode(patientLang);
 
@@ -370,13 +372,20 @@ export default function DualConsultation() {
               style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
               disabled={connected}
             />
-            {connected && (
-              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderLeft: "1px solid #e5e7eb" }}>
-                <span>{patientProfile?.flag || "🌐"}</span>
-                <span>{patientProfile?.nativeName ?? patientLang}</span>
-                <span style={{ color: "#9ca3af" }}>환자</span>
-              </span>
-            )}
+            <img
+              src={`https://flagcdn.com/w40/${LANG_TO_FLAG[patientLang] || "us"}.png`}
+              width={24}
+              height={16}
+              style={{ borderRadius: 2, marginLeft: 12 }}
+              alt={`${LANG_TO_LABEL[patientLang] || "ENG"} flag`}
+            />
+            <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 4 }}>
+              {LANG_TO_LABEL[patientLang] || "ENG"}
+            </span>
+            <span style={{ fontSize: 13, color: "#374151", marginLeft: 8 }}>???</span>
+            <span style={{ fontSize: 13, fontWeight: 900, marginLeft: 8, color: connected ? "#047857" : "#B91C1C" }}>
+              {connected ? "? ???" : "? ????"}
+            </span>
           </div>
           <button
             type="button"
