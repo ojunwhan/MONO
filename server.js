@@ -3804,7 +3804,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType, toLang: clientToLang } = {}, ack) => {
+  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType, toLang: clientToLang, vadStaffLang, vadPatientLang } = {}, ack) => {
     console.log("[stt:whisper] received roomId:", roomId, "pid:", participantId);
     const ackReply = (payload) => {
       if (typeof ack === "function") {
@@ -3911,7 +3911,15 @@ io.on('connection', (socket) => {
           }
           const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
           const otherP = otherPid ? meta.participants[otherPid] : null;
-          const toLang = otherP?.lang || clientToLang || "en";
+          let toLang = otherP?.lang || clientToLang || "en";
+          if (vadStaffLang && vadPatientLang) {
+            const detected = mapLang(lang || "en");
+            if (detected === mapLang(vadStaffLang)) {
+              toLang = mapLang(vadPatientLang);
+            } else {
+              toLang = mapLang(vadStaffLang);
+            }
+          }
           const siteCtx = meta.siteContext || "general";
           const roomContext = getRoomContext(roomId);
           addToRoomContext(roomId, { text: normalized, lang: fromLang, role: 'user' });

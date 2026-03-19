@@ -264,14 +264,16 @@ export default function DualConsultation() {
       console.log("[Dual] sendWhisper pid:", pid, "rid:", rid);
       if (!pid || !rid) return;
       pendingSenderRef.current = asStaff ? "staff" : "patient";
-      const toLang = asStaff ? patientLang : staffLang;
-      socket.emit(
-        "stt:whisper",
-        { roomId: rid, participantId: pid, lang: fromLang, toLang, audio: base64Audio, mimeType },
-        (ack) => {
-          if (!ack?.ok && ack?.error) console.warn("[DualConsultation] stt ack:", ack.error);
-        }
-      );
+      const lang = inputModeRef.current === "vad" ? "auto" : (asStaff ? staffLang : patientLang);
+      const toLang = inputModeRef.current === "vad" ? null : (asStaff ? patientLang : staffLang);
+      const payload = { roomId: rid, participantId: pid, lang, toLang, audio: base64Audio, mimeType };
+      if (inputModeRef.current === "vad") {
+        payload.vadStaffLang = staffLangRef.current;
+        payload.vadPatientLang = patientLangRef.current;
+      }
+      socket.emit("stt:whisper", payload, (ack) => {
+        if (!ack?.ok && ack?.error) console.warn("[DualConsultation] stt ack:", ack.error);
+      });
     },
     [connected, roomId, patientLang, staffLang]
   );
