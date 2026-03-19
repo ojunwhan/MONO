@@ -37,6 +37,8 @@ export default function DualConsultation() {
   const [showPatientGrid, setShowPatientGrid] = useState(false);
   const [inputMode, setInputMode] = useState("ptt"); // "ptt" = dual mic, "vad" = single mic auto (manual start/stop for now)
   const [vadActive, setVadActive] = useState(false);
+  const vadActiveRef = useRef(false);
+  const staffRecordingRef = useRef(false);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -198,13 +200,11 @@ export default function DualConsultation() {
       if (!text || !final) return;
       let isStaff;
       if (inputModeRef.current === "vad") {
-        const detectedLang = fromLang || "";
-        const patientLang = patientLangRef.current || "";
-        if (detectedLang === patientLang || detectedLang.startsWith(patientLang)) {
-          isStaff = false;
-        } else {
-          isStaff = true;
-        }
+        const detected = (fromLang || "").toLowerCase();
+        const pLang = (patientLangRef.current || "en").toLowerCase();
+        isStaff = detected !== pLang;
+        // If detected language matches patient language ? patient spoke ? right side (green)
+        // If detected language does NOT match patient language ? staff spoke ? left side (blue)
       } else {
         isStaff = pendingSenderRef.current === "staff";
       }
@@ -284,7 +284,7 @@ export default function DualConsultation() {
       stopPatientRecording();
       return;
     }
-    if (staffRecording) {
+    if (staffRecordingRef.current) {
       stopStaffRecording();
       return;
     }
@@ -311,6 +311,14 @@ export default function DualConsultation() {
         staffStreamRef.current = null;
         staffRecorderRef.current = null;
         setStaffRecording(false);
+        // Auto-restart if VAD mode is still active
+        if (inputModeRef.current === "vad" && vadActiveRef.current) {
+          setTimeout(() => {
+            if (inputModeRef.current === "vad" && vadActiveRef.current) {
+              startStaffRecording(true);
+            }
+          }, 200);
+        }
       };
       recorder.start(100);
       staffRecorderRef.current = recorder;
@@ -362,9 +370,11 @@ export default function DualConsultation() {
 
   const handleVADToggle = () => {
     if (vadActive) {
+      vadActiveRef.current = false;
       if (staffRecording) stopStaffRecording();
       setVadActive(false);
     } else {
+      vadActiveRef.current = true;
       setVadActive(true);
       startStaffRecording();
     }
