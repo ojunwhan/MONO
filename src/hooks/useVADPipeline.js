@@ -12,7 +12,7 @@
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
 import { useMicVAD } from "@ricky0123/vad-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -43,12 +43,52 @@ const DEFAULT_GAIN = 1.0;
 const DEFAULT_VAD_THRESHOLD = 0.01;
 const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
 
+/** Stable reference for useMicVAD — avoid new object each render */
+const ADDITIONAL_AUDIO_CONSTRAINTS = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  sampleRate: 16000,
+};
+
+/** Silero VAD params — stable reference */
+const MIC_VAD_SILERO_OPTIONS = {
+  positiveSpeechThreshold: 0.5,
+  negativeSpeechThreshold: 0.35,
+  redemptionMs: 600,
+  minSpeechMs: 250,
+  preSpeechPadMs: 300,
+  submitUserSpeechOnPause: true,
+};
+
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string }} opts
  */
 export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId, vadStaffLang, vadPatientLang }) {
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
+
+  const roomIdRef = useRef(roomId);
+  const participantIdRef = useRef(participantId);
+  const langRef = useRef(lang);
+  const vadStaffLangRef = useRef(vadStaffLang);
+  const vadPatientLangRef = useRef(vadPatientLang);
+
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+  useEffect(() => {
+    participantIdRef.current = participantId;
+  }, [participantId]);
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
+  useEffect(() => {
+    vadStaffLangRef.current = vadStaffLang;
+  }, [vadStaffLang]);
+  useEffect(() => {
+    vadPatientLangRef.current = vadPatientLang;
+  }, [vadPatientLang]);
 
   // ── 원격 조절 가능한 refs ──
   const gainRef = useRef(DEFAULT_GAIN);
@@ -80,71 +120,68 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     return () => socket.off("vad:gain:update", handler);
   }, [roomId, roleHint]);
 
-  const sendAudioToServer = useCallback(
-    (audioFloat32) => {
-      if (!roomId || !participantId || !lang) return;
+  const sendAudioToServer = useCallback((audioFloat32) => {
+    const rid = roomIdRef.current;
+    const pid = participantIdRef.current;
+    const lng = langRef.current;
+    if (!rid || !pid || !lng) return;
 
-      // 1. stt:open — 세션 등록 (server.js STT_SESSIONS.set)
-      socket.emit("stt:open", {
-        roomId,
-        participantId,
-        lang,
+    const staffL = vadStaffLangRef.current;
+    const patientL = vadPatientLangRef.current;
+
+    // 1. stt:open — 세션 등록 (server.js STT_SESSIONS.set)
+    socket.emit("stt:open", {
+      roomId: rid,
+      participantId: pid,
+      lang: lng,
+      sampleRateHz: 16000,
+      ...(staffL && { vadStaffLang: staffL }),
+      ...(patientL && { vadPatientLang: patientL }),
+    });
+
+    // 2. 소프트웨어 게인 적용
+    let processed = audioFloat32;
+    const currentGain = gainRef.current;
+    if (currentGain !== 1.0) {
+      processed = new Float32Array(audioFloat32.length);
+      for (let i = 0; i < audioFloat32.length; i++) {
+        processed[i] = Math.max(-1, Math.min(1, audioFloat32[i] * currentGain));
+      }
+    }
+
+    // 3. Float32 → Int16 PCM 변환
+    const int16 = float32ToInt16(processed);
+
+    // 4. CHUNK_SIZE 단위로 분할 전송 (stt:audio)
+    for (let offset = 0; offset < int16.length; offset += CHUNK_SIZE) {
+      const chunk = int16.slice(offset, offset + CHUNK_SIZE);
+      const base64 = int16ToBase64(chunk);
+      socket.emit("stt:audio", {
+        roomId: rid,
+        participantId: pid,
+        lang: lng,
+        audio: base64,
         sampleRateHz: 16000,
-        ...(vadStaffLang && { vadStaffLang }),
-        ...(vadPatientLang && { vadPatientLang }),
       });
+    }
 
-      // 2. 소프트웨어 게인 적용
-      let processed = audioFloat32;
-      const currentGain = gainRef.current;
-      if (currentGain !== 1.0) {
-        processed = new Float32Array(audioFloat32.length);
-        for (let i = 0; i < audioFloat32.length; i++) {
-          processed[i] = Math.max(-1, Math.min(1, audioFloat32[i] * currentGain));
-        }
-      }
+    // 5. 전송 완료 신호 → server.js 풀파이프라인 시작
+    //    transcribePcm16() → fastTranslate → hqTranslate → receive-message
+    // [PERF] T2: stt:segment_end emit 직전
+    const t1 = perfT1Ref.current;
+    console.log(`[PERF] T2 segment_end sent | VAD→Send: ${Date.now() - t1}ms`);
+    socket.emit("stt:segment_end", {
+      roomId: rid,
+      participantId: pid,
+    });
+  }, []);
 
-      // 3. Float32 → Int16 PCM 변환
-      const int16 = float32ToInt16(processed);
+  const onSpeechStartStable = useCallback(() => {
+    sessionActiveRef.current = true;
+  }, []);
 
-      // 4. CHUNK_SIZE 단위로 분할 전송 (stt:audio)
-      for (let offset = 0; offset < int16.length; offset += CHUNK_SIZE) {
-        const chunk = int16.slice(offset, offset + CHUNK_SIZE);
-        const base64 = int16ToBase64(chunk);
-        socket.emit("stt:audio", {
-          roomId,
-          participantId,
-          lang,
-          audio: base64,
-          sampleRateHz: 16000,
-        });
-      }
-
-      // 5. 전송 완료 신호 → server.js 풀파이프라인 시작
-      //    transcribePcm16() → fastTranslate → hqTranslate → receive-message
-      // [PERF] T2: stt:segment_end emit 직전
-      const t1 = perfT1Ref.current;
-      console.log(`[PERF] T2 segment_end sent | VAD→Send: ${Date.now() - t1}ms`);
-      socket.emit("stt:segment_end", {
-        roomId,
-        participantId,
-      });
-    },
-    [roomId, participantId, lang, vadStaffLang, vadPatientLang]
-  );
-
-  const vad = useMicVAD({
-    startOnLoad: false,
-
-    // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
-    baseAssetPath: "/",
-    onnxWASMBasePath: "/",
-
-    onSpeechStart: () => {
-      sessionActiveRef.current = true;
-    },
-
-    onSpeechEnd: (audioFloat32) => {
+  const onSpeechEndStable = useCallback(
+    (audioFloat32) => {
       const t1 = Date.now(); // [PERF] T1: VAD 발화종료 감지
       console.log("[PERF] T1 VAD speech end detected");
       if (!sessionActiveRef.current) return;
@@ -162,23 +199,29 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
 
       sendAudioToServer(audioFloat32);
     },
+    [sendAudioToServer]
+  );
 
-    // ─── getUserMedia 오디오 옵션 — 에코/노이즈 제거 강제 활성화 ───
-    additionalAudioConstraints: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      sampleRate: 16000,
-    },
+  const micVadOptions = useMemo(
+    () => ({
+      startOnLoad: false,
 
-    // ─── Silero VAD 파라미터 — 조용한 환경(상담실/조사실) 최적화 ───
-    positiveSpeechThreshold: 0.5, // 말소리 판정 임계값
-    negativeSpeechThreshold: 0.35, // 낮출수록 묵음 감지 예민
-    redemptionMs: 600, // 침묵 판정 대기 (~0.6초)
-    minSpeechMs: 250, // 최소 발화 길이 (노이즈 제거)
-    preSpeechPadMs: 300, // 발화 시작 전 여유분
-    submitUserSpeechOnPause: true, // pause 시 진행 중인 발화 전송
-  });
+      // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
+      baseAssetPath: "/",
+      onnxWASMBasePath: "/",
+
+      onSpeechStart: onSpeechStartStable,
+
+      onSpeechEnd: onSpeechEndStable,
+
+      additionalAudioConstraints: ADDITIONAL_AUDIO_CONSTRAINTS,
+
+      ...MIC_VAD_SILERO_OPTIONS,
+    }),
+    [onSpeechStartStable, onSpeechEndStable]
+  );
+
+  const vad = useMicVAD(micVadOptions);
 
   return {
     listening: vad.listening,
