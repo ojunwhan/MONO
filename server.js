@@ -3902,9 +3902,9 @@ io.on('connection', (socket) => {
             // Auto-create session for DualConsultation mode
             const newSessionId = require('uuid').v4();
             await dbRun(
-              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, created_at, started_at)
-               VALUES (?, ?, ?, 'active', ?, datetime('now'), datetime('now'))`,
-              [newSessionId, roomId, pToken || null, meta?.orgCode || null]
+              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at)
+               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'))`,
+              [newSessionId, roomId, pToken || null, meta?.orgCode || null, roomId || 'auto']
             ).catch(() => null);
             activeSession = { id: newSessionId };
             console.log("[hospital] Auto-created session for room:", roomId, "sessionId:", newSessionId);
