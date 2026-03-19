@@ -12,7 +12,7 @@
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
 import { useMicVAD } from "@ricky0123/vad-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -64,7 +64,8 @@ const MIC_VAD_SILERO_OPTIONS = {
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string }} opts
  */
-export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId, vadStaffLang, vadPatientLang }) {
+export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId, vadStaffLang, vadPatientLang, disableServerStt = false }) {
+  const [speechEndTimestamp, setSpeechEndTimestamp] = useState(0);
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
 
@@ -73,6 +74,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   const langRef = useRef(lang);
   const vadStaffLangRef = useRef(vadStaffLang);
   const vadPatientLangRef = useRef(vadPatientLang);
+  const disableServerSttRef = useRef(disableServerStt);
 
   useEffect(() => {
     roomIdRef.current = roomId;
@@ -89,6 +91,9 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   useEffect(() => {
     vadPatientLangRef.current = vadPatientLang;
   }, [vadPatientLang]);
+  useEffect(() => {
+    disableServerSttRef.current = disableServerStt;
+  }, [disableServerStt]);
 
   // ── 원격 조절 가능한 refs ──
   const gainRef = useRef(DEFAULT_GAIN);
@@ -197,6 +202,12 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
       // 최소 녹음 길이 필터 — 원격 조절 가능
       if (audioFloat32.length < minSpeechSamplesRef.current) return;
 
+      setSpeechEndTimestamp(Date.now());
+
+      if (disableServerSttRef.current) {
+        console.log("[VAD] Speech segment passed filters (server STT disabled)");
+        return;
+      }
       sendAudioToServer(audioFloat32);
     },
     [sendAudioToServer]
@@ -238,6 +249,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     start: vad.start,
     pause: vad.pause,
     toggle: vad.toggle,
+    speechEndTimestamp,
     // 현재 감도 설정값 읽기 (UI 표시용)
     gainRef,
     vadThresholdRef,
