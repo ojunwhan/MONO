@@ -1,0 +1,11 @@
+[08:53:03] 직원: 안녕하세요. 어디가 불편해서 오셨어요? → Hello. What brings you discomfort today?
+[08:53:12] 환자: Now I have a stomach ache. → 지금 복통이 있습니다.
+[08:53:22] 직원: 언제부터 그러셨어요? 약은 드셔보셨어요? → Since when have you been experiencing this? Have you taken any medication?
+[08:53:37] 환자: No, I haven't. → 아니요, 아직 복용하지 않았습니다.
+[08:55:46] 직원: 그럼 오늘 약을 받으러 오신 건가요? → Are you here to pick up your medication today?
+[09:06:02] 직원: 약을 받으러 오셨으면 어떤 약이 필요하신지 정확하게 말씀해 주셔야 합니다. → If you have come to receive medication, you must clearly specify which medication you need.
+[09:08:27] 직원: 어떤 약을 평소에 복용하시는지 알고 싶어요 → I would like to know which medication you usually take.
+[09:09:22] 직원: 혹시 복통약을 많이 드시나요 → Do you frequently take medication for abdominal pain?
+[09:10:23] 직원: 안녕하세요 → Hello.
+[09:33:53] 직원: 어 혹시 두통약도 많이 드세요? → Do you happen to take a lot of headache medication?
+[09:33:59] 환자: No. → 아니요.

@@ -1,0 +1,2 @@
+[01:45:02] 직원: 어서오세요. 어디가 불편해서 오셨죠? → Welcome. May I ask what brings you here today?
+[01:45:06] 환자: I have a headache. → 두통이 있습니다.

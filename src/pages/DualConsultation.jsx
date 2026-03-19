@@ -7,7 +7,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
 import { getTier1Languages, getLanguageByCode } from "../constants/languages";
-import { getFlagUrlByLang, getLabelFromCode } from "../constants/languageProfiles";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -30,49 +29,10 @@ export default function DualConsultation() {
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
-  const [micSwapped, setMicSwapped] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(true);
 
   const LANG_OPTIONS = getTier1Languages();
   const patientProfile = getLanguageByCode(patientLang);
-
-  const FlagGrid = ({ selectedLang, onSelectLang }) => {
-    return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", maxHeight: 240, overflowY: "auto", paddingRight: 4 }}>
-        {LANG_OPTIONS.map((p) => {
-          const isSelected = p.code === selectedLang;
-          return (
-            <button
-              key={p.code}
-              type="button"
-              onClick={() => onSelectLang?.(p.code)}
-              style={{
-                borderRadius: 14,
-                border: isSelected ? "2px solid #3B82F6" : "1px solid rgba(17,24,39,0.10)",
-                background: isSelected ? "#EFF6FF" : "#FFFFFF",
-                boxShadow: isSelected ? "0 10px 30px rgba(59,130,246,0.12)" : "none",
-                padding: "10px 6px",
-                cursor: "pointer",
-                transition: "transform 200ms ease, box-shadow 200ms ease, background 200ms ease",
-              }}
-            >
-              <img
-                src={getFlagUrlByLang(p.code)}
-                alt={`${getLabelFromCode(p.code)} flag`}
-                width={40}
-                height={28}
-                style={{ width: 40, height: 28, borderRadius: 10, objectFit: "cover", display: "block", margin: "0 auto" }}
-                loading="lazy"
-              />
-              <div style={{ marginTop: 8, textAlign: "center", fontSize: 12, fontWeight: 800, color: "#111827" }}>
-                {getLabelFromCode(p.code)}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -119,27 +79,20 @@ export default function DualConsultation() {
   const handleConnect = useCallback(() => {
     if (!ptNumber.trim()) return;
     const pt = String(ptNumber).trim();
-    const uuid =
-      typeof crypto !== "undefined" && crypto?.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const pid = "dc-" + uuid;
+    const pid = "dc-" + crypto.randomUUID();
     participantIdRef.current = pid;
     console.log("[Dual] handleConnect pid set:", participantIdRef.current);
+    connectedRef.current = true;
+    setRoomId(pt);
     const siteContext = "hospital_plastic_surgery";
     socket.emit("join", {
       roomId: pt,
-      fromLang: staffLang,
       participantId: pid,
-      role: "host",
-      roleHint: "owner",
+      fromLang: staffLang,
+      roleHint: "host",
       localName: "직원",
       siteContext,
-      inputMode: "ptt",
     });
-    // 서버 이벤트 대기 없이 즉시 UI를 connected 상태로 전환합니다.
-    connectedRef.current = true;
-    setRoomId(pt);
     setConnected(true);
   }, [ptNumber, staffLang]);
 
@@ -404,424 +357,197 @@ export default function DualConsultation() {
   }, [textInputValue, connected]);
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#fff", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }}>
-      <style>{`
-        @keyframes bubbleIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulseGlowStaff {
-          0% { transform: translateZ(0) scale(1); box-shadow: 0 0 0 rgba(102,126,234,0.0); }
-          50% { transform: translateZ(0) scale(1.01); box-shadow: 0 0 0 8px rgba(102,126,234,0.18); }
-          100% { transform: translateZ(0) scale(1); box-shadow: 0 0 0 rgba(102,126,234,0.0); }
-        }
-        @keyframes pulseGlowPatient {
-          0% { transform: translateZ(0) scale(1); box-shadow: 0 0 0 rgba(245,87,108,0.0); }
-          50% { transform: translateZ(0) scale(1.01); box-shadow: 0 0 0 8px rgba(245,87,108,0.18); }
-          100% { transform: translateZ(0) scale(1); box-shadow: 0 0 0 rgba(245,87,108,0.0); }
-        }
-      `}</style>
-
+    <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       {/* Top bar */}
-      <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "10px", padding: "12px", background: "#fff" }}>
-        {/* PT Info Card */}
-        <div
-          style={{
-            background: "#fff",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-            borderRadius: 16,
-            margin: "12px 0 0",
-            padding: "14px 14px",
-            border: "1px solid rgba(0,0,0,0.04)",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          {/* PT box (PT + 환자 언어 + 환자명 + 연결 상태) */}
-          <div
-            style={{
-              flex: "1 1 auto",
-              minWidth: 0,
-              borderRadius: 12,
-              padding: "12px 16px",
-              background: "#E8F5E9",
-              boxShadow: "0 10px 24px rgba(16,185,129,0.10)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-            }}
-          >
+      <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
             <input
               type="text"
-              placeholder="PT-TEST01"
+              placeholder="PT 번호"
               value={ptNumber}
               onChange={(e) => setPtNumber(e.target.value)}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
               disabled={connected}
-              style={{
-                flex: "0 0 auto",
-                width: 130,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#2E1065",
-                letterSpacing: 0.2,
-              }}
             />
-
-            <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 8, minWidth: 70 }}>
-              <span style={{ fontSize: 18, lineHeight: 1 }}>{patientProfile?.flag || "🌐"}</span>
-              <span style={{ fontSize: 12, fontWeight: 900, color: "#374151", whiteSpace: "nowrap" }}>
-                {getLabelFromCode(patientLang)}
+            {connected && (
+              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderLeft: "1px solid #e5e7eb" }}>
+                <span>{patientProfile?.flag || "🌐"}</span>
+                <span>{patientProfile?.nativeName ?? patientLang}</span>
+                <span style={{ color: "#9ca3af" }}>환자</span>
               </span>
-            </div>
-
-            <div style={{ flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
-              환자 이름 미등록
-            </div>
-
-            <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", fontSize: 13, fontWeight: 900, color: connected ? "#047857" : "#B91C1C" }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 999,
-                  background: connected ? "#10B981" : "#EF4444",
-                }}
-              />
-              {connected ? "연결됨" : "연결 끊김"}
-            </div>
+            )}
           </div>
-        </div>
-
-        {/* Connect CTA */}
-        {!connected && (
           <button
             type="button"
-            onClick={() => handleConnect()}
-            disabled={!ptNumber.trim()}
-            style={{
-              marginTop: 2,
-              alignSelf: "center",
-              border: "none",
-              borderRadius: 26,
-              padding: "12px 18px",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 800,
-              boxShadow: "0 12px 30px rgba(118,75,162,0.22)",
-              opacity: !ptNumber.trim() ? 0.55 : 1,
-              transition: "transform 200ms ease, opacity 200ms ease",
-            }}
+            onClick={handleConnect}
+            disabled={connected || !ptNumber.trim()}
+            style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
           >
-            Connect
+            {connected ? "연결됨" : "Connect"}
           </button>
-        )}
-
-        {/* Settings panel */}
-        {connected && (
-          <div style={{ width: "100%" }}>
+          {connected && (
             <button
               type="button"
               onClick={() => setSettingsExpanded((p) => !p)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 12px",
-                borderRadius: 16,
-                border: "1px solid rgba(0,0,0,0.06)",
-                background: "#fff",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                fontSize: 14,
-                fontWeight: 900,
-                color: "#374151",
-                transition: "transform 200ms ease",
-              }}
+              title={settingsExpanded ? "설정 접기" : "설정 펼치기"}
+              style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
             >
-              <span>⚙️ 설정</span>
-            <span style={{ color: "#6B7280", fontWeight: 800 }}>{settingsExpanded ? "▲" : ""}</span>
+              {settingsExpanded ? "▼" : "▲"}
             </button>
-
-            <div
-              style={{
-                marginTop: 10,
-                overflow: "hidden",
-                maxHeight: settingsExpanded ? 720 : 0,
-                opacity: settingsExpanded ? 1 : 0,
-                pointerEvents: settingsExpanded ? "auto" : "none",
-                transition: "max-height 300ms ease, opacity 300ms ease",
-              }}
-            >
-              <div
-                style={{
-                  borderRadius: 16,
-                  background: "#fff",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-                  border: "1px solid rgba(0,0,0,0.04)",
-                  padding: 14,
-                }}
-              >
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  {/* Staff mic */}
-                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>직원 마이크</div>
-                    <select
-                      value={staffDeviceId}
-                      onChange={(e) => setStaffDeviceId(e.target.value)}
-                      style={{ width: "100%", borderRadius: 14, border: "1px solid #E5E7EB", background: "#F9FAFB", padding: "10px 12px", fontSize: 14 }}
-                    >
-                      {devices.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Patient mic */}
-                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>환자 마이크</div>
-                    <select
-                      value={patientDeviceId}
-                      onChange={(e) => setPatientDeviceId(e.target.value)}
-                      style={{ width: "100%", borderRadius: 14, border: "1px solid #E5E7EB", background: "#F9FAFB", padding: "10px 12px", fontSize: 14 }}
-                    >
-                      {devices.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Staff language */}
-                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>직원 언어</div>
-                    <FlagGrid selectedLang={staffLang} onSelectLang={(code) => setStaffLang(code)} />
-                  </div>
-
-                  {/* Patient language */}
-                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>환자 언어</div>
-                    <FlagGrid selectedLang={patientLang} onSelectLang={(code) => setPatientLang(code)} />
-                  </div>
-                </div>
+          )}
+        </div>
+        {connected && settingsExpanded && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
+              <div>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 마이크</label>
+                <select
+                  value={staffDeviceId}
+                  onChange={(e) => setStaffDeviceId(e.target.value)}
+                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                >
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 마이크</label>
+                <select
+                  value={patientDeviceId}
+                  onChange={(e) => setPatientDeviceId(e.target.value)}
+                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                >
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
+              <div>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 언어</label>
+                <select
+                  value={staffLang}
+                  onChange={(e) => setStaffLang(e.target.value)}
+                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                >
+                  {LANG_OPTIONS.map((o) => (
+                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 언어</label>
+                <select
+                  value={patientLang}
+                  onChange={(e) => setPatientLang(e.target.value)}
+                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                >
+                  {LANG_OPTIONS.map((o) => (
+                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </>
         )}
       </header>
 
       {/* Single unified chat area */}
-      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "16px 12px", background: "linear-gradient(180deg, #FFF5F5 0%, #FFFFFF 50%, #F0FFF4 100%)" }}>
-        {messages.map((m) => {
-          const staffOnLeft = !micSwapped;
-          const isLeft = m.isStaff ? staffOnLeft : !staffOnLeft;
-          const label = m.isStaff ? "👩‍⚕️ 직원" : "🧑‍🦰 환자";
-          const bubbleBg = m.isStaff ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)";
-          const borderRadius = isLeft ? "20px 20px 20px 6px" : "20px 20px 6px 20px";
-          return (
-            <div key={m.id} style={{ marginBottom: 14, display: "flex", justifyContent: isLeft ? "flex-start" : "flex-end" }}>
-              <div style={{ maxWidth: "70%", display: "flex", flexDirection: "column", alignItems: isLeft ? "flex-start" : "flex-end" }}>
-                <div
-                  style={{
-                    fontSize: "0.7rem",
-                    color: "#9CA3AF",
-                    fontWeight: 900,
-                    marginBottom: 8,
-                    textAlign: isLeft ? "left" : "right",
-                    width: "100%",
-                  }}
-                >
-                  {label}
-                </div>
-                <div
-                  style={{
-                    background: bubbleBg,
-                    color: "#fff",
-                    padding: "14px 18px",
-                    borderRadius,
-                    boxShadow: "0 12px 30px rgba(0,0,0,0.07)",
-                    animation: "bubbleIn 200ms ease both",
-                  }}
-                >
-                  {(m.originalText || "").trim() && (
-                    <div style={{ fontSize: "0.8rem", opacity: 0.7, marginBottom: 6 }}>{m.originalText}</div>
-                  )}
-                  <div style={{ fontSize: "1.05rem", fontWeight: 600 }}>
-                    {m.translatedText || (m.streaming ? "…" : "")}
-                  </div>
-                </div>
+      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            style={{
+              marginBottom: "12px",
+              display: "flex",
+              justifyContent: m.isStaff ? "flex-start" : "flex-end",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "70%",
+                width: "fit-content",
+                borderRadius: m.isStaff ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
+                padding: "8px 16px",
+                background: m.isStaff ? "#3B82F6" : "#10B981",
+                color: "#fff",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+              }}
+            >
+              {(m.originalText || "").trim() && (
+                <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
+              )}
+              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
+                {m.translatedText || (m.streaming ? "…" : "")}
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
       </main>
 
       {/* Mic buttons - full width */}
-      <footer style={{ display: "flex", flexShrink: 0, alignItems: "center", gap: 12, borderTop: "1px solid #f0f0f0", background: "#fff", padding: "12px 16px" }}>
-        {/* Left button */}
-        {!micSwapped ? (
-          <button
-            type="button"
-            onClick={startStaffRecording}
-            style={{
-              flex: 1,
-              height: 52,
-              borderRadius: 26,
-              border: "none",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 900,
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              boxShadow: "0 16px 34px rgba(118,75,162,0.22)",
-              transition: "transform 200ms ease",
-              animation: staffRecording ? "pulseGlowStaff 1.2s ease-in-out infinite" : "none",
-              padding: "0 16px",
-            }}
-          >
-            {staffRecording ? "녹음 중..." : "🎤 직원"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={startPatientRecording}
-            style={{
-              flex: 1,
-              height: 52,
-              borderRadius: 26,
-              border: "none",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 900,
-              background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-              boxShadow: "0 16px 34px rgba(245,87,108,0.22)",
-              transition: "transform 200ms ease",
-              animation: patientRecording ? "pulseGlowPatient 1.2s ease-in-out infinite" : "none",
-              padding: "0 16px",
-            }}
-          >
-            {patientRecording ? "녹음 중..." : "🎤 환자"}
-          </button>
-        )}
-
-        {/* Swap control */}
+      <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
         <button
           type="button"
-          onClick={() => setMicSwapped((p) => !p)}
+          onClick={startStaffRecording}
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            border: "1px solid rgba(0,0,0,0.06)",
-            background: "#fff",
-            boxShadow: "0 10px 22px rgba(0,0,0,0.05)",
-            color: "#6B7280",
-            fontSize: 18,
-            fontWeight: 900,
-            transition: "transform 200ms ease",
+            flex: 1,
+            minHeight: "48px",
+            borderRadius: "10px",
+            padding: "14px 16px",
+            fontSize: "14px",
+            fontWeight: 500,
+            background: staffRecording ? "#ef4444" : "#EEF2FF",
+            color: staffRecording ? "#fff" : "#1f2937",
+            border: "2px solid #6366F1",
           }}
-          aria-label="swap mic buttons"
-          title="Swap"
         >
-          ⇄
+          {staffRecording ? "녹음 중…" : "🎤 직원"}
         </button>
-
-        {/* Right button */}
-        {!micSwapped ? (
-          <button
-            type="button"
-            onClick={startPatientRecording}
-            style={{
-              flex: 1,
-              height: 52,
-              borderRadius: 26,
-              border: "none",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 900,
-              background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-              boxShadow: "0 16px 34px rgba(245,87,108,0.22)",
-              transition: "transform 200ms ease",
-              animation: patientRecording ? "pulseGlowPatient 1.2s ease-in-out infinite" : "none",
-              padding: "0 16px",
-            }}
-          >
-            {patientRecording ? "녹음 중..." : "🎤 환자"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={startStaffRecording}
-            style={{
-              flex: 1,
-              height: 52,
-              borderRadius: 26,
-              border: "none",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 900,
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              boxShadow: "0 16px 34px rgba(118,75,162,0.22)",
-              transition: "transform 200ms ease",
-              animation: staffRecording ? "pulseGlowStaff 1.2s ease-in-out infinite" : "none",
-              padding: "0 16px",
-            }}
-          >
-            {staffRecording ? "녹음 중..." : "🎤 직원"}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={startPatientRecording}
+          style={{
+            flex: 1,
+            minHeight: "48px",
+            borderRadius: "10px",
+            padding: "14px 16px",
+            fontSize: "14px",
+            fontWeight: 500,
+            background: patientRecording ? "#ef4444" : "#F0FDF4",
+            color: patientRecording ? "#fff" : "#1f2937",
+            border: "2px solid #22C55E",
+          }}
+        >
+          {patientRecording ? "녹음 중…" : "🎤 환자"}
+        </button>
       </footer>
 
       {/* Text input bar - at very bottom */}
       {connected && (
-        <div style={{ flexShrink: 0, display: "flex", gap: 12, padding: "12px 16px 16px", background: "#fff" }}>
+        <div style={{ flexShrink: 0, display: "flex", gap: "8px", padding: "8px 12px", borderTop: "1px solid #e5e7eb", background: "#fff" }}>
           <input
             type="text"
             value={textInputValue}
             onChange={(e) => setTextInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendText()}
             placeholder="메시지 입력..."
-            style={{
-              flex: 1,
-              minWidth: 0,
-              height: 44,
-              borderRadius: 22,
-              border: "1px solid rgba(0,0,0,0.08)",
-              background: "#fff",
-              padding: "0 16px",
-              fontSize: 14,
-              fontWeight: 600,
-              boxShadow: "0 12px 26px rgba(0,0,0,0.04)",
-              outline: "none",
-              transition: "transform 200ms ease, box-shadow 200ms ease",
-            }}
+            style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "10px 12px", fontSize: "14px" }}
             disabled={!connected}
           />
           <button
             type="button"
             onClick={handleSendText}
             disabled={!connected || !textInputValue.trim()}
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              border: "none",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              color: "#fff",
-              fontSize: 16,
-              fontWeight: 900,
-              boxShadow: "0 16px 34px rgba(118,75,162,0.22)",
-              opacity: !textInputValue.trim() ? 0.6 : 1,
-              transition: "transform 200ms ease, opacity 200ms ease",
-            }}
+            style={{ borderRadius: "8px", background: "#2563EB", color: "#fff", padding: "10px 16px", fontSize: "14px", fontWeight: 500 }}
           >
             →
           </button>
