@@ -148,6 +148,8 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
       }
     : undefined;
 
+  console.log("[VAD] calling useMicVAD with options:", { roomId, participantId, lang, deviceId: !!deviceId });
+
   const vad = useMicVAD({
     startOnLoad: false,
 
@@ -157,7 +159,12 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
 
     ...(getStreamFn && { getStream: getStreamFn }),
 
+    onVADMisfire: () => {
+      console.log("[VAD] misfire");
+    },
+
     onSpeechStart: () => {
+      console.log("[VAD] speech start");
       sessionActiveRef.current = true;
     },
 
@@ -196,6 +203,13 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     preSpeechPadMs: 300, // 발화 시작 전 여유분
     submitUserSpeechOnPause: true, // pause 시 진행 중인 발화 전송
   });
+
+  const { listening, loading, errored, userSpeaking } = vad;
+  console.log("[VAD] useMicVAD returned:", { listening, loading, errored, userSpeaking });
+
+  useEffect(() => {
+    console.log("[VAD] state changed:", { listening, loading, errored, userSpeaking });
+  }, [listening, loading, errored, userSpeaking]);
 
   return {
     listening: vad.listening,
