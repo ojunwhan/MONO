@@ -1,12 +1,11 @@
 /**
- * DualConsultation — Standalone in-clinic bilingual interpretation page.
+ * DualConsultation ??Standalone in-clinic bilingual interpretation page.
  * Full-screen messenger: PT number + Connect, two mic selectors, two lang selectors,
  * scrollable message area (staff right, patient left), two bottom mic buttons.
  * Uses existing socket events: join, stt:whisper, receive-message, receive-message-stream, receive-message-stream-end.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
-import { getTier1Languages, getLanguageByCode } from "../constants/languages";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -29,10 +28,73 @@ export default function DualConsultation() {
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
-  const [settingsExpanded, setSettingsExpanded] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [micSwapped, setMicSwapped] = useState(false);
 
-  const LANG_OPTIONS = getTier1Languages();
-  const patientProfile = getLanguageByCode(patientLang);
+  const LANG_FLAG_GRID = [
+    { code: "ko", flag: "kr", label: "KOR" },
+    { code: "en", flag: "us", label: "ENG" },
+    { code: "zh", flag: "cn", label: "CHN" },
+    { code: "ja", flag: "jp", label: "JPN" },
+    { code: "vi", flag: "vn", label: "VNM" },
+    { code: "th", flag: "th", label: "THA" },
+    { code: "id", flag: "id", label: "IDN" },
+    { code: "ms", flag: "my", label: "MYS" },
+    { code: "tl", flag: "ph", label: "PHL" },
+    { code: "my", flag: "mm", label: "MMR" },
+    { code: "km", flag: "kh", label: "KHM" },
+    { code: "ne", flag: "np", label: "NPL" },
+    { code: "mn", flag: "mn", label: "MNG" },
+    { code: "uz", flag: "uz", label: "UZB" },
+    { code: "ru", flag: "ru", label: "RUS" },
+    { code: "es", flag: "es", label: "ESP" },
+    { code: "pt", flag: "pt", label: "PRT" },
+    { code: "fr", flag: "fr", label: "FRA" },
+    { code: "de", flag: "de", label: "DEU" },
+    { code: "ar", flag: "sa", label: "ARA" },
+  ];
+
+  const patientLangMeta =
+    LANG_FLAG_GRID.find((x) => x.code === patientLang) ||
+    LANG_FLAG_GRID.find((x) => x.code === "en") ||
+    LANG_FLAG_GRID[0];
+
+  const FlagGrid = ({ selectedLang, onSelectLang }) => {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, maxHeight: 200, overflowY: "auto" }}>
+        {LANG_FLAG_GRID.map((p) => {
+          const isSelected = p.code === selectedLang;
+          return (
+            <button
+              key={p.code}
+              type="button"
+              onClick={() => onSelectLang?.(p.code)}
+              style={{
+                width: 60,
+                borderRadius: 8,
+                padding: 4,
+                textAlign: "center",
+                cursor: "pointer",
+                border: isSelected ? "2px solid #3B82F6" : "2px solid transparent",
+                background: isSelected ? "rgba(59,130,246,0.06)" : "#fff",
+                transition: "border-color 200ms ease, transform 200ms ease, background 200ms ease",
+              }}
+            >
+              <img
+                src={`https://flagcdn.com/w40/${p.flag}.png`}
+                alt={`${p.label} flag`}
+                width={32}
+                height={24}
+                style={{ borderRadius: 6, objectFit: "cover", display: "block", margin: "0 auto" }}
+                loading="lazy"
+              />
+              <div style={{ fontSize: 11, fontWeight: 800, marginTop: 4, color: "#111827" }}>{p.label}</div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -359,24 +421,96 @@ export default function DualConsultation() {
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       {/* Top bar */}
-      <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
+      <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "10px", padding: "12px", background: "#fff" }}>
+        {/* PT Info Card */}
+        <div
+          style={{
+            background: "#fff",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            borderRadius: 16,
+            margin: "12px 0 0",
+            padding: "14px 14px",
+            border: "1px solid rgba(0,0,0,0.04)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          {/* PT box (PT + ?�자 ?�어 + ?�자�?+ ?�결 ?�태) */}
+          <div
+            style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              borderRadius: 12,
+              padding: "8px 12px",
+              background: "#fff",
+              borderBottom: "1px solid #e5e7eb",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
             <input
               type="text"
               placeholder="PT 번호"
               value={ptNumber}
               onChange={(e) => setPtNumber(e.target.value)}
-              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
-              disabled={connected}
+              style={{
+                flex: "0 0 auto",
+                width: 130,
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#2E1065",
+                letterSpacing: 0.2,
+              }}
             />
-            {connected && (
-              <span style={{ flexShrink: 0, fontSize: "11px", color: "#4b5563", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderLeft: "1px solid #e5e7eb" }}>
-                <span>{patientProfile?.flag || "🌐"}</span>
-                <span>{patientProfile?.nativeName ?? patientLang}</span>
-                <span style={{ color: "#9ca3af" }}>환자</span>
-              </span>
-            )}
+
+            <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <img
+                src={`https://flagcdn.com/w40/${patientLangMeta.flag}.png`}
+                alt={`${patientLangMeta.label} flag`}
+                width={32}
+                height={24}
+                style={{ borderRadius: 6, objectFit: "cover" }}
+                loading="lazy"
+              />
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#374151", whiteSpace: "nowrap" }}>{patientLangMeta.label}</div>
+            </div>
+
+            <div style={{ flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 800, color: "#111827", whiteSpace: "nowrap" }}>
+              김?�진
+            </div>
+
+            <button
+              type="button"
+              style={{
+                flex: "0 0 auto",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                border: "none",
+                background: "transparent",
+                cursor: "default",
+                padding: 0,
+                whiteSpace: "nowrap",
+                fontSize: 13,
+                fontWeight: 900,
+                color: connected ? "#047857" : "#B91C1C",
+              }}
+            >
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 999,
+                  background: connected ? "#10B981" : "#EF4444",
+                }}
+              />
+              {connected ? "?�결?? : "?�결?��?"}
+            </button>
           </div>
           <button
             type="button"
@@ -384,54 +518,102 @@ export default function DualConsultation() {
             disabled={connected || !ptNumber.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
           >
-            {connected ? "연결됨" : "Connect"}
+            {connected ? "?�결?? : "Connect"}
           </button>
-          {connected && (
-            <button
-              type="button"
-              onClick={() => setSettingsExpanded((p) => !p)}
-              title={settingsExpanded ? "설정 접기" : "설정 펼치기"}
-              style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
+        )}
+
+        {/* Settings panel */}
+        {connected && (
+          <div style={{ width: "100%" }}>
+            <div
+              onClick={() => setSettingsOpen((p) => !p)}
+              style={{
+                width: "100%",
+                background: "#f9fafb",
+                padding: "8px 16px",
+                cursor: "pointer",
+                textAlign: "center",
+                fontSize: 13,
+                color: "#6b7280",
+                borderBottom: "1px solid #e5e7eb",
+                userSelect: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                fontWeight: 900,
+              }}
             >
-              {settingsExpanded ? "▼" : "▲"}
-            </button>
-          )}
-        </div>
-        {connected && settingsExpanded && (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 마이크</label>
-                <select
-                  value={staffDeviceId}
-                  onChange={(e) => setStaffDeviceId(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 마이크</label>
-                <select
-                  value={patientDeviceId}
-                  onChange={(e) => setPatientDeviceId(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `마이크 ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
+              <span>?�️ ?�정</span>
+              <span>{settingsOpen ? "?? : "??}</span>
+            </div>
+
+            <div
+              style={{
+                overflow: "hidden",
+                maxHeight: settingsOpen ? 720 : 0,
+                transition: "max-height 300ms ease",
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 16,
+                  background: "#fff",
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+                  border: "1px solid rgba(0,0,0,0.04)",
+                  padding: 14,
+                }}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  {/* Staff mic */}
+                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>직원 마이??/div>
+                    <select
+                      value={staffDeviceId}
+                      onChange={(e) => setStaffDeviceId(e.target.value)}
+                      style={{ width: "100%", borderRadius: 14, border: "1px solid #E5E7EB", background: "#F9FAFB", padding: "10px 12px", fontSize: 14 }}
+                    >
+                      {devices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `마이??${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Patient mic */}
+                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>?�자 마이??/div>
+                    <select
+                      value={patientDeviceId}
+                      onChange={(e) => setPatientDeviceId(e.target.value)}
+                      style={{ width: "100%", borderRadius: 14, border: "1px solid #E5E7EB", background: "#F9FAFB", padding: "10px 12px", fontSize: 14 }}
+                    >
+                      {devices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `마이??${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Staff language */}
+                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>직원 ?�어</div>
+                    <FlagGrid selectedLang={staffLang} onSelectLang={(code) => setStaffLang(code)} />
+                  </div>
+
+                  {/* Patient language */}
+                  <div style={{ background: "#F9FAFB", borderRadius: 16, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#6B7280", marginBottom: 8 }}>?�자 ?�어</div>
+                    <FlagGrid selectedLang={patientLang} onSelectLang={(code) => setPatientLang(code)} />
+                  </div>
+                </div>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 언어</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>직원 ?�어</label>
                 <select
                   value={staffLang}
                   onChange={(e) => setStaffLang(e.target.value)}
@@ -443,7 +625,7 @@ export default function DualConsultation() {
                 </select>
               </div>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>환자 언어</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?�자 ?�어</label>
                 <select
                   value={patientLang}
                   onChange={(e) => setPatientLang(e.target.value)}
@@ -485,7 +667,7 @@ export default function DualConsultation() {
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
               )}
               <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
-                {m.translatedText || (m.streaming ? "…" : "")}
+                {m.translatedText || (m.streaming ? "?? : "")}
               </div>
             </div>
           </div>
@@ -510,7 +692,7 @@ export default function DualConsultation() {
             border: "2px solid #6366F1",
           }}
         >
-          {staffRecording ? "녹음 중…" : "🎤 직원"}
+          {staffRecording ? "?�음 중�? : "?�� 직원"}
         </button>
         <button
           type="button"
@@ -527,7 +709,7 @@ export default function DualConsultation() {
             border: "2px solid #22C55E",
           }}
         >
-          {patientRecording ? "녹음 중…" : "🎤 환자"}
+          {patientRecording ? "?�음 중�? : "?�� ?�자"}
         </button>
       </footer>
 
@@ -539,7 +721,7 @@ export default function DualConsultation() {
             value={textInputValue}
             onChange={(e) => setTextInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendText()}
-            placeholder="메시지 입력..."
+            placeholder="메시지 ?�력..."
             style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "10px 12px", fontSize: "14px" }}
             disabled={!connected}
           />
@@ -549,7 +731,7 @@ export default function DualConsultation() {
             disabled={!connected || !textInputValue.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", color: "#fff", padding: "10px 16px", fontSize: "14px", fontWeight: 500 }}
           >
-            →
+            ??
           </button>
         </div>
       )}
