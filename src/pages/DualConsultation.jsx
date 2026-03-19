@@ -297,15 +297,23 @@ export default function DualConsultation() {
       console.log("[Recv] receive-message:", JSON.stringify(data).slice(0, 300));
       const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = data || {};
       if (!id || (incomingRoomId && incomingRoomId !== rid)) return;
-      if (seenIdsRef.current.has(id)) return;
-      seenIdsRef.current.add(id);
       const isStaff = pendingSenderRef.current === "staff";
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === id);
         if (idx >= 0) {
-          return prev.map((m, i) => (i === idx ? { ...m, translatedText: translatedText ?? m.translatedText, streaming: false } : m));
+          return prev.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  translatedText: translatedText || data.text || m.translatedText,
+                  streaming: false,
+                }
+              : m
+          );
         }
+        if (seenIdsRef.current.has(id)) return prev;
+        seenIdsRef.current.add(id);
         return [
           ...prev,
           {
@@ -610,6 +618,7 @@ export default function DualConsultation() {
       roomId: roomIdRef.current,
       participantId: participantIdRef.current,
       message: { id: msgId, text: trimmed },
+      toLang: patientLangRef.current || "en",
     });
     console.log("[TextInput] send-message emitted, msgId:", msgId, "text:", trimmed);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);

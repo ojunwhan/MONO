@@ -4127,7 +4127,7 @@ io.on('connection', (socket) => {
     if (roomType === "oneToOne") {
       const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
       const otherP = otherPid ? meta.participants[otherPid] : null;
-      const toLang = otherP?.lang || "en";
+      const toLang = data.toLang || otherP?.lang || "en";
 
       // Sender's display name adapted to receiver's language
       let senderDisplayName = senderP?.adaptedNames?.[toLang] || senderP?.nativeName || "";
@@ -4191,6 +4191,19 @@ io.on('connection', (socket) => {
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
         addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
+      }
+      if (!targetSocketId) {
+        socket.emit("receive-message", {
+          id,
+          roomId,
+          text: draft,
+          translatedText: draft,
+          originalText: trimmedText,
+          fromLang,
+          toLang,
+          participantId,
+          timestamp: Date.now(),
+        });
       }
       // Push only when receiver is not actively viewing this room in foreground.
       maybeSendPushToUser(otherPid, {
