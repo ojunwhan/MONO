@@ -39,6 +39,10 @@ export default function DualConsultation() {
   const [inputMode, setInputMode] = useState("ptt"); // "ptt" = dual mic, "vad" = single mic auto (manual start/stop for now)
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
+  const [sttProvider, setSttProvider] = useState("webspeech");
+  const [webSpeechInterim, setWebSpeechInterim] = useState("");
+  const webSpeechRef = useRef(null);
+  const webSpeechActiveRef = useRef(false);
   const staffRecordingRef = useRef(false);
 
   const participantIdRef = useRef("");
@@ -77,6 +81,7 @@ export default function DualConsultation() {
     listening: vadListening,
     start: vadStart,
     pause: vadPause,
+    speechEndTimestamp,
   } = useVADPipeline({
     roomId: roomId || undefined,
     participantId: participantIdRef.current || undefined,
@@ -84,7 +89,133 @@ export default function DualConsultation() {
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
+    disableServerStt: sttProvider === "webspeech",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = ptNumber.trim();
+        const url = q
+          ? `/api/hospital/stt-provider?orgCode=${encodeURIComponent(q)}`
+          : "/api/hospital/stt-provider";
+        const res = await fetch(url);
+        const data = await res.json();
+        if (cancelled) return;
+        let prov = data?.sttProvider || "webspeech";
+        if (typeof window !== "undefined" && !window.SpeechRecognition && !window.webkitSpeechRecognition) {
+          prov = "groq";
+        }
+        setSttProvider(prov);
+      } catch {
+        if (!cancelled) {
+          setSttProvider(
+            typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition)
+              ? "webspeech"
+              : "groq"
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ptNumber]);
+
+  const stopWebSpeech = useCallback(() => {
+    webSpeechActiveRef.current = false;
+    if (webSpeechRef.current) {
+      try {
+        webSpeechRef.current.stop();
+      } catch (e) {}
+      webSpeechRef.current = null;
+    }
+  }, []);
+
+  const startWebSpeech = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (webSpeechRef.current) {
+      try {
+        webSpeechRef.current.stop();
+      } catch (e) {}
+      webSpeechRef.current = null;
+    }
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    const sl = staffLangRef.current || "ko";
+    recognition.lang =
+      { ko: "ko-KR", en: "en-US", zh: "zh-CN", ja: "ja-JP", vi: "vi-VN", th: "th-TH" }[sl] || `${sl}-KR`;
+    recognition.onresult = (event) => {
+      let interim = "";
+      let clearedByFinal = false;
+      const rid = roomIdRef.current;
+      const pid = participantIdRef.current;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const piece = res[0]?.transcript || "";
+        if (res.isFinal) {
+          const transcript = piece.trim();
+          if (transcript && rid && pid) {
+            pendingSenderRef.current = "staff";
+            const msgId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            seenIdsRef.current.add(msgId);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: msgId,
+                originalText: transcript,
+                translatedText: transcript,
+                isStaff: true,
+                senderPid: pid,
+                timestamp: Date.now(),
+                streaming: false,
+              },
+            ]);
+            socket.emit("send-message", {
+              roomId: rid,
+              participantId: pid,
+              message: { id: msgId, text: transcript },
+            });
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+            clearedByFinal = true;
+          }
+        } else {
+          interim += piece;
+        }
+      }
+      setWebSpeechInterim(clearedByFinal ? "" : interim.trim());
+    };
+    recognition.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      console.error("[WebSpeech] error:", e.error);
+    };
+    recognition.onend = () => {
+      if (webSpeechActiveRef.current) {
+        try {
+          recognition.start();
+        } catch (e) {}
+      }
+    };
+    try {
+      recognition.start();
+      webSpeechRef.current = recognition;
+      webSpeechActiveRef.current = true;
+    } catch (e) {
+      console.error("[WebSpeech] start failed:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (inputMode === "vad" && vadActive && sttProvider === "webspeech") {
+      startWebSpeech();
+    } else {
+      stopWebSpeech();
+    }
+    return () => stopWebSpeech();
+  }, [inputMode, vadActive, sttProvider, startWebSpeech, stopWebSpeech]);
 
   // List audio devices
   useEffect(() => {
@@ -419,10 +550,28 @@ export default function DualConsultation() {
   useEffect(() => {
     if (inputMode !== "vad") {
       vadPause();
+      stopWebSpeech();
       vadActiveRef.current = false;
       setVadActive(false);
     }
-  }, [inputMode, vadPause]);
+  }, [inputMode, vadPause, stopWebSpeech]);
+
+  const toggleSttProviderAdmin = useCallback(async () => {
+    const oc = ptNumber.trim();
+    if (!oc) return;
+    const next = sttProvider === "webspeech" ? "groq" : "webspeech";
+    try {
+      const res = await fetch("/api/hospital/stt-provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgCode: oc, sttProvider: next }),
+      });
+      if (!res.ok) throw new Error("stt_provider_update_failed");
+      setSttProvider(next);
+    } catch (e) {
+      console.error("[Dual] stt-provider toggle:", e?.message || e);
+    }
+  }, [ptNumber, sttProvider]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
@@ -599,6 +748,29 @@ export default function DualConsultation() {
                   </div>
                 </div>
               </div>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                  STT: {sttProvider === "webspeech" ? "Web Speech (??)" : "Groq Whisper (??)"}
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleSttProviderAdmin}
+                  disabled={!ptNumber.trim()}
+                  title={ptNumber.trim() ? "Toggle STT provider (saved per org)" : "Enter PT Number to toggle org setting"}
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    color: "#2563eb",
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: ptNumber.trim() ? "pointer" : "not-allowed",
+                    textDecoration: "underline",
+                  }}
+                >
+                  ??: STT ?? ?? (webspeech ? groq)
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -606,6 +778,11 @@ export default function DualConsultation() {
 
       {/* Single unified chat area */}
       <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
+        {inputMode === "vad" && webSpeechInterim ? (
+          <div style={{ padding: "8px 16px", fontSize: 14, color: "#9ca3af", fontStyle: "italic", minHeight: 24 }}>
+            {`?? ${webSpeechInterim}`}
+          </div>
+        ) : null}
         {messages.map((m) => (
           <div
             key={m.id}
