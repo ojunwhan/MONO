@@ -12,7 +12,7 @@
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
 import { useMicVAD } from "@ricky0123/vad-react";
-import { useRef, useCallback, useEffect } from "react";
+import { useMemo, useCallback, useEffect, useRef } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -133,22 +133,21 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     [roomId, participantId, lang, vadStaffLang, vadPatientLang]
   );
 
-  const getStreamFn = deviceId
-    ? async () => {
-        return navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: { exact: deviceId },
-            channelCount: 1,
-            sampleRate: 16000,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-      }
-    : undefined;
-
-  console.log("[VAD] calling useMicVAD with options:", { roomId, participantId, lang, deviceId: !!deviceId });
+  const getStreamFn = useMemo(() => {
+    if (!deviceId) return undefined;
+    return async () => {
+      return navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    };
+  }, [deviceId]);
 
   const vad = useMicVAD({
     startOnLoad: false,
@@ -159,12 +158,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
 
     ...(getStreamFn && { getStream: getStreamFn }),
 
-    onVADMisfire: () => {
-      console.log("[VAD] misfire");
-    },
-
     onSpeechStart: () => {
-      console.log("[VAD] speech start");
       sessionActiveRef.current = true;
     },
 
@@ -203,13 +197,6 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     preSpeechPadMs: 300, // 발화 시작 전 여유분
     submitUserSpeechOnPause: true, // pause 시 진행 중인 발화 전송
   });
-
-  const { listening, loading, errored, userSpeaking } = vad;
-  console.log("[VAD] useMicVAD returned:", { listening, loading, errored, userSpeaking });
-
-  useEffect(() => {
-    console.log("[VAD] state changed:", { listening, loading, errored, userSpeaking });
-  }, [listening, loading, errored, userSpeaking]);
 
   return {
     listening: vad.listening,
