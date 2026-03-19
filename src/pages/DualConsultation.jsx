@@ -7,7 +7,24 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
+import { getFlagUrlByLang } from "../constants/languageProfiles";
+import { getLanguageByCode } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
+
+function twemojiFlagSvgUrl(flag) {
+  const codePoints = Array.from(String(flag || ""))
+    .map((ch) => ch.codePointAt(0)?.toString(16))
+    .filter(Boolean);
+  if (!codePoints.length) return "";
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints.join("-")}.svg`;
+}
+
+/** Same order as LanguageFlagPicker: Twemoji from language emoji, else flagcdn. */
+function patientTopBarFlagFallbackUrl(langCode) {
+  const key = String(langCode || "").toLowerCase().split("-")[0];
+  const lang = getLanguageByCode(key);
+  return (lang?.flag && twemojiFlagSvgUrl(lang.flag)) || getFlagUrlByLang(key);
+}
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -18,7 +35,6 @@ async function toBase64FromBlob(blob) {
 }
 
 export default function DualConsultation() {
-  const LANG_TO_FLAG = {en:"us",ko:"kr",zh:"cn",ja:"jp",vi:"vn",th:"th",id:"id",ms:"my",tl:"ph",my:"mm",km:"kh",ne:"np",mn:"mn",uz:"uz",ru:"ru",es:"es",pt:"pt",fr:"fr",de:"de",ar:"sa"};
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
@@ -625,11 +641,18 @@ export default function DualConsultation() {
               disabled={connected}
             />
             <img
-              src={`https://flagcdn.com/w40/${LANG_TO_FLAG[patientLang] || "us"}.png`}
+              key={patientLang}
+              src={`/icons/flags/${String(patientLang || "en").toLowerCase().split("-")[0]}.svg`}
               width={24}
               height={16}
-              style={{ borderRadius: 2, marginLeft: 12 }}
+              style={{ borderRadius: 2, marginLeft: 12, objectFit: "cover" }}
               alt=""
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.dataset.flagFallback) return;
+                el.dataset.flagFallback = "1";
+                el.src = patientTopBarFlagFallbackUrl(patientLang);
+              }}
             />
             <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {LANG_TO_LABEL[patientLang] || "ENG"}
