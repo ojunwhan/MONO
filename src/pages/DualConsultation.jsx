@@ -49,7 +49,6 @@ export default function DualConsultation() {
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
   const [inputMode, setInputMode] = useState("ptt"); // "ptt" = dual mic, "vad" = single mic auto (manual start/stop for now)
@@ -584,33 +583,18 @@ export default function DualConsultation() {
     }
   }, [inputMode, vadPause, stopWebSpeech]);
 
-  const toggleSttProviderAdmin = useCallback(async () => {
-    const oc = ptNumber.trim();
-    if (!oc) return;
-    const next = sttProvider === "webspeech" ? "groq" : "webspeech";
-    try {
-      const res = await fetch("/api/hospital/stt-provider", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgCode: oc, sttProvider: next }),
-      });
-      if (!res.ok) throw new Error("stt_provider_update_failed");
-      setSttProvider(next);
-    } catch (e) {
-      console.error("[Dual] stt-provider toggle:", e?.message || e);
-    }
-  }, [ptNumber, sttProvider]);
-
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
     if (!trimmed || !connected || !roomIdRef.current || !participantIdRef.current) return;
-    const msgId = `dc-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const msgId = `msg-${Date.now()}`;
+    pendingSenderRef.current = "staff";
+    seenIdsRef.current.add(msgId);
     setMessages((prev) => [
       ...prev,
       {
         id: msgId,
         originalText: trimmed,
-        translatedText: trimmed,
+        translatedText: "",
         isStaff: true,
         senderPid: participantIdRef.current,
         timestamp: Date.now(),
@@ -679,14 +663,7 @@ export default function DualConsultation() {
           )}
         </div>
         {connected && settingsExpanded && (
-          <>
-            <div
-              onClick={() => setSettingsOpen((prev) => !prev)}
-              style={{ padding: "6px 16px", cursor: "pointer", textAlign: "center", fontSize: 13, color: "#6b7280", background: "#f9fafb", borderBottom: "1px solid #e5e7eb", userSelect: "none" }}
-            >
-              {settingsOpen ? "Settings \u25BC" : "Settings \u25B6"}
-            </div>
-            <div style={{ maxHeight: settingsOpen ? "500px" : "0", overflow: "hidden", transition: "max-height 300ms ease" }}>
+          <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "8px 0" }}>
                 <button
                   type="button"
@@ -706,16 +683,18 @@ export default function DualConsultation() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setInputMode("vad")}
+                  disabled
+                  title={"\uC900\uBE44 \uC911 (Coming Soon)"}
                   style={{
                     padding: "6px 16px",
                     borderRadius: 20,
                     border: "1px solid #d1d5db",
-                    background: inputMode === "vad" ? "#3B82F6" : "white",
-                    color: inputMode === "vad" ? "white" : "#374151",
+                    background: "#e5e7eb",
+                    color: "#6b7280",
                     fontSize: 13,
                     fontWeight: 600,
-                    cursor: "pointer",
+                    cursor: "not-allowed",
+                    opacity: 0.4,
                   }}
                 >
                   Single Mic (Auto)
@@ -783,31 +762,7 @@ export default function DualConsultation() {
                   </div>
                 </div>
               </div>
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-                  STT: {sttProvider === "webspeech" ? "Web Speech (??)" : "Groq Whisper (??)"}
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleSttProviderAdmin}
-                  disabled={!ptNumber.trim()}
-                  title={ptNumber.trim() ? "Toggle STT provider (saved per org)" : "Enter PT Number to toggle org setting"}
-                  style={{
-                    marginTop: 4,
-                    fontSize: 11,
-                    color: "#2563eb",
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: ptNumber.trim() ? "pointer" : "not-allowed",
-                    textDecoration: "underline",
-                  }}
-                >
-                  STT ?? ?? (webspeech ? groq)
-                </button>
-              </div>
-            </div>
-          </>
+          </div>
         )}
       </header>
 
