@@ -53,6 +53,19 @@ export default function DualConsultation() {
   const patientMimeRef = useRef("audio/webm");
   /** Tracks which button sent the last whisper so we can align next received message (staff=right, patient=left). */
   const pendingSenderRef = useRef(null); // 'staff' | 'patient' | null
+  const inputModeRef = useRef(inputMode);
+  const staffLangRef = useRef(staffLang);
+  const patientLangRef = useRef(patientLang);
+
+  useEffect(() => {
+    inputModeRef.current = inputMode;
+  }, [inputMode]);
+  useEffect(() => {
+    staffLangRef.current = staffLang;
+  }, [staffLang]);
+  useEffect(() => {
+    patientLangRef.current = patientLang;
+  }, [patientLang]);
 
   // List audio devices
   useEffect(() => {
@@ -180,11 +193,21 @@ export default function DualConsultation() {
     };
 
     const onSttResult = (payload) => {
-      const { roomId: incomingRoomId, participantId: incomingPid, text, translatedText: payloadTranslated, final } = payload || {};
+      const { roomId: incomingRoomId, participantId: incomingPid, text, translatedText: payloadTranslated, final, fromLang } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!text || !final) return;
-      const pending = pendingSenderRef.current;
-      const isStaff = pending ? pending === "staff" : incomingPid === participantIdRef.current;
+      let isStaff;
+      if (inputModeRef.current === "vad") {
+        const detectedLang = fromLang || "";
+        const patientLang = patientLangRef.current || "";
+        if (detectedLang === patientLang || detectedLang.startsWith(patientLang)) {
+          isStaff = false;
+        } else {
+          isStaff = true;
+        }
+      } else {
+        isStaff = pendingSenderRef.current === "staff";
+      }
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       seenIdsRef.current.add(msgId);
