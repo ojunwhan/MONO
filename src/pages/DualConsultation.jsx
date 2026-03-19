@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageFlagPicker from "../components/LanguageFlagPicker";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -33,6 +33,8 @@ export default function DualConsultation() {
   const [textInputValue, setTextInputValue] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(true);
+  const [showStaffGrid, setShowStaffGrid] = useState(false);
+  const [showPatientGrid, setShowPatientGrid] = useState(false);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -443,14 +445,30 @@ export default function DualConsultation() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px", marginTop: "12px" }}>
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Lang</label>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <LanguageSelector value={staffLang} onChange={setStaffLang} placeholder="Search language..." />
+                  <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 30 }} className="[&_p]:hidden">
+                    <LanguageFlagPicker
+                      selectedLang={staffLang}
+                      showGrid={showStaffGrid}
+                      onToggleGrid={() => setShowStaffGrid((prev) => !prev)}
+                      onSelect={(code) => {
+                        setStaffLang(code);
+                        setShowStaffGrid(false);
+                      }}
+                    />
                   </div>
                 </div>
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Lang</label>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <LanguageSelector value={patientLang} onChange={setPatientLang} placeholder="Search language..." />
+                  <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 30 }} className="[&_p]:hidden">
+                    <LanguageFlagPicker
+                      selectedLang={patientLang}
+                      showGrid={showPatientGrid}
+                      onToggleGrid={() => setShowPatientGrid((prev) => !prev)}
+                      onSelect={(code) => {
+                        setPatientLang(code);
+                        setShowPatientGrid(false);
+                      }}
+                    />
                   </div>
                 </div>
               </div>
