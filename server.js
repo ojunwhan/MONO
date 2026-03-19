@@ -3871,6 +3871,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    let fromLang = mapLang(lang || "en");
     let translatedText = normalized;
     const stripBracketTag = (s) => (typeof s === 'string' ? s.replace(/^(\[.*?\]\s*)+/, '').trim() : s);
 
@@ -3882,7 +3883,7 @@ io.on('connection', (socket) => {
         if (isHospital1to1 && !meta.hospitalEndedSession) {
           const rec = SOCKET_ROLES.get(socket.id) || {};
           const senderRole = rec.role === "owner" ? "host" : "guest";
-          let fromLang = mapLang(lang || "en");
+          fromLang = mapLang(lang || "en");
           const sessionRow = await dbGet("SELECT patient_token FROM hospital_sessions WHERE room_id = ?", [roomId]).catch(() => null);
           const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
           let activeSession = null;
@@ -3966,7 +3967,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: translatedText ? translatedText.replace(/^\[.*?\]\s*/, '').trim() : normalized, fromLang: lang, final: true });
+    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: translatedText ? translatedText.replace(/^\[.*?\]\s*/, '').trim() : normalized, fromLang: fromLang || lang, final: true });
     ackReply({ ok: true, text: normalized });
   });
 
