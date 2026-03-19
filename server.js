@@ -2708,7 +2708,7 @@ io.on('connection', (socket) => {
   });
 
   // --- join 핸들러 (call sign system, idempotent) ---
-  socket.on("join", async ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode }) => {
+  socket.on("join", async ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode, siteContext }) => {
     if (!roomId || !participantId) return;
     if (typeof roomId !== 'string' || roomId.length > 200) return;
     if (typeof participantId !== 'string' || participantId.length > 128) return;
@@ -2807,6 +2807,9 @@ io.on('connection', (socket) => {
     leaveBeforeJoin({ nextRoomId: roomId, participantId, reason: "join" });
 
     const meta = ensureRoomMeta(roomId);
+    if (siteContext && siteContext !== "general") {
+      meta.siteContext = siteContext;
+    }
     if (meta.expiresAt && Date.now() > Number(meta.expiresAt)) {
       socket.emit("room-status", { status: "room-expired", roomId });
       return;
