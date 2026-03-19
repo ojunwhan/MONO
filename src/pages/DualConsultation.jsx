@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
-import { getTier1Languages, getLanguageByCode } from "../constants/languages";
+import LanguageSelector from "../components/LanguageSelector";
 
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
@@ -32,9 +32,7 @@ export default function DualConsultation() {
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
-
-  const LANG_OPTIONS = getTier1Languages();
-  const patientProfile = getLanguageByCode(patientLang);
+  const [settingsOpen, setSettingsOpen] = useState(true);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -405,60 +403,56 @@ export default function DualConsultation() {
         </div>
         {connected && settingsExpanded && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
-                <select
-                  value={staffDeviceId}
-                  onChange={(e) => setStaffDeviceId(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
-                <select
-                  value={patientDeviceId}
-                  onChange={(e) => setPatientDeviceId(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div
+              onClick={() => setSettingsOpen((prev) => !prev)}
+              style={{ padding: "6px 16px", cursor: "pointer", textAlign: "center", fontSize: 13, color: "#6b7280", background: "#f9fafb", borderBottom: "1px solid #e5e7eb", userSelect: "none" }}
+            >
+              {settingsOpen ? "Settings \u25BC" : "Settings \u25B6"}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Lang</label>
-                <select
-                  value={staffLang}
-                  onChange={(e) => setStaffLang(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {LANG_OPTIONS.map((o) => (
-                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
-                  ))}
-                </select>
+            <div style={{ maxHeight: settingsOpen ? "500px" : "0", overflow: "hidden", transition: "max-height 300ms ease" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
+                <div>
+                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
+                  <select
+                    value={staffDeviceId}
+                    onChange={(e) => setStaffDeviceId(e.target.value)}
+                    style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                  >
+                    {devices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
+                  <select
+                    value={patientDeviceId}
+                    onChange={(e) => setPatientDeviceId(e.target.value)}
+                    style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                  >
+                    {devices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Lang</label>
-                <select
-                  value={patientLang}
-                  onChange={(e) => setPatientLang(e.target.value)}
-                  style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                >
-                  {LANG_OPTIONS.map((o) => (
-                    <option key={o.code} value={o.code}>{o.flag} {o.nativeName}</option>
-                  ))}
-                </select>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px", marginTop: "12px" }}>
+                <div>
+                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Lang</label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <LanguageSelector value={staffLang} onChange={setStaffLang} placeholder="Search language..." />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Lang</label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <LanguageSelector value={patientLang} onChange={setPatientLang} placeholder="Search language..." />
+                  </div>
+                </div>
               </div>
             </div>
           </>
