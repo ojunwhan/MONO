@@ -5122,6 +5122,8 @@ app.post("/api/auth/convert-guest", async (req, res) => {
       }
     } catch (_) {}
 
+    try { await dbRun("ALTER TABLE organizations ADD COLUMN stt_provider TEXT DEFAULT 'webspeech'"); } catch (e) {}
+
     // org_encryption_key 컬럼 추가 후 키가 없는 기관에 32바이트 랜덤 키 생성
     await dbRun("ALTER TABLE organizations ADD COLUMN org_encryption_key TEXT").catch(() => {});
     const orgRows = await dbAll("SELECT org_code, org_encryption_key FROM organizations");
@@ -5364,6 +5366,30 @@ app.post('/api/hospital/auth/logout', (req, res) => {
     sameSite: 'lax',
   });
   res.json({ success: true });
+});
+
+app.get("/api/hospital/stt-provider", async (req, res) => {
+  try {
+    const { orgCode } = req.query;
+    if (!orgCode) return res.json({ sttProvider: "webspeech" });
+    const row = await dbGet("SELECT stt_provider FROM organizations WHERE org_code = ?", [orgCode]);
+    res.json({ sttProvider: row?.stt_provider || "webspeech" });
+  } catch (e) {
+    res.json({ sttProvider: "webspeech" });
+  }
+});
+
+app.post("/api/hospital/stt-provider", async (req, res) => {
+  try {
+    const { orgCode, sttProvider } = req.body;
+    if (!orgCode || !["webspeech", "groq"].includes(sttProvider)) {
+      return res.status(400).json({ error: "Invalid orgCode or sttProvider" });
+    }
+    await dbRun("UPDATE organizations SET stt_provider = ? WHERE org_code = ?", [sttProvider, orgCode]);
+    res.json({ success: true, sttProvider });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/hospital/join — 환자가 QR 스캔 후 채널 연결 (환자 1명 = 채널 1개, 재방문 시 기존 채널 재사용)
