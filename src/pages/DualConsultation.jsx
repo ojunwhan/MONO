@@ -663,22 +663,6 @@ export default function DualConsultation() {
           </>
         ) : (
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
-            {vadActive && !vadListening ? (
-              <div style={{ fontSize: 12, color: "#92400e", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <span
-                  aria-hidden
-                  style={{
-                    width: 14,
-                    height: 14,
-                    border: "2px solid #ca8a04",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "dual-vad-spin 0.7s linear infinite",
-                  }}
-                />
-                Initializing microphone?
-              </div>
-            ) : null}
             <button
               type="button"
               onClick={handleVADToggle}
@@ -730,6 +714,22 @@ export default function DualConsultation() {
                     ? "Stop Listening"
                     : "Start Listening"}
             </button>
+            {vadActive && !vadListening ? (
+              <div style={{ fontSize: 12, color: "#92400e", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: "2px solid #ca8a04",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "dual-vad-spin 0.7s linear infinite",
+                  }}
+                />
+                Initializing microphone?
+              </div>
+            ) : null}
             <style>{`@keyframes dual-vad-pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.2);} }@keyframes dual-vad-spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
