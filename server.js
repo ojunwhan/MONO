@@ -7090,23 +7090,10 @@ app.use(["/dual-consultation"], (req, res, next) => {
   next();
 });
 
-app.use((req, res, next) => {
-  const vadPaths = [
-    "/ort-wasm-simd-threaded.wasm",
-    "/ort-wasm-simd-threaded.mjs",
-    "/silero_vad_legacy.onnx",
-    "/silero_vad_v5.onnx",
-    "/vad.worklet.bundle.min.js"
-  ];
-  if (vadPaths.includes(req.path)) {
-    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-  }
-  next();
-});
-
 // ✅ WASM/MJS MIME 타입 올바르게 설정
 app.use(express.static(distPath, {
   setHeaders: (res, filePath) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     if (filePath.endsWith('.wasm')) {
       res.setHeader('Content-Type', 'application/wasm');
     } else if (filePath.endsWith('.mjs')) {
