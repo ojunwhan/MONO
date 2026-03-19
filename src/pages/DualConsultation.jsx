@@ -503,7 +503,12 @@ export default function DualConsultation() {
       if (!pid || !rid) return;
       pendingSenderRef.current = asStaff ? "staff" : "patient";
       const lang = inputModeRef.current === "vad" ? "auto" : (asStaff ? staffLang : patientLang);
-      const toLang = inputModeRef.current === "vad" ? null : (asStaff ? patientLang : staffLang);
+      const toLang =
+        inputModeRef.current === "vad"
+          ? null
+          : asStaff
+            ? (patientLangRef.current || "en")
+            : (staffLang || "ko");
       const payload = { roomId: rid, participantId: pid, lang, toLang, audio: base64Audio, mimeType };
       if (inputModeRef.current === "vad") {
         payload.vadStaffLang = staffLangRef.current;

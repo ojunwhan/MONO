@@ -3887,7 +3887,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on("stt:whisper", async ({ roomId, participantId, lang, audio, mimeType, toLang: clientToLang, vadStaffLang, vadPatientLang } = {}, ack) => {
+  socket.on("stt:whisper", async (data = {}, ack) => {
+    const { roomId, participantId, lang, audio, mimeType, vadStaffLang, vadPatientLang } = data || {};
+    const optionalToLang = data?.toLang != null && String(data.toLang).trim() !== "" ? data.toLang : null;
     console.log("[stt:whisper] received roomId:", roomId, "pid:", participantId);
     const ackReply = (payload) => {
       if (typeof ack === "function") {
@@ -3995,7 +3997,8 @@ io.on('connection', (socket) => {
           }
           const otherPid = Object.keys(meta.participants).find(p => p !== participantId);
           const otherP = otherPid ? meta.participants[otherPid] : null;
-          let toLang = otherP?.lang || clientToLang || "en";
+          const otherParticipantLang = otherP?.lang;
+          let toLang = mapLang(optionalToLang || otherParticipantLang || "en");
           if (vadStaffLang && vadPatientLang) {
             // Detect language from transcribed text (Korean chars = Korean, else use other lang)
             const hasKorean = /[\uAC00-\uD7AF\u1100-\u11FF]/.test(normalized);
@@ -4050,7 +4053,23 @@ io.on('connection', (socket) => {
       }
     }
 
-    socket.emit("stt:result", { roomId, participantId, text: normalized, translatedText: translatedText ? translatedText.replace(/^\[.*?\]\s*/, '').trim() : normalized, fromLang: fromLang || lang, final: true });
+    const metaStt = ensureRoomMeta(roomId);
+    const otherPidStt = Object.keys(metaStt.participants || {}).find((p) => p !== participantId);
+    const otherPStt = otherPidStt ? metaStt.participants[otherPidStt] : null;
+    const otherSocketIdStt = otherPStt?.socketId;
+    const tt = translatedText ? translatedText.replace(/^\[.*?\]\s*/, "").trim() : normalized;
+    const sttResultPayload = {
+      roomId,
+      participantId,
+      text: normalized,
+      translatedText: tt,
+      fromLang: fromLang || lang,
+      final: true,
+    };
+    if (otherSocketIdStt && otherSocketIdStt !== socket.id) {
+      io.to(otherSocketIdStt).emit("stt:result", sttResultPayload);
+    }
+    socket.emit("stt:result", sttResultPayload);
     ackReply({ ok: true, text: normalized });
   });
 
