@@ -3882,7 +3882,7 @@ io.on('connection', (socket) => {
         if (isHospital1to1 && !meta.hospitalEndedSession) {
           const rec = SOCKET_ROLES.get(socket.id) || {};
           const senderRole = rec.role === "owner" ? "host" : "guest";
-          const fromLang = mapLang(lang || "en");
+          let fromLang = mapLang(lang || "en");
           const sessionRow = await dbGet("SELECT patient_token FROM hospital_sessions WHERE room_id = ?", [roomId]).catch(() => null);
           const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
           let activeSession = null;
@@ -3913,12 +3913,19 @@ io.on('connection', (socket) => {
           const otherP = otherPid ? meta.participants[otherPid] : null;
           let toLang = otherP?.lang || clientToLang || "en";
           if (vadStaffLang && vadPatientLang) {
-            const detected = fromLang;
-            if (detected === mapLang(vadStaffLang)) {
-              toLang = mapLang(vadPatientLang);
+            // Detect language from transcribed text (Korean chars = Korean, else use other lang)
+            const hasKorean = /[\uAC00-\uD7AF\u1100-\u11FF]/.test(normalized);
+            const staffL = mapLang(vadStaffLang);
+            const patientL = mapLang(vadPatientLang);
+            if (hasKorean) {
+              // Korean detected in text → speaker is the Korean-language person
+              toLang = (staffL === "ko") ? patientL : staffL;
             } else {
-              toLang = mapLang(vadStaffLang);
+              // Non-Korean text → speaker is the non-Korean person
+              toLang = (staffL === "ko") ? staffL : patientL;
             }
+            // Also fix fromLang for proper message storage
+            fromLang = hasKorean ? "ko" : (patientL !== "ko" ? patientL : staffL);
           }
           const siteCtx = meta.siteContext || "general";
           const roomContext = getRoomContext(roomId);
