@@ -127,12 +127,6 @@ export default function DualConsultation() {
     participantIdRef.current = pid;
     console.log("[Dual] handleConnect pid set:", participantIdRef.current);
     const siteContext = "hospital_plastic_surgery";
-    // 서버가 join 후 내보내는 room-context를 기준으로 connected 상태를 켭니다.
-    socket.once("room-status", () => {
-      connectedRef.current = true;
-      setRoomId(pt);
-      setConnected(true);
-    });
     socket.emit("join", {
       roomId: pt,
       fromLang: staffLang,
@@ -143,6 +137,10 @@ export default function DualConsultation() {
       siteContext,
       inputMode: "ptt",
     });
+    // 서버 이벤트 대기 없이 즉시 UI를 connected 상태로 전환합니다.
+    connectedRef.current = true;
+    setRoomId(pt);
+    setConnected(true);
   }, [ptNumber, staffLang]);
 
   // Unmount: leave room if we had connected
@@ -440,15 +438,19 @@ export default function DualConsultation() {
             gap: 12,
           }}
         >
-          {/* PT pill */}
+          {/* PT box (PT + 환자 언어 + 환자명 + 연결 상태) */}
           <div
             style={{
-              flex: "1 1 160px",
+              flex: "1 1 auto",
               minWidth: 0,
-              borderRadius: 999,
-              padding: "10px 12px",
-              background: "linear-gradient(135deg, rgba(255,222,233,1) 0%, rgba(255,209,193,1) 100%)",
-              boxShadow: "0 8px 22px rgba(255,93,162,0.12)",
+              borderRadius: 12,
+              padding: "12px 16px",
+              background: "#E8F5E9",
+              boxShadow: "0 10px 24px rgba(16,185,129,0.10)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
             }}
           >
             <input
@@ -458,49 +460,36 @@ export default function DualConsultation() {
               onChange={(e) => setPtNumber(e.target.value)}
               disabled={connected}
               style={{
-                width: "100%",
+                flex: "0 0 auto",
+                width: 130,
                 border: "none",
                 outline: "none",
                 background: "transparent",
                 fontSize: 14,
-                fontWeight: 700,
-                color: "#9f1239",
+                fontWeight: 600,
+                color: "#2E1065",
                 letterSpacing: 0.2,
               }}
             />
-          </div>
 
-          {/* Patient info */}
-          <div style={{ flex: "1 1 auto", minWidth: 120, textAlign: "center" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>환자 이름 미등록</div>
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <span style={{ fontSize: 18 }}>{patientProfile?.flag || "🌐"}</span>
-              <span style={{ fontSize: 12, fontWeight: 800, color: "#6B7280" }}>{getLabelFromCode(patientLang)}</span>
+            <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 8, minWidth: 70 }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{patientProfile?.flag || "🌐"}</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: "#374151", whiteSpace: "nowrap" }}>
+                {getLabelFromCode(patientLang)}
+              </span>
             </div>
-          </div>
 
-          {/* Connection badge */}
-          <div style={{ flex: "0 0 auto" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "10px 12px",
-                borderRadius: 999,
-                background: connected ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.10)",
-                color: connected ? "#047857" : "#B91C1C",
-                fontSize: 13,
-                fontWeight: 800,
-              }}
-            >
+            <div style={{ flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
+              환자 이름 미등록
+            </div>
+
+            <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", fontSize: 13, fontWeight: 900, color: connected ? "#047857" : "#B91C1C" }}>
               <span
                 style={{
                   width: 10,
                   height: 10,
                   borderRadius: 999,
                   background: connected ? "#10B981" : "#EF4444",
-                  boxShadow: connected ? "0 0 0 6px rgba(16,185,129,0.16)" : "0 0 0 6px rgba(239,68,68,0.14)",
                 }}
               />
               {connected ? "연결됨" : "연결 끊김"}
