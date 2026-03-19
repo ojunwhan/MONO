@@ -92,7 +92,7 @@ export default function DualConsultation() {
       participantId: pid,
       fromLang: staffLang,
       roleHint: "host",
-      localName: "??",
+      localName: "Staff",
       siteContext,
     });
     setConnected(true);
@@ -366,7 +366,7 @@ export default function DualConsultation() {
           <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
             <input
               type="text"
-              placeholder="PT ??"
+              placeholder="PT Number"
               value={ptNumber}
               onChange={(e) => setPtNumber(e.target.value)}
               style={{ flex: 1, minWidth: 0, border: "none", outline: "none", padding: "8px 12px", fontSize: "14px" }}
@@ -390,13 +390,13 @@ export default function DualConsultation() {
             disabled={connected || !ptNumber.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
           >
-            {connected ? "???" : "Connect"}
+            {connected ? "Connected" : "Connect"}
           </button>
           {connected && (
             <button
               type="button"
               onClick={() => setSettingsExpanded((p) => !p)}
-              title={settingsExpanded ? "?? ??" : "?? ???"}
+              title={settingsExpanded ? "Collapse" : "Expand"}
               style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
             >
               {settingsExpanded ? "?" : "?"}
@@ -407,7 +407,7 @@ export default function DualConsultation() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ???</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
                 <select
                   value={staffDeviceId}
                   onChange={(e) => setStaffDeviceId(e.target.value)}
@@ -415,13 +415,13 @@ export default function DualConsultation() {
                 >
                   {devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `??? ${d.deviceId.slice(0, 8)}`}
+                      {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ???</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
                 <select
                   value={patientDeviceId}
                   onChange={(e) => setPatientDeviceId(e.target.value)}
@@ -429,7 +429,7 @@ export default function DualConsultation() {
                 >
                   {devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `??? ${d.deviceId.slice(0, 8)}`}
+                      {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
                     </option>
                   ))}
                 </select>
@@ -437,7 +437,7 @@ export default function DualConsultation() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px" }}>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ??</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Lang</label>
                 <select
                   value={staffLang}
                   onChange={(e) => setStaffLang(e.target.value)}
@@ -449,7 +449,7 @@ export default function DualConsultation() {
                 </select>
               </div>
               <div>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>?? ??</label>
+                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Lang</label>
                 <select
                   value={patientLang}
                   onChange={(e) => setPatientLang(e.target.value)}
@@ -491,7 +491,7 @@ export default function DualConsultation() {
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
               )}
               <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
-                {m.translatedText || (m.streaming ? "?" : "")}
+                {m.translatedText || (m.streaming ? "..." : "")}
               </div>
             </div>
           </div>
@@ -516,7 +516,7 @@ export default function DualConsultation() {
             border: "2px solid #6366F1",
           }}
         >
-          {staffRecording ? "?? ??" : "?? ??"}
+          {staffRecording ? "Stop" : "Staff"}
         </button>
         <button
           type="button"
@@ -533,7 +533,7 @@ export default function DualConsultation() {
             border: "2px solid #22C55E",
           }}
         >
-          {patientRecording ? "?? ??" : "?? ??"}
+          {patientRecording ? "Stop" : "Patient"}
         </button>
       </footer>
 
@@ -545,7 +545,7 @@ export default function DualConsultation() {
             value={textInputValue}
             onChange={(e) => setTextInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendText()}
-            placeholder="??? ??..."
+            placeholder="Type message..."
             style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid #d1d5db", padding: "10px 12px", fontSize: "14px" }}
             disabled={!connected}
           />
@@ -555,7 +555,7 @@ export default function DualConsultation() {
             disabled={!connected || !textInputValue.trim()}
             style={{ borderRadius: "8px", background: "#2563EB", color: "#fff", padding: "10px 16px", fontSize: "14px", fontWeight: 500 }}
           >
-            ?
+            Send
           </button>
         </div>
       )}
