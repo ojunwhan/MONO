@@ -382,7 +382,7 @@ export default function DualConsultation() {
             <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 4 }}>
               {LANG_TO_LABEL[patientLang] || "ENG"}
             </span>
-            <span style={{ fontSize: 13, color: "#374151", marginLeft: 8 }}>???</span>
+            <span style={{ fontSize: 13, color: "#374151", marginLeft: 8 }}>Sarah Johnson</span>
             <span style={{ fontSize: 13, fontWeight: 900, marginLeft: 8, color: connected ? "#047857" : "#B91C1C" }}>
               {connected ? "? ???" : "? ????"}
             </span>
