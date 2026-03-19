@@ -293,8 +293,9 @@ export default function DualConsultation() {
     if (!roomId) return;
     const rid = roomId;
 
-    const onReceiveMessage = (payload) => {
-      const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = payload || {};
+    const onReceiveMessage = (data) => {
+      console.log("[Recv] receive-message:", JSON.stringify(data).slice(0, 300));
+      const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = data || {};
       if (!id || (incomingRoomId && incomingRoomId !== rid)) return;
       if (seenIdsRef.current.has(id)) return;
       seenIdsRef.current.add(id);
@@ -321,8 +322,9 @@ export default function DualConsultation() {
       setTimeout(scrollToBottom, 50);
     };
 
-    const onStream = (payload) => {
-      const { roomId: incomingRoomId, messageId, chunk, senderPid, originalText } = payload || {};
+    const onStream = (data) => {
+      console.log("[Stream] receive-message-stream:", JSON.stringify(data).slice(0, 300));
+      const { roomId: incomingRoomId, messageId, chunk, senderPid, originalText } = data || {};
       if (!messageId || !chunk || (incomingRoomId && incomingRoomId !== rid)) return;
       const isStaff = pendingSenderRef.current === "staff";
       setMessages((prev) => {
@@ -348,8 +350,9 @@ export default function DualConsultation() {
       setTimeout(scrollToBottom, 50);
     };
 
-    const onStreamEnd = (payload) => {
-      const { roomId: incomingRoomId, messageId, fullText } = payload || {};
+    const onStreamEnd = (data) => {
+      console.log("[StreamEnd] receive-message-stream-end:", JSON.stringify(data).slice(0, 300));
+      const { roomId: incomingRoomId, messageId, fullText } = data || {};
       if (!messageId || (incomingRoomId && incomingRoomId !== rid)) return;
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, translatedText: fullText ?? m.translatedText, streaming: false } : m))
@@ -358,6 +361,7 @@ export default function DualConsultation() {
     };
 
     const onReviseMessage = (payload) => {
+      console.log("[Revise] revise-message:", JSON.stringify(payload).slice(0, 300));
       const { id: messageId, translatedText: revisedText, roomId: incomingRoomId } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!messageId || revisedText == null || String(revisedText).trim() === "") return;
@@ -607,6 +611,7 @@ export default function DualConsultation() {
       participantId: participantIdRef.current,
       message: { id: msgId, text: trimmed },
     });
+    console.log("[TextInput] send-message emitted, msgId:", msgId, "text:", trimmed);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, [textInputValue, connected]);
 
@@ -770,7 +775,7 @@ export default function DualConsultation() {
       <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
         {inputMode === "vad" && webSpeechInterim ? (
           <div style={{ padding: "8px 16px", fontSize: 14, color: "#9ca3af", fontStyle: "italic", minHeight: 24 }}>
-            {`?? ${webSpeechInterim}`}
+            {`${"\uBC88\uC5ED \uC911..."} ${webSpeechInterim}`}
           </div>
         ) : null}
         {messages.map((m) => (
@@ -802,7 +807,7 @@ export default function DualConsultation() {
                   : (m.translatedText || "").trim()
                     ? m.translatedText
                     : (m.originalText || "").trim()
-                      ? "?? ?..."
+                      ? "\uBC88\uC5ED \uC911..."
                       : ""}
               </div>
             </div>
