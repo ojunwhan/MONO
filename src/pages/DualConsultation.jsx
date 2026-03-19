@@ -17,6 +17,8 @@ async function toBase64FromBlob(blob) {
 }
 
 export default function DualConsultation() {
+  const LANG_TO_FLAG = {en:"us",ko:"kr",zh:"cn",ja:"jp",vi:"vn",th:"th",id:"id",ms:"my",tl:"ph",my:"mm",km:"kh",ne:"np",mn:"mn",uz:"uz",ru:"ru",es:"es",pt:"pt",fr:"fr",de:"de",ar:"sa"};
+  const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
   const [roomId, setRoomId] = useState("");
