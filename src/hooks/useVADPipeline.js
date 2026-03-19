@@ -206,6 +206,13 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     () => ({
       startOnLoad: false,
 
+      processorType: "ScriptProcessor",
+      ortConfig: (ort) => {
+        ort.env.logLevel = "error";
+        ort.env.wasm.numThreads = 1;
+        ort.env.wasm.proxy = false;
+      },
+
       // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
       baseAssetPath: "/",
       onnxWASMBasePath: "/",
