@@ -128,7 +128,7 @@ export default function DualConsultation() {
     console.log("[Dual] handleConnect pid set:", participantIdRef.current);
     const siteContext = "hospital_plastic_surgery";
     // 서버가 join 후 내보내는 room-context를 기준으로 connected 상태를 켭니다.
-    socket.once("room-context", () => {
+    socket.once("room-status", () => {
       connectedRef.current = true;
       setRoomId(pt);
       setConnected(true);
