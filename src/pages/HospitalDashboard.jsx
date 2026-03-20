@@ -395,6 +395,38 @@ export default function HospitalDashboard() {
                       )}
                       {item.ai_summary && typeof item.ai_summary === "object" ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const s = item.ai_summary || {};
+                                const labelMap = { cc: "C.C", consulted_procedures: "\uC0C1\uB2F4 \uC2DC\uC220", patient_requests: "\uD658\uC790 \uC694\uCCAD", budget: "\uC608\uC0B0", follow_up: "F/U", special_notes: "\uD2B9\uC774\uC0AC\uD56D", summary: "\uC0C1\uB2F4 \uC694\uC57D", chief_complaint: "C.C", procedures_mentioned: "\uC0C1\uB2F4 \uC2DC\uC220", budget_mentioned: "\uC608\uC0B0", follow_up_required: "F/U", consultation_summary: "\uC0C1\uB2F4 \uC694\uC57D" };
+                                const lines = Object.entries(s).map(([k, v]) => {
+                                  if (!v || (typeof v === "string" && !v.trim())) return null;
+                                  const label = labelMap[k] || k;
+                                  const val = Array.isArray(v) ? v.join(", ") : (v === true || v === "true") ? "\uD544\uC694" : (v === false || v === "false") ? "\uBD88\uD544\uC694" : String(v);
+                                  return `[${label}] ${val}`;
+                                }).filter(Boolean);
+                                const text = `${item.room_id ?? item.pt_number} | ${item.patient_name || "-"}\n${"=".repeat(30)}\n${lines.join("\n")}`;
+                                navigator.clipboard.writeText(text).then(() => alert("\uBCF5\uC0AC\uB418\uC5C8\uC2B5\uB2C8\uB2E4")).catch(() => alert("Copy failed"));
+                              }}
+                              style={{ padding: "4px 12px", fontSize: "12px", background: "#6366f1", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                            >
+                              {"\uD074\uB9BD\uBCF4\uB4DC \uBCF5\uC0AC"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const a = document.createElement("a");
+                                a.href = `/api/hospital/ai-summary-pdf/${item.session_id}?orgCode=${encodeURIComponent(item.org_code || "")}`;
+                                a.download = `MONO_Summary_${item.room_id}.pdf`;
+                                a.click();
+                              }}
+                              style={{ padding: "4px 12px", fontSize: "12px", background: "#059669", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                            >
+                              PDF
+                            </button>
+                          </div>
                           {Object.entries(item.ai_summary).map(([key, value]) =>
                             value !== null && value !== undefined && (typeof value === "boolean" || (Array.isArray(value) ? value.length > 0 : String(value).trim())) ? (
                               <div key={key} style={{ background: "#f9fafb", borderRadius: "8px", padding: "10px 14px" }}>

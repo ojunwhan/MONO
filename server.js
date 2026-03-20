@@ -6299,7 +6299,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     let rows;
     if (ptNumber) {
       rows = await dbAll(
-        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at,
+        `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
@@ -6310,7 +6310,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
       );
     } else {
       rows = await dbAll(
-        `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at,
+        `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
@@ -6335,7 +6335,9 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
       const parsed = typeof r.ai_summary === 'string' ? safeParseSummary(r.ai_summary) : r.ai_summary;
       return {
         session_id: r.id,
+        room_id: r.room_id,
         pt_number: r.room_id,
+        org_code: r.org_code || '',
         ai_summary: parsed,
         created_at: r.created_at,
         ended_at: r.ended_at,
@@ -6349,6 +6351,75 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     console.error('[hospital:ai-summaries]', e?.message);
     trackUsageError(e, { source: 'hospital:ai-summaries' });
     res.status(500).json({ error: 'ai_summaries_failed' });
+  }
+});
+
+app.get("/api/hospital/ai-summary-pdf/:sessionId", requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCodeQ = req.query.orgCode || req.query.org_code;
+    const sessionId = req.params.sessionId;
+    if (!sessionId) return res.status(400).json({ error: "missing sessionId" });
+
+    const session = await dbGet(
+      `SELECT hs.id, hs.room_id, hs.ai_summary, hs.created_at, hs.ended_at, hs.org_code, hs.patient_token,
+              COALESCE(hs.guest_lang, hp_chart.language, hp_tok.language, '') AS guest_lang,
+              COALESCE(hp_chart.name, hp_tok.name, '') AS patient_name
+       FROM hospital_sessions hs
+       LEFT JOIN hospital_patients hp_chart ON hp_chart.chart_number = hs.chart_number
+       LEFT JOIN hospital_patients hp_tok ON hp_tok.patient_token = hs.patient_token
+       WHERE hs.id = ? LIMIT 1`,
+      [sessionId]
+    );
+    if (!session || !session.ai_summary) return res.status(404).json({ error: "summary not found" });
+
+    const orgFilter = req.hospitalOrgCode || "";
+    if (orgFilter && String(session.org_code || "UNKNOWN") !== String(orgFilter)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const orgRow = await dbGet("SELECT name FROM organizations WHERE org_code = ? LIMIT 1", [session.org_code || orgCodeQ || orgFilter]).catch(() => null);
+
+    let parsed = session.ai_summary;
+    if (typeof parsed === "string") {
+      try { parsed = JSON.parse(parsed); } catch { parsed = { summary: parsed }; }
+    }
+
+    const langMap = { en: "English", ja: "\u65E5\u672C\u8A9E", zh: "\u4E2D\u6587", vi: "Ti\u1EBFng Vi\u1EC7t", th: "\u0E44\u0E17\u0E22", ko: "\uD55C\uAD6D\uC5B4" };
+    const pdfData = {
+      room_id: session.room_id,
+      patient_name: session.patient_name || "-",
+      patient_lang: langMap[session.guest_lang] || session.guest_lang || "-",
+      patient_flag: "",
+      org_name: orgRow?.name || "",
+      created_at: session.created_at || "",
+      ended_at: session.ended_at || "",
+      ai_summary: parsed,
+    };
+
+    const { execSync } = require("child_process");
+    const tmpDir = path.join(__dirname, "state", "tmp");
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const jsonPath = path.join(tmpDir, `summary_${sessionId}.json`);
+    const pdfPath = path.join(tmpDir, `summary_${sessionId}.pdf`);
+    fs.writeFileSync(jsonPath, JSON.stringify(pdfData, null, 2), "utf-8");
+
+    execSync(`python3 ${path.join(__dirname, "scripts", "generate_summary_pdf.py")} "${jsonPath}" "${pdfPath}"`, { timeout: 15000 });
+
+    if (!fs.existsSync(pdfPath)) return res.status(500).json({ error: "pdf generation failed" });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="MONO_Summary_${session.room_id}.pdf"`);
+    const stream = fs.createReadStream(pdfPath);
+    stream.pipe(res);
+    stream.on("end", () => {
+      try { fs.unlinkSync(jsonPath); fs.unlinkSync(pdfPath); } catch (_) {}
+    });
+    stream.on("error", () => {
+      try { fs.unlinkSync(jsonPath); fs.unlinkSync(pdfPath); } catch (_) {}
+    });
+  } catch (e) {
+    console.error("[ai-summary-pdf]", e?.message);
+    res.status(500).json({ error: "pdf generation error" });
   }
 });
 
