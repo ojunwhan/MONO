@@ -55,6 +55,8 @@ async function toBase64FromBlob(blob) {
 }
 
 export default function DualConsultation() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const urlRoomName = searchParams.get("roomName") || "";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
@@ -172,12 +174,6 @@ export default function DualConsultation() {
       cancelled = true;
     };
   }, [ptNumber]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("mono_staff_name", staffName);
-    } catch (_) {}
-  }, [staffName]);
 
   useEffect(() => {
     setPatientEditOpen(false);
@@ -1045,27 +1041,6 @@ export default function DualConsultation() {
                   Single Mic (Auto)
                 </button>
               </div>
-              <div style={{ marginTop: 8, marginBottom: 4 }}>
-                <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Name</label>
-                <input
-                  type="text"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const v = e.currentTarget.value;
-                      setStaffName(v);
-                      try {
-                        localStorage.setItem("mono_staff_name", v);
-                      } catch (_) {}
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  placeholder="Staff name (e.g. Dr. Kim)"
-                  style={{ width: "100%", borderRadius: "6px", border: "1px solid #d1d5db", padding: "8px 10px", fontSize: "14px", boxSizing: "border-box" }}
-                />
-              </div>
               <div style={{ display: "grid", gridTemplateColumns: inputMode === "vad" ? "1fr" : "1fr 1fr", gap: "12px", fontSize: "12px" }}>
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
@@ -1196,7 +1171,7 @@ export default function DualConsultation() {
                 border: "2px solid #6366F1",
               }}
             >
-              {staffRecording ? "Stop" : staffName.trim() || "Staff"}
+              {staffRecording ? "Stop" : staffName.trim() || urlRoomName.trim() || "Staff"}
             </button>
             <button
               type="button"

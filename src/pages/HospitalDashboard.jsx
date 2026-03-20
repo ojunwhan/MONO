@@ -500,7 +500,7 @@ function RoomsPanel({ authUser }) {
           setAddName("");
           setAddTemplate("reception");
           navigate(
-            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}`
+            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}`
           );
           setSubmitting(false);
           return;
@@ -656,7 +656,7 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
 
   const openDualConsultation = () => {
     navigate(
-      `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}`
+      `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}&roomName=${encodeURIComponent(room.name)}`
     );
   };
 
