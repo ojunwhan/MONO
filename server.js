@@ -6101,16 +6101,16 @@ async function extractMedicalSummary(sessionId) {
       messages: [
         {
           role: 'system',
-          content: `You are a medical data extraction assistant for plastic surgery and aesthetic clinics. Extract structured data from this conversation and return ONLY valid JSON with no markdown, no code fences, no explanation.
+          content: `You are a medical data extraction assistant specialized in plastic surgery and aesthetic clinics in Korea. Extract structured data from this interpreted conversation between hospital staff and a foreign patient. Return ONLY valid JSON with no markdown, no code fences, no explanation.
 All values MUST be written in Korean. Return exactly this structure:
 {
-"chief_complaint": "내원 사유 한 문장",
-"procedures_mentioned": ["상담에서 언급된 시술/치료 목록"],
-"patient_requests": ["환자의 구체적 요청이나 선호사항"],
-"budget_mentioned": "언급된 예산, 없으면 null",
-"follow_up_required": true or false,
-"special_notes": ["알레르기, 병력, 우려사항 등 중요 사항"],
-"consultation_summary": "전체 상담 내용 2-3문장 요약"
+  "cc": "\uB0B4\uC6D0 \uC0AC\uC720 \uD55C \uBB38\uC7A5",
+  "consulted_procedures": ["\uC0C1\uB2F4\uC5D0\uC11C \uC5B8\uAE09\uB41C \uC2DC\uC220/\uCE58\uB8CC \uBAA9\uB85D"],
+  "patient_requests": ["\uD658\uC790\uC758 \uAD6C\uCCB4\uC801 \uC694\uCCAD\uC774\uB098 \uC120\uD638\uC0AC\uD56D"],
+  "budget": "\uC5B8\uAE09\uB41C \uC608\uC0B0, \uC5C6\uC73C\uBA74 null",
+  "follow_up": "true \uB610\uB294 false",
+  "special_notes": ["\uC54C\uB808\uB974\uAE30, \uBCD1\uB825, \uC6B0\uB840\uC0AC\uD56D \uB4F1 \uC911\uC694 \uC0AC\uD56D"],
+  "summary": "\uC804\uCCB4 \uC0C1\uB2F4 \uB0B4\uC6A9 2-3\uBB38\uC7A5 \uC694\uC57D"
 }`,
         },
         { role: 'user', content: transcript },

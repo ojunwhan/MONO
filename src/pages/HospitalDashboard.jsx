@@ -398,8 +398,8 @@ export default function HospitalDashboard() {
                           {Object.entries(item.ai_summary).map(([key, value]) =>
                             value && String(value).trim() ? (
                               <div key={key} style={{ background: "#f9fafb", borderRadius: "8px", padding: "10px 14px" }}>
-                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>{({ chief_complaint: "\uC8FC\uD638\uC18C", procedures_mentioned: "\uC5B8\uAE09 \uC2DC\uC220", patient_requests: "\uD658\uC790 \uC694\uCCAD\uC0AC\uD56D", budget_mentioned: "\uC608\uC0B0", follow_up_required: "\uD6C4\uC18D \uC870\uCE58 \uD544\uC694", special_notes: "\uD2B9\uC774\uC0AC\uD56D", consultation_summary: "\uC0C1\uB2F4 \uC694\uC57D" }[key] || key.replace(/_/g, " "))}</div>
-                                <div style={{ fontSize: "14px", color: "#374151" }}>{Array.isArray(value) ? value.join(", ") : String(value)}</div>
+                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>{({ cc: "\u0043\u002E\u0043 (\uB0B4\uC6D0 \uC0AC\uC720)", consulted_procedures: "\uC0C1\uB2F4 \uC2DC\uC220", patient_requests: "\uD658\uC790 \uC694\uCCAD\uC0AC\uD56D", budget: "\uC608\uC0B0", follow_up: "\u0046\u002F\u0055", special_notes: "\uD2B9\uC774\uC0AC\uD56D", summary: "\uC0C1\uB2F4 \uC694\uC57D", chief_complaint: "\u0043\u002E\u0043 (\uB0B4\uC6D0 \uC0AC\uC720)", procedures_mentioned: "\uC0C1\uB2F4 \uC2DC\uC220", budget_mentioned: "\uC608\uC0B0", follow_up_required: "\u0046\u002F\u0055", consultation_summary: "\uC0C1\uB2F4 \uC694\uC57D" }[key] || key.replace(/_/g, " "))}</div>
+                                <div style={{ fontSize: "14px", color: "#374151" }}>{Array.isArray(value) ? value.join(", ") : (value === true || value === "true") ? "\uD544\uC694" : (value === false || value === "false") ? "\uBD88\uD544\uC694" : String(value)}</div>
                               </div>
                             ) : null
                           )}
