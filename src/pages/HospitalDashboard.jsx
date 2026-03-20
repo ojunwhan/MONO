@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import { getLanguageByCode, LANGUAGES } from "../constants/languages";
+import { getFlagUrlByLang, getLabelFromCode } from "../constants/languageProfiles";
 import {
   BarChart3,
   Users,
@@ -35,13 +36,27 @@ import {
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 
-/** consultation_dual patient language dropdown: common hospital langs first, then A–Z by English name. */
-const DUAL_PATIENT_LANG_PRIORITY = ["en", "ja", "zh", "vi", "th", "ru"];
+/** consultation_dual patient language grid order (same flag URL logic as LanguageFlagPicker). */
+function dualPatientFlagToTwemojiUrl(flag) {
+  const codePoints = Array.from(String(flag || ""))
+    .map((ch) => ch.codePointAt(0)?.toString(16))
+    .filter(Boolean);
+  if (!codePoints.length) return "";
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints.join("-")}.svg`;
+}
+
+function getDualPatientFlagImageUrl(code) {
+  const lang = getLanguageByCode(code);
+  const emojiFlagUrl = lang?.flag ? dualPatientFlagToTwemojiUrl(lang.flag) : "";
+  return emojiFlagUrl || getFlagUrlByLang(code);
+}
+
+const DUAL_PATIENT_LANG_PRIORITY = ["en", "ja", "zh", "vi", "th", "id", "mn", "ru"];
 const DUAL_PATIENT_LANG_OPTIONS = (() => {
   const byCode = new Map(LANGUAGES.map((l) => [l.code, l]));
   const priority = [];
-  for (const code of DUAL_PATIENT_LANG_PRIORITY) {
-    const row = byCode.get(code);
+  for (const c of DUAL_PATIENT_LANG_PRIORITY) {
+    const row = byCode.get(c);
     if (row) priority.push(row);
   }
   const rest = LANGUAGES.filter((l) => !DUAL_PATIENT_LANG_PRIORITY.includes(l.code)).sort((a, b) =>
@@ -629,6 +644,8 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
       return "en";
     }
   });
+  const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const dualPatientSelected = getLanguageByCode(dualPatientLang) || getLanguageByCode("en");
   const handleCopyStaff = () => {
     navigator.clipboard?.writeText(staffUrl).then(() => {
       setCopied(true);
@@ -744,23 +761,66 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 언어 (외국어)</label>
-            <select
-              value={dualPatientLang}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDualPatientLang(v);
-                try {
-                  localStorage.setItem("dualConsult_patientLang", v);
-                } catch (_) {}
-              }}
-              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            <button
+              type="button"
+              onClick={() => setShowLangDropdown((v) => !v)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left hover:bg-[var(--color-bg-secondary)]/50"
             >
-              {DUAL_PATIENT_LANG_OPTIONS.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {(l.flag ? `${l.flag} ` : "") + (l.nativeName || l.name || l.code)}
-                </option>
-              ))}
-            </select>
+              <img
+                src={getDualPatientFlagImageUrl(dualPatientLang)}
+                alt=""
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-[6px] object-cover shrink-0"
+                loading="lazy"
+              />
+              <div className="flex-1 min-w-0">
+                <span className="text-[13px] font-semibold text-[var(--color-text)]">
+                  {getLabelFromCode(dualPatientLang) || String(dualPatientLang || "").toUpperCase()}{" "}
+                  <span className="font-normal text-[var(--color-text-secondary)]">
+                    {dualPatientSelected?.name || "English"}
+                  </span>
+                </span>
+              </div>
+              {showLangDropdown ? <ChevronUp size={18} className="shrink-0 text-[var(--color-text-secondary)]" /> : <ChevronDown size={18} className="shrink-0 text-[var(--color-text-secondary)]" />}
+            </button>
+            {showLangDropdown ? (
+              <div className="mt-1 grid grid-cols-4 gap-2 max-h-60 overflow-y-auto rounded-[8px] border border-[var(--color-border)] p-2 bg-[var(--color-bg)]">
+                {DUAL_PATIENT_LANG_OPTIONS.map((p) => {
+                  const isSelected = dualPatientLang === p.code;
+                  return (
+                    <button
+                      key={p.code}
+                      type="button"
+                      onClick={() => {
+                        setDualPatientLang(p.code);
+                        try {
+                          localStorage.setItem("dualConsult_patientLang", p.code);
+                        } catch (_) {}
+                        setShowLangDropdown(false);
+                      }}
+                      className={`rounded-[10px] border-2 px-1 py-2 text-center transition-colors ${
+                        isSelected
+                          ? "border-[#3B82F6] bg-[#EFF6FF]"
+                          : "border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[#F8FAFC]"
+                      }`}
+                    >
+                      <img
+                        src={getDualPatientFlagImageUrl(p.code)}
+                        alt={`${p.name || p.code} flag`}
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 mx-auto rounded-[8px] object-cover"
+                        loading="lazy"
+                      />
+                      <div className="mt-1.5 text-[11px] font-semibold tracking-wide text-[var(--color-text)]">
+                        {getLabelFromCode(p.code) || String(p.code || "").toUpperCase()}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
