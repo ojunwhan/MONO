@@ -53,7 +53,7 @@ const MENU_ITEMS = [
   { id: "overview", label: "통계 개요", icon: BarChart3 },
   { id: "history", label: "환자 통역 이력", icon: Users },
   { id: "departments", label: "진료과별 현황", icon: Building2 },
-  { id: "rooms", label: "방 관리", icon: LayoutGrid },
+  { id: "rooms", label: "\uBC29 \uB9CC\uB4E4\uAE30", icon: LayoutGrid },
   { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
   { id: "ai-summary", label: "AI 요약", icon: Sparkles },
@@ -274,7 +274,7 @@ export default function HospitalDashboard() {
                 key={`sidebar-${index}-${item.id}`}
                 type="button"
                 onClick={() => setActiveMenu(item.id)}
-                className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-medium transition-colors ${
+                className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-semibold transition-colors ${
                   isActive
                     ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#2563EB] border-r-2 border-[#2563EB]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text)]"
@@ -420,7 +420,7 @@ export default function HospitalDashboard() {
 }
 
 // ═══════════════════════════════════════════
-// ROOMS PANEL — 방 관리 (추가, QR, 인쇄, 링크 복사)
+// ROOMS PANEL — \uBC29 \uB9CC\uB4E4\uAE30 (추가, QR, 인쇄, 링크 복사)
 // ═══════════════════════════════════════════
 const ROOM_TEMPLATES = [
   { value: "reception", label: "\uC811\uC218 \uBAA8\uB4DC" },
