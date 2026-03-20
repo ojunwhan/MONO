@@ -6080,16 +6080,15 @@ async function extractMedicalSummary(sessionId) {
         {
           role: 'system',
           content: `You are a medical data extraction assistant for plastic surgery and aesthetic clinics. Extract structured data from this conversation and return ONLY valid JSON with no markdown, no code fences, no explanation.
-
-Return exactly this structure:
+All values MUST be written in Korean. Return exactly this structure:
 {
-  "chief_complaint": "main reason for visit in one sentence",
-  "procedures_mentioned": ["list of procedures or treatments discussed"],
-  "patient_requests": ["specific requests or preferences from patient"],
-  "budget_mentioned": "budget if mentioned, else null",
-  "follow_up_required": true or false,
-  "special_notes": ["allergies, medical history, concerns, or anything important"],
-  "consultation_summary": "2-3 sentence summary of the entire consultation"
+"chief_complaint": "내원 사유 한 문장",
+"procedures_mentioned": ["상담에서 언급된 시술/치료 목록"],
+"patient_requests": ["환자의 구체적 요청이나 선호사항"],
+"budget_mentioned": "언급된 예산, 없으면 null",
+"follow_up_required": true or false,
+"special_notes": ["알레르기, 병력, 우려사항 등 중요 사항"],
+"consultation_summary": "전체 상담 내용 2-3문장 요약"
 }`,
         },
         { role: 'user', content: transcript },
