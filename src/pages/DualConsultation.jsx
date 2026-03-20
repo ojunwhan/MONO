@@ -70,7 +70,9 @@ export default function DualConsultation() {
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
   const [textInputValue, setTextInputValue] = useState("");
-  const [staffName, setStaffName] = useState(() => {
+  const [staffName] = useState(() => {
+    const fromUrl = (new URLSearchParams(window.location.search).get("roomName") || "").trim();
+    if (fromUrl) return fromUrl;
     try {
       return localStorage.getItem("mono_staff_name") || "";
     } catch {
@@ -1171,7 +1173,7 @@ export default function DualConsultation() {
                 border: "2px solid #6366F1",
               }}
             >
-              {staffRecording ? "Stop" : staffName.trim() || urlRoomName.trim() || "Staff"}
+              {staffRecording ? "Stop" : urlRoomName.trim() || staffName.trim() || "Staff"}
             </button>
             <button
               type="button"
