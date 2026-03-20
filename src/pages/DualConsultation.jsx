@@ -4,12 +4,41 @@
  * scrollable message area (staff right, patient left), two bottom mic buttons.
  * Uses existing socket events: join, stt:whisper, receive-message, receive-message-stream, receive-message-stream-end.
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import socket from "../socket";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
+
+function readDualConsultUrlBoot() {
+  if (typeof window === "undefined") {
+    return { room: "", org: "", staffLang: "", patientLang: "", doctor: "", ptNumber: "", patientName: "" };
+  }
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const dec = (k) => {
+      const raw = sp.get(k);
+      if (raw == null || raw === "") return "";
+      try {
+        return decodeURIComponent(raw.replace(/\+/g, " "));
+      } catch {
+        return raw;
+      }
+    };
+    return {
+      room: sp.get("room")?.trim() || "",
+      org: sp.get("org")?.trim() || "",
+      staffLang: sp.get("staffLang")?.trim() || "",
+      patientLang: sp.get("patientLang")?.trim() || "",
+      doctor: dec("doctor"),
+      ptNumber: dec("ptNumber"),
+      patientName: dec("patientName"),
+    };
+  } catch {
+    return { room: "", org: "", staffLang: "", patientLang: "", doctor: "", ptNumber: "", patientName: "" };
+  }
+}
 
 function twemojiFlagSvgUrl(flag) {
   const codePoints = Array.from(String(flag || ""))
@@ -56,11 +85,29 @@ async function toBase64FromBlob(blob) {
 
 export default function DualConsultation() {
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
-  const [ptNumber, setPtNumber] = useState("");
+  const urlBootOnce = useMemo(() => readDualConsultUrlBoot(), []);
+  const [ptNumber, setPtNumber] = useState(() => readDualConsultUrlBoot().ptNumber || "");
   const [connected, setConnected] = useState(false);
   const [roomId, setRoomId] = useState("");
-  const [staffLang, setStaffLang] = useState("ko");
-  const [patientLang, setPatientLang] = useState("en");
+  const [staffLang, setStaffLang] = useState(() => {
+    const sl = readDualConsultUrlBoot().staffLang;
+    if (sl) return sl;
+    try {
+      return localStorage.getItem("dualConsult_staffLang") || "ko";
+    } catch {
+      return "ko";
+    }
+  });
+  const [patientLang, setPatientLang] = useState(() => {
+    const pl = readDualConsultUrlBoot().patientLang;
+    if (pl) return pl;
+    try {
+      return localStorage.getItem("dualConsult_patientLang") || "en";
+    } catch {
+      return "en";
+    }
+  });
+  const [doctorName, setDoctorName] = useState(() => readDualConsultUrlBoot().doctor || "");
   const [staffDeviceId, setStaffDeviceId] = useState("");
   const [patientDeviceId, setPatientDeviceId] = useState("");
   const [devices, setDevices] = useState([]);
@@ -75,7 +122,7 @@ export default function DualConsultation() {
       return "";
     }
   });
-  const [patientDisplayName, setPatientDisplayName] = useState("");
+  const [patientDisplayName, setPatientDisplayName] = useState(() => readDualConsultUrlBoot().patientName || "");
   const [regPatientName, setRegPatientName] = useState("");
   const [regPatientLang, setRegPatientLang] = useState("en");
   const [patientEditOpen, setPatientEditOpen] = useState(false);
@@ -180,6 +227,17 @@ export default function DualConsultation() {
   }, [staffName]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem("dualConsult_staffLang", staffLang);
+    } catch (_) {}
+  }, [staffLang]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("dualConsult_patientLang", patientLang);
+    } catch (_) {}
+  }, [patientLang]);
+
+  useEffect(() => {
     setPatientEditOpen(false);
     setRegPatientName("");
     setRegPatientLang("en");
@@ -188,30 +246,46 @@ export default function DualConsultation() {
 
   useEffect(() => {
     const q = ptNumber.trim();
-    if (!q) {
+    const roomFromUrl = (urlBootOnce.room || "").trim();
+    const fetchId = roomFromUrl || q;
+    if (!fetchId) {
+      const b = urlBootOnce;
+      if ((b.patientName || "").trim() && !(b.ptNumber || "").trim()) return;
       setPatientDisplayName("");
       return;
     }
     let cancelled = false;
-    fetch(`/api/hospital/patient-by-room/${encodeURIComponent(q)}/history`)
+    fetch(`/api/hospital/patient-by-room/${encodeURIComponent(fetchId)}/history`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
         const n = data?.patient_name;
-        setPatientDisplayName(typeof n === "string" && n.trim() ? n.trim() : "");
+        const urlPatientName = (urlBootOnce.patientName || "").trim();
+        if (typeof n === "string" && n.trim()) {
+          setPatientDisplayName(n.trim());
+        } else if (urlPatientName) {
+          setPatientDisplayName(urlPatientName);
+        } else {
+          setPatientDisplayName("");
+        }
         const pl = data?.patient_lang;
-        if (typeof pl === "string" && pl.trim()) {
+        const urlPl = (urlBootOnce.patientLang || "").trim();
+        if (!urlPl && typeof pl === "string" && pl.trim()) {
           const code = pl.trim().toLowerCase().split("-")[0];
           if (LANG_TO_LABEL[code] !== undefined) setPatientLang(code);
         }
       })
       .catch(() => {
-        if (!cancelled) setPatientDisplayName("");
+        if (!cancelled) {
+          const urlPatientName = (urlBootOnce.patientName || "").trim();
+          if (urlPatientName) setPatientDisplayName(urlPatientName);
+          else setPatientDisplayName("");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [ptNumber]);
+  }, [ptNumber, urlBootOnce]);
 
   const submitPatientUpsert = useCallback(async ({ name, lang }) => {
     const token = ptNumber.trim();
@@ -378,26 +452,47 @@ export default function DualConsultation() {
     roomIdRef.current = roomId;
   }, [roomId]);
 
-  // Socket: join only when user clicks Connect (never on mount)
-  const handleConnect = useCallback(() => {
-    if (!ptNumber.trim()) return;
-    const pt = String(ptNumber).trim();
+  const joinConsultationRoom = useCallback((joinRoomId) => {
+    const rid = String(joinRoomId || "").trim();
+    if (!rid) return;
     const pid = "dc-" + crypto.randomUUID();
     participantIdRef.current = pid;
-    console.log("[Dual] handleConnect pid set:", participantIdRef.current);
+    console.log("[Dual] joinConsultationRoom pid set:", participantIdRef.current, "room:", rid);
     connectedRef.current = true;
-    setRoomId(pt);
+    setRoomId(rid);
     const siteContext = "hospital_plastic_surgery";
     socket.emit("join", {
-      roomId: pt,
+      roomId: rid,
       participantId: pid,
-      fromLang: staffLang,
+      fromLang: staffLangRef.current,
       roleHint: "host",
       localName: "Staff",
       siteContext,
     });
     setConnected(true);
-  }, [ptNumber, staffLang]);
+  }, []);
+
+  const handleConnect = useCallback(() => {
+    const preset = (urlBootOnce.room || "").trim();
+    const join = preset || ptNumber.trim();
+    if (!join) return;
+    joinConsultationRoom(join);
+  }, [ptNumber, urlBootOnce, joinConsultationRoom]);
+
+  useEffect(() => {
+    if (connected) return;
+    const room = (urlBootOnce.room || "").trim();
+    const pt = (urlBootOnce.ptNumber || "").trim();
+    const sl = (urlBootOnce.staffLang || "").trim();
+    const pl = (urlBootOnce.patientLang || "").trim();
+    const join = room || pt;
+    if (!join || !sl || !pl) return;
+    const t = setTimeout(() => {
+      if (connectedRef.current) return;
+      joinConsultationRoom(join);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [urlBootOnce, joinConsultationRoom, connected]);
 
   // Unmount: leave room if we had connected
   useEffect(() => {
@@ -765,6 +860,10 @@ export default function DualConsultation() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, [textInputValue, connected]);
 
+  const summaryPt = ptNumber.trim() || (urlBootOnce.room || "").trim();
+  const summaryPatient = patientDisplayName.trim();
+  const showSessionSummary = Boolean(doctorName.trim() || summaryPatient || summaryPt);
+
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       {/* Top bar */}
@@ -829,8 +928,16 @@ export default function DualConsultation() {
           <button
             type="button"
             onClick={handleConnect}
-            disabled={connected || !ptNumber.trim()}
-            style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
+            disabled={connected || !(ptNumber.trim() || (urlBootOnce.room || "").trim())}
+            style={{
+              borderRadius: "8px",
+              background: "#2563EB",
+              padding: "8px 16px",
+              fontSize: "14px",
+              fontWeight: 500,
+              color: "#fff",
+              opacity: connected || !(ptNumber.trim() || (urlBootOnce.room || "").trim()) ? 0.5 : 1,
+            }}
           >
             {connected ? "Connected" : "Connect"}
           </button>
@@ -845,6 +952,18 @@ export default function DualConsultation() {
             </button>
           )}
         </div>
+        {showSessionSummary ? (
+          <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45 }}>
+            {doctorName.trim() ? <span>??: {doctorName.trim()}</span> : null}
+            {doctorName.trim() && (summaryPatient || summaryPt) ? <span> | </span> : null}
+            {summaryPatient || summaryPt ? (
+              <span>
+                ??: {summaryPatient || "?"}
+                {summaryPt ? ` (${summaryPt})` : ""}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {ptNumber.trim() && !patientDisplayName ? (
           <div
             style={{

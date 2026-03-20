@@ -34,6 +34,7 @@ import {
   Sparkles,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
+import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import {
   BarChart,
   Bar,
@@ -600,10 +601,27 @@ function RoomsPanel({ authUser }) {
 }
 
 function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelete }) {
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
+  const [dualDoctor, setDualDoctor] = useState("");
+  const [dualStaffLang, setDualStaffLang] = useState(() => {
+    try {
+      return localStorage.getItem("dualConsult_staffLang") || "ko";
+    } catch {
+      return "ko";
+    }
+  });
+  const [dualPtNumber, setDualPtNumber] = useState("");
+  const [dualPatientName, setDualPatientName] = useState("");
+  const [dualPatientLang, setDualPatientLang] = useState(() => {
+    try {
+      return localStorage.getItem("dualConsult_patientLang") || "en";
+    } catch {
+      return "en";
+    }
+  });
   const handleCopyStaff = () => {
     navigator.clipboard?.writeText(staffUrl).then(() => {
       setCopied(true);
@@ -643,6 +661,25 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
         : "접수 모드 (탭하여 말하기)";
   const isConsultationDual = room.template === "consultation_dual";
 
+  const handleStartDualConsultation = () => {
+    try {
+      localStorage.setItem("dualConsult_staffLang", dualStaffLang);
+      localStorage.setItem("dualConsult_patientLang", dualPatientLang);
+    } catch (_) {}
+    const q = new URLSearchParams();
+    q.set("room", room.id);
+    if (orgCode) q.set("org", orgCode);
+    q.set("staffLang", dualStaffLang);
+    q.set("patientLang", dualPatientLang);
+    const d = dualDoctor.trim();
+    if (d) q.set("doctor", d);
+    const pt = dualPtNumber.trim();
+    if (pt) q.set("ptNumber", pt);
+    const pn = dualPatientName.trim();
+    if (pn) q.set("patientName", pn);
+    navigate(`/dual-consultation?${q.toString()}`);
+  };
+
   return (
     <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] flex flex-col items-center">
       <div className="w-full flex items-start justify-between gap-2 mb-2">
@@ -662,6 +699,71 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
       <span className="text-[11px] font-medium text-[var(--color-text-secondary)] mb-3 px-2 py-1 rounded-md bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
         {templateLabel}
       </span>
+      {isConsultationDual ? (
+        <div className="w-full mb-4 space-y-3 text-left">
+          <p className="text-[13px] font-bold text-[var(--color-text)]">상담 시작</p>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">담당 의사</label>
+            <input
+              type="text"
+              value={dualDoctor}
+              onChange={(e) => setDualDoctor(e.target.value)}
+              placeholder="담당 의사 이름"
+              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">병원쪽 언어</label>
+            <div className="w-full [&_p]:hidden">
+              <LanguageFlagPicker
+                selectedLang={dualStaffLang}
+                showGrid
+                onToggleGrid={() => {}}
+                onSelect={(code) => setDualStaffLang(code)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 차트번호</label>
+            <input
+              type="text"
+              value={dualPtNumber}
+              onChange={(e) => setDualPtNumber(e.target.value)}
+              placeholder="PT-XXXXXX 또는 차트번호"
+              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 이름</label>
+            <input
+              type="text"
+              value={dualPatientName}
+              onChange={(e) => setDualPatientName(e.target.value)}
+              placeholder="환자 이름"
+              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 언어 (외국어)</label>
+            <div className="w-full [&_p]:hidden">
+              <LanguageFlagPicker
+                selectedLang={dualPatientLang}
+                showGrid
+                onToggleGrid={() => {}}
+                onSelect={(code) => setDualPatientLang(code)}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleStartDualConsultation}
+            className="w-full py-3 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-bold hover:bg-[#1D4ED8] shadow-sm"
+          >
+            상담 시작
+          </button>
+          <div className="border-t border-[var(--color-border)] pt-4 mt-1 w-full" />
+        </div>
+      ) : null}
       <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
         <Suspense fallback={<span className="inline-block w-[160px] h-[160px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
           <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
