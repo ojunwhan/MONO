@@ -372,27 +372,11 @@ const DEPT_TERM_MAP = {
 function getMedicalTermContext(dept = 'reception', targetLang = 'en') {
   const termSets = DEPT_TERM_MAP[dept] || DEPT_TERM_MAP['reception'];
   const allTerms = termSets.flat();
-
   const lines = allTerms.map(term => {
     const target = term[targetLang] || term['en'];
-    return `- ${term.ko} = ${target}`;
+    return `${term.ko}=${target}`;
   });
-
-  return `
-[전문 의료 통역 지침]
-당신은 병원 전문 의료통역사입니다.
-아래 용어집을 최우선으로 참조하여 정확하게 번역하세요.
-의학 용어는 아래 표준 번역어를 반드시 사용하세요.
-
-[${dept.toUpperCase()} 과 전문용어]
-${lines.join('\n')}
-
-번역 원칙:
-1. 의학 용어는 위 용어집 기준을 우선 적용
-2. 용어집에 없는 경우 의학적으로 가장 정확한 표현 사용
-3. 환자가 이해하기 쉬운 자연스러운 표현으로 번역
-4. 약품명, 시술명, 검사명은 정확하게 유지
-`.trim();
+  return `[Medical glossary - use these translations]\n${lines.join('\n')}`;
 }
 
 module.exports = { getMedicalTermContext };

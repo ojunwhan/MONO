@@ -634,7 +634,7 @@ const SITE_CONTEXT_PROMPTS = {
   hospital_dermatology: `You are a professional medical interpreter specializing in Dermatology. Translate accurately in the context of skin conditions. Prioritize precise translation of terms related to: rash, eczema, psoriasis, acne, moles, skin biopsy, dermatitis, hives, fungal infections, topical medications, UV exposure, skin cancer screening.`,
   hospital_ophthalmology: `You are a professional medical interpreter specializing in Ophthalmology. Translate accurately in the context of eye conditions. Prioritize precise translation of terms related to: visual acuity, cataracts, glaucoma, retinal conditions, intraocular pressure, eye drops, laser surgery, lens prescription, fundoscopy, OCT scan.`,
   hospital_dentistry: `You are a professional medical interpreter specializing in Dentistry. Translate accurately in the context of dental conditions. Prioritize precise translation of terms related to: cavity/caries, root canal, crown, bridge, extraction, implant, gum disease, scaling, filling, orthodontics, wisdom teeth, dental X-ray, local anesthesia.`,
-  hospital_plastic_surgery: `You are a professional medical interpreter specializing in Plastic and Cosmetic Surgery. Translate accurately in the context of cosmetic and reconstructive surgical consultations, pre/post-operative care, and aesthetic procedures. Prioritize precise translation of terms related to: rhinoplasty, blepharoplasty, facelift, liposuction, breast augmentation, botox, filler, laser treatment, skin rejuvenation, scar revision, jaw surgery, cheekbone reduction, fat grafting, thread lifting, recovery period, swelling, bruising, compression garments, follow-up appointments. Patient safety is the top priority — never omit or alter surgical instructions, medication dosages, or post-operative care guidelines.`,
+  hospital_plastic_surgery: `You are a professional medical interpreter for Plastic/Cosmetic Surgery. Translate accurately for surgical consultations, pre/post-op care, and aesthetic procedures. Patient safety is top priority — never omit surgical instructions, dosages, or care guidelines.`,
 };
 
 // ───────────────── CALL SIGN SYSTEM (DETERMINISTIC — NO GPT) ─────────────────
@@ -1750,29 +1750,7 @@ function buildSystemPrompt(from, to, ctx, siteContext, opts = {}) {
     const isMedical = isHospital || (contextInject && medicalTerms);
     if (isMedical) {
       const hospitalRegister = isHospital
-        ? `
-CRITICAL — Hospital Mode Language Register:
-Always translate using the highest level of formal, respectful language
-regardless of the target language.
-This applies to ALL 99 supported languages without exception.
-
-The output must always sound like:
-- A professional medical staff speaking to a patient with full respect
-- Or a patient speaking to a doctor with full politeness
-- NEVER casual, informal, or blunt expressions
-- NEVER slang or colloquial language
-
-Examples of register:
-- Korean: ~하십니까, ~드리겠습니다, ~하시겠습니까 (최고 존칭)
-- English: 'Would you please~', 'May I ask~', 'I would like to inform you~'
-- Japanese: 最敬語・丁寧語 (keigo, sonkeigo)
-- Chinese: 您 instead of 你, 请问, 非常抱歉
-- Vietnamese: kính thưa, xin phép
-- All other languages: equivalent highest formal/honorific register
-
-If the source text is casual or informal,
-ALWAYS elevate the register in the translation to formal/respectful.
-Do not mirror the informality of the source.`
+        ? `\nCRITICAL: Always use the highest formal/honorific register in the target language. Elevate casual source text to formal. Never mirror informality.`
         : "";
       return [
         siteDomain,
