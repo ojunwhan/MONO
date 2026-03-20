@@ -782,7 +782,7 @@ export default function DualConsultation() {
   }, [textInputValue, connected]);
 
   const handleEndSession = useCallback(() => {
-    if (!window.confirm("??? ?????????")) return;
+    if (!window.confirm("\uC0C1\uB2F4\uC744 \uC885\uB8CC\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?")) return;
     const rid = roomIdRef.current;
     if (rid && socket) {
       socket.emit("dual-consultation:end", { roomId: rid });
