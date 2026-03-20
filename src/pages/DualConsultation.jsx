@@ -8,7 +8,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "../socket";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { getFlagUrlByLang } from "../constants/languageProfiles";
-import { getLanguageByCode } from "../constants/languages";
+import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
 
 function twemojiFlagSvgUrl(flag) {
@@ -26,18 +26,15 @@ function patientTopBarFlagFallbackUrl(langCode) {
   return (lang?.flag && twemojiFlagSvgUrl(lang.flag)) || getFlagUrlByLang(key);
 }
 
-const REGISTRATION_LANG_OPTIONS = [
-  { value: "en", label: "English" },
-  { value: "zh", label: "Chinese (\u4E2D\u6587)" },
-  { value: "ja", label: "Japanese (\u65E5\u672C\u8A9E)" },
-  { value: "vi", label: "Vietnamese" },
-  { value: "ru", label: "Russian" },
-  { value: "th", label: "Thai" },
-  { value: "id", label: "Indonesian" },
-  { value: "ko", label: "Korean (\uD55C\uAD6D\uC5B4)" },
-  { value: "es", label: "Spanish" },
-  { value: "ar", label: "Arabic" },
-];
+/** Full MONO language list for registration/edit dropdowns; sorted A?Z by English name. */
+const REGISTRATION_LANG_OPTIONS = [...LANGUAGES]
+  .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }))
+  .map((l) => {
+    const name = l.name || l.code;
+    const native = String(l.nativeName || "").trim();
+    const label = native && native !== String(name).trim() ? `${name} (${l.nativeName})` : name;
+    return { value: l.code, label };
+  });
 
 function getRegistrationOrgCode() {
   if (typeof window === "undefined") return "ORG-0001";
