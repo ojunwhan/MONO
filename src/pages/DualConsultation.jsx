@@ -875,7 +875,7 @@ export default function DualConsultation() {
               onClick={handleEndSession}
               style={{ padding: "6px 16px", background: "#ef4444", color: "#fff", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
             >
-              ?? ??
+              {"\uC0C1\uB2F4 \uC885\uB8CC"}
             </button>
           )}
         </div>
