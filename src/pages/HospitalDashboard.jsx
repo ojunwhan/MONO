@@ -3,8 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspens
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
-import { getLanguageByCode, LANGUAGES } from "../constants/languages";
-import { getFlagUrlByLang, getLabelFromCode } from "../constants/languageProfiles";
+import { getLanguageByCode } from "../constants/languages";
 import {
   BarChart3,
   Users,
@@ -35,35 +34,6 @@ import {
   Sparkles,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
-
-/** consultation_dual patient language grid order (same flag URL logic as LanguageFlagPicker). */
-function dualPatientFlagToTwemojiUrl(flag) {
-  const codePoints = Array.from(String(flag || ""))
-    .map((ch) => ch.codePointAt(0)?.toString(16))
-    .filter(Boolean);
-  if (!codePoints.length) return "";
-  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints.join("-")}.svg`;
-}
-
-function getDualPatientFlagImageUrl(code) {
-  const lang = getLanguageByCode(code);
-  const emojiFlagUrl = lang?.flag ? dualPatientFlagToTwemojiUrl(lang.flag) : "";
-  return emojiFlagUrl || getFlagUrlByLang(code);
-}
-
-const DUAL_PATIENT_LANG_PRIORITY = ["en", "ja", "zh", "vi", "th", "id", "mn", "ru"];
-const DUAL_PATIENT_LANG_OPTIONS = (() => {
-  const byCode = new Map(LANGUAGES.map((l) => [l.code, l]));
-  const priority = [];
-  for (const c of DUAL_PATIENT_LANG_PRIORITY) {
-    const row = byCode.get(c);
-    if (row) priority.push(row);
-  }
-  const rest = LANGUAGES.filter((l) => !DUAL_PATIENT_LANG_PRIORITY.includes(l.code)).sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "", "en", { sensitivity: "base" })
-  );
-  return [...priority, ...rest];
-})();
 import {
   BarChart,
   Bar,
@@ -459,6 +429,7 @@ const ROOM_TEMPLATES = [
 ];
 
 function RoomsPanel({ authUser }) {
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addName, setAddName] = useState("");
@@ -524,6 +495,16 @@ function RoomsPanel({ authUser }) {
       });
       const data = await r.json();
       if (data.success) {
+        if (addTemplate === "consultation_dual" && data.room) {
+          setRooms((prev) => [data.room, ...prev]);
+          setAddName("");
+          setAddTemplate("reception");
+          navigate(
+            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}`
+          );
+          setSubmitting(false);
+          return;
+        }
         setRooms((prev) => [data.room, ...prev]);
         setAddName("");
         setAddTemplate("reception");
@@ -634,18 +615,6 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
   const [copied, setCopied] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [dualDoctor, setDualDoctor] = useState("");
-  const [dualPtNumber, setDualPtNumber] = useState("");
-  const [dualPatientName, setDualPatientName] = useState("");
-  const [dualPatientLang, setDualPatientLang] = useState(() => {
-    try {
-      return localStorage.getItem("dualConsult_patientLang") || "en";
-    } catch {
-      return "en";
-    }
-  });
-  const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const dualPatientSelected = getLanguageByCode(dualPatientLang) || getLanguageByCode("en");
   const handleCopyStaff = () => {
     navigator.clipboard?.writeText(staffUrl).then(() => {
       setCopied(true);
@@ -685,24 +654,10 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
         : "접수 모드 (탭하여 말하기)";
   const isConsultationDual = room.template === "consultation_dual";
 
-  const handleStartDualConsultation = () => {
-    const staffLang = "ko";
-    try {
-      localStorage.setItem("dualConsult_staffLang", staffLang);
-      localStorage.setItem("dualConsult_patientLang", dualPatientLang);
-    } catch (_) {}
-    const q = new URLSearchParams();
-    q.set("room", room.id);
-    if (orgCode) q.set("org", orgCode);
-    q.set("staffLang", staffLang);
-    q.set("patientLang", dualPatientLang);
-    const d = dualDoctor.trim();
-    if (d) q.set("doctor", d);
-    const pt = dualPtNumber.trim();
-    if (pt) q.set("ptNumber", pt);
-    const pn = dualPatientName.trim();
-    if (pn) q.set("patientName", pn);
-    navigate(`/dual-consultation?${q.toString()}`);
+  const openDualConsultation = () => {
+    navigate(
+      `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}`
+    );
   };
 
   return (
@@ -725,109 +680,13 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
         {templateLabel}
       </span>
       {isConsultationDual ? (
-        <div className="w-full space-y-2 text-left mb-1">
-          <p className="text-[12px] font-bold text-[var(--color-text)] border-b border-[var(--color-border)] pb-1.5 mb-1">
-            상담 시작
-          </p>
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">담당자</label>
-            <input
-              type="text"
-              value={dualDoctor}
-              onChange={(e) => setDualDoctor(e.target.value)}
-              placeholder="담당자 이름"
-              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
-            />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 차트번호</label>
-            <input
-              type="text"
-              value={dualPtNumber}
-              onChange={(e) => setDualPtNumber(e.target.value)}
-              placeholder="PT-XXXXXX 또는 차트번호"
-              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
-            />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 이름</label>
-            <input
-              type="text"
-              value={dualPatientName}
-              onChange={(e) => setDualPatientName(e.target.value)}
-              placeholder="환자 이름"
-              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
-            />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 언어 (외국어)</label>
-            <button
-              type="button"
-              onClick={() => setShowLangDropdown((v) => !v)}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-left hover:bg-[var(--color-bg-secondary)]/50"
-            >
-              <img
-                src={getDualPatientFlagImageUrl(dualPatientLang)}
-                alt=""
-                width={32}
-                height={32}
-                className="w-8 h-8 rounded-[6px] object-cover shrink-0"
-                loading="lazy"
-              />
-              <div className="flex-1 min-w-0">
-                <span className="text-[13px] font-semibold text-[var(--color-text)]">
-                  {getLabelFromCode(dualPatientLang) || String(dualPatientLang || "").toUpperCase()}{" "}
-                  <span className="font-normal text-[var(--color-text-secondary)]">
-                    {dualPatientSelected?.name || "English"}
-                  </span>
-                </span>
-              </div>
-              {showLangDropdown ? <ChevronUp size={18} className="shrink-0 text-[var(--color-text-secondary)]" /> : <ChevronDown size={18} className="shrink-0 text-[var(--color-text-secondary)]" />}
-            </button>
-            {showLangDropdown ? (
-              <div className="mt-1 grid grid-cols-4 gap-2 max-h-60 overflow-y-auto rounded-[8px] border border-[var(--color-border)] p-2 bg-[var(--color-bg)]">
-                {DUAL_PATIENT_LANG_OPTIONS.map((p) => {
-                  const isSelected = dualPatientLang === p.code;
-                  return (
-                    <button
-                      key={p.code}
-                      type="button"
-                      onClick={() => {
-                        setDualPatientLang(p.code);
-                        try {
-                          localStorage.setItem("dualConsult_patientLang", p.code);
-                        } catch (_) {}
-                        setShowLangDropdown(false);
-                      }}
-                      className={`rounded-[10px] border-2 px-1 py-2 text-center transition-colors ${
-                        isSelected
-                          ? "border-[#3B82F6] bg-[#EFF6FF]"
-                          : "border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[#F8FAFC]"
-                      }`}
-                    >
-                      <img
-                        src={getDualPatientFlagImageUrl(p.code)}
-                        alt={`${p.name || p.code} flag`}
-                        width={48}
-                        height={48}
-                        className="w-12 h-12 mx-auto rounded-[8px] object-cover"
-                        loading="lazy"
-                      />
-                      <div className="mt-1.5 text-[11px] font-semibold tracking-wide text-[var(--color-text)]">
-                        {getLabelFromCode(p.code) || String(p.code || "").toUpperCase()}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
+        <div className="flex flex-wrap gap-2 w-full justify-center mb-2">
           <button
             type="button"
-            onClick={handleStartDualConsultation}
-            className="w-full py-2.5 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-bold hover:bg-[#1D4ED8] shadow-sm mt-1"
+            onClick={openDualConsultation}
+            className="flex items-center justify-center gap-2 w-full max-w-[280px] px-3 py-2.5 rounded-[8px] bg-[#2563EB] text-white text-[13px] font-semibold hover:bg-[#1D4ED8]"
           >
-            상담 시작
+            상담실 열기
           </button>
         </div>
       ) : null}
