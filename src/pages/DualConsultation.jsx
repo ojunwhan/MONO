@@ -1252,47 +1252,91 @@ export default function DualConsultation() {
       </header>
 
       {/* Single unified chat area */}
-      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
+      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px", background: "#FAF9F7" }}>
         {inputMode === "vad" && webSpeechInterim ? (
           <div style={{ padding: "8px 16px", fontSize: 14, color: "#9ca3af", fontStyle: "italic", minHeight: 24 }}>
             {`${"\uBC88\uC5ED \uC911..."} ${webSpeechInterim}`}
           </div>
         ) : null}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            style={{
-              marginBottom: "12px",
-              display: "flex",
-              justifyContent: m.isStaff ? "flex-start" : "flex-end",
-            }}
-          >
-            <div
+        {messages.map((m) => {
+          const langCodeForFlag = m.isStaff ? staffLang : patientLang;
+          const flagKey = String(langCodeForFlag || "").toLowerCase().split("-")[0];
+          const flagLang = getLanguageByCode(flagKey);
+          const bubbleFlagSrc =
+            (flagLang?.flag && twemojiFlagSvgUrl(flagLang.flag)) || getFlagUrlByLang(flagKey);
+          const flagImg = (
+            <img
+              src={bubbleFlagSrc}
+              alt=""
+              width={24}
+              height={24}
               style={{
-                maxWidth: "70%",
-                width: "fit-content",
-                borderRadius: m.isStaff ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
-                padding: "8px 16px",
-                background: m.isStaff ? "#3B82F6" : "#10B981",
-                color: "#fff",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                width: 24,
+                height: 24,
+                borderRadius: 4,
+                objectFit: "cover",
+                flexShrink: 0,
+                marginRight: m.isStaff ? 4 : 0,
+                marginLeft: m.isStaff ? 0 : 4,
+              }}
+              loading="lazy"
+            />
+          );
+          return (
+            <div
+              key={m.id}
+              style={{
+                marginBottom: "12px",
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "flex-start",
+                justifyContent: m.isStaff ? "flex-start" : "flex-end",
               }}
             >
-              {(m.originalText || "").trim() && (
-                <div style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "4px" }}>{m.originalText}</div>
-              )}
-              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>
-                {m.streaming
-                  ? "..."
-                  : (m.translatedText || "").trim()
-                    ? m.translatedText
-                    : (m.originalText || "").trim()
-                      ? "\uBC88\uC5ED \uC911..."
-                      : ""}
+              {m.isStaff ? flagImg : null}
+              <div
+                style={{
+                  maxWidth: "70%",
+                  width: "fit-content",
+                  borderRadius: m.isStaff ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
+                  padding: "8px 16px",
+                  background: m.isStaff ? "#6366F1" : "#F9A8D4",
+                  color: m.isStaff ? "#FFFFFF" : "#1F2937",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                }}
+              >
+                {(m.originalText || "").trim() && (
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      opacity: m.isStaff ? 0.8 : 0.6,
+                      marginBottom: "4px",
+                      color: m.isStaff ? "#FFFFFF" : "#1F2937",
+                    }}
+                  >
+                    {m.originalText}
+                  </div>
+                )}
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                    color: m.isStaff ? "#FFFFFF" : "#1F2937",
+                  }}
+                >
+                  {m.streaming
+                    ? "..."
+                    : (m.translatedText || "").trim()
+                      ? m.translatedText
+                      : (m.originalText || "").trim()
+                        ? "\uBC88\uC5ED \uC911..."
+                        : ""}
+                </div>
               </div>
+              {!m.isStaff ? flagImg : null}
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
       </main>
 
