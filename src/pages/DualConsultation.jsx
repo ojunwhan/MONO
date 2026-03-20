@@ -1196,7 +1196,7 @@ export default function DualConsultation() {
           >
             <div
               style={{
-                maxWidth: "70%",
+                maxWidth: "60%",
                 width: "fit-content",
                 borderRadius: m.isStaff ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
                 padding: "8px 16px",
