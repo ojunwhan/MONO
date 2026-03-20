@@ -423,8 +423,9 @@ export default function HospitalDashboard() {
 // ROOMS PANEL — 방 관리 (추가, QR, 인쇄, 링크 복사)
 // ═══════════════════════════════════════════
 const ROOM_TEMPLATES = [
-  { value: "reception", label: "접수 모드" },
-  { value: "consultation", label: "상담 모드" },
+  { value: "reception", label: "\uC811\uC218 \uBAA8\uB4DC" },
+  { value: "consultation_dual", label: "\uC0C1\uB2F4 \uBAA8\uB4DC 1 (\uB4C0\uC5BC\uB9C8\uC774\uD06C)" },
+  { value: "consultation", label: "\uC0C1\uB2F4 \uBAA8\uB4DC 2 (\uD0DC\uBE14\uB9BF)" },
 ];
 
 function RoomsPanel({ authUser }) {
@@ -457,6 +458,10 @@ function RoomsPanel({ authUser }) {
   const buildRoomUrl = useCallback(
     (room, kiosk = false) => {
       if (!origin) return "";
+      if (room.template === "consultation_dual") {
+        const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}`;
+      }
       const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
       const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
       return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
@@ -630,7 +635,13 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
     }
   };
 
-  const templateLabel = room.template === "consultation" ? "상담 모드 (VAD)" : "접수 모드 (탭하여 말하기)";
+  const templateLabel =
+    room.template === "consultation_dual"
+      ? "듀얼마이크 PTT"
+      : room.template === "consultation"
+        ? "상담 모드 (VAD)"
+        : "접수 모드 (탭하여 말하기)";
+  const isConsultationDual = room.template === "consultation_dual";
 
   return (
     <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] flex flex-col items-center">
@@ -671,16 +682,18 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
           className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
         >
           <Copy size={14} />
-          {copied ? "복사됨" : "직원 PC용 링크 복사"}
+          {copied ? "복사됨" : isConsultationDual ? "상담실 열기" : "직원 PC용 링크 복사"}
         </button>
-        <button
-          type="button"
-          onClick={handleCopyTablet}
-          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
-        >
-          <Copy size={14} />
-          {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
-        </button>
+        {!isConsultationDual && (
+          <button
+            type="button"
+            onClick={handleCopyTablet}
+            className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+          >
+            <Copy size={14} />
+            {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -797,6 +810,10 @@ function OverviewPanel({ authUser }) {
 
   const buildStaffUrl = useCallback((room, kiosk = false) => {
     if (!origin || !room) return "";
+    if (room.template === "consultation_dual") {
+      const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}`;
+    }
     const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
     const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
     return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
