@@ -416,7 +416,8 @@ export default function DualConsultation() {
 
     const onReceiveMessage = (data) => {
       console.log("[Recv] receive-message:", JSON.stringify(data).slice(0, 300));
-      const { id, roomId: incomingRoomId, originalText, translatedText, senderPid } = data || {};
+      const { id, roomId: incomingRoomId, originalText, translatedText, senderPid, participantId: payloadParticipantId } = data || {};
+      const senderPidResolved = senderPid ?? payloadParticipantId;
       if (!id || (incomingRoomId && incomingRoomId !== rid)) return;
       const isStaff = pendingSenderRef.current === "staff";
       if (pendingSenderRef.current) pendingSenderRef.current = null;
@@ -433,16 +434,30 @@ export default function DualConsultation() {
               : m
           );
         }
-        if (seenIdsRef.current.has(id)) return prev;
+        const tText = translatedText || data.text || "";
+        if (seenIdsRef.current.has(id)) {
+          return [
+            ...prev.filter((m) => m.id !== id),
+            {
+              id,
+              originalText: originalText || "",
+              translatedText: tText,
+              isStaff: senderPidResolved === participantIdRef.current ? isStaff : false,
+              senderPid: senderPidResolved,
+              timestamp: data.timestamp ?? Date.now(),
+              streaming: false,
+            },
+          ];
+        }
         seenIdsRef.current.add(id);
         return [
           ...prev,
           {
             id,
             originalText: originalText || "",
-            translatedText: translatedText || "",
-            isStaff: senderPid === participantIdRef.current ? isStaff : false,
-            senderPid,
+            translatedText: tText,
+            isStaff: senderPidResolved === participantIdRef.current ? isStaff : false,
+            senderPid: senderPidResolved,
             timestamp: Date.now(),
             streaming: false,
           },
