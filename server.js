@@ -1925,6 +1925,17 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
     await dbRun('UPDATE translation_cache SET hit_count = hit_count + 1, last_used_at = datetime(\'now\') WHERE cache_key = ?', [cacheKey]).catch(() => {});
     return cached.translated_text;
   }
+  // --- Fallback: hospital-specific miss → try generic hospital_plastic_surgery ---
+  if (!cached?.translated_text && siteContext && siteContext.startsWith('hospital_') && siteContext !== 'hospital_plastic_surgery') {
+    const fallbackKey = `${from}:${to}:hospital_plastic_surgery:${text.trim()}`;
+    const fallbackCached = await dbGet('SELECT translated_text FROM translation_cache WHERE cache_key = ?', [fallbackKey]);
+    if (fallbackCached?.translated_text != null) {
+      await dbRun('UPDATE translation_cache SET hit_count = hit_count + 1, last_used_at = datetime(\'now\') WHERE cache_key = ?', [fallbackKey]).catch(() => {});
+      console.log(`[CACHE-FALLBACK] ${siteContext} → hospital_plastic_surgery | ${from}→${to} | "${text.trim().substring(0, 30)}..."`);
+      return fallbackCached.translated_text;
+    }
+  }
+  // --- End fallback ---
   resetDailyStats();
   usageStats.translationRequests += 1;
   usageStats.openaiTranslations += 1;
