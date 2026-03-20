@@ -10,6 +10,7 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
+import { useWebSpeechSTT } from "../hooks/useWebSpeechSTT";
 
 function twemojiFlagSvgUrl(flag) {
   const codePoints = Array.from(String(flag || ""))
@@ -90,13 +91,12 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
-  const [inputMode, setInputMode] = useState("ptt"); // "ptt" = dual mic, "vad" = single mic auto (manual start/stop for now)
+  const [inputMode, setInputMode] = useState("ptt"); // "ptt" | "webspeech" | "vad" (vad UI unused)
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
   const [sttProvider, setSttProvider] = useState("webspeech");
-  const [webSpeechInterim, setWebSpeechInterim] = useState("");
-  const webSpeechRef = useRef(null);
-  const webSpeechActiveRef = useRef(false);
+  const [webSpeechSpeaker, setWebSpeechSpeaker] = useState("staff"); // "staff" | "patient"
+  const [webSpeechActive, setWebSpeechActive] = useState(false);
   const staffRecordingRef = useRef(false);
 
   const participantIdRef = useRef("");
@@ -144,6 +144,66 @@ export default function DualConsultation() {
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
     disableServerStt: sttProvider === "webspeech",
+  });
+
+  const langToBcp47 = (lang) => {
+    const key = String(lang || "").toLowerCase().split("-")[0];
+    const map = {
+      ko: "ko-KR", en: "en-US", ja: "ja-JP", zh: "zh-CN",
+      vi: "vi-VN", th: "th-TH", ru: "ru-RU", de: "de-DE",
+      fr: "fr-FR", es: "es-ES", pt: "pt-BR", hi: "hi-IN",
+      ar: "ar-SA", id: "id-ID", ms: "ms-MY", tl: "tl-PH",
+      mn: "mn-MN", my: "my-MM", ne: "ne-NP", uz: "uz-UZ",
+    };
+    return map[key] || (key.length ? `${key}-KR` : "ko-KR");
+  };
+  const webSpeechLang = webSpeechSpeaker === "staff" ? langToBcp47(staffLang) : langToBcp47(patientLang);
+
+  const onWebSpeechFinal = useCallback(
+    (text, confidence) => {
+      if (!roomIdRef.current || !participantIdRef.current || !String(text || "").trim()) return;
+      const isStaffSide = webSpeechSpeaker === "staff";
+      const confStr =
+        typeof confidence === "number" && !Number.isNaN(confidence) ? confidence.toFixed(2) : "?";
+      console.log(`[WebSpeech] Final (${isStaffSide ? "staff" : "patient"}, conf=${confStr}): "${text}"`);
+      const msgId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      pendingSenderRef.current = isStaffSide ? "staff" : "patient";
+      seenIdsRef.current.add(msgId);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: msgId,
+          originalText: text.trim(),
+          translatedText: "",
+          isStaff: isStaffSide,
+          senderPid: participantIdRef.current,
+          timestamp: Date.now(),
+          streaming: false,
+        },
+      ]);
+      socket.emit("send-message", {
+        roomId: roomIdRef.current,
+        participantId: participantIdRef.current,
+        message: { id: msgId, text: text.trim() },
+        toLang: isStaffSide ? (patientLangRef.current || "en") : (staffLangRef.current || "ko"),
+        senderRole: isStaffSide ? "host" : "guest",
+      });
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    },
+    [webSpeechSpeaker]
+  );
+
+  const {
+    isListening: webSpeechListening,
+    interimText: webSpeechInterim,
+    error: webSpeechError,
+  } = useWebSpeechSTT({
+    lang: webSpeechLang,
+    active: inputMode === "webspeech" && webSpeechActive,
+    confidenceThreshold: 0.5,
+    minTextLength: 2,
+    onFinal: onWebSpeechFinal,
+    onInterim: () => {},
   });
 
   useEffect(() => {
@@ -256,101 +316,6 @@ export default function DualConsultation() {
     const ok = await submitPatientUpsert({ name: editPatientName, lang: editPatientLang });
     if (ok) setPatientEditOpen(false);
   }, [editPatientName, editPatientLang, submitPatientUpsert]);
-
-  const stopWebSpeech = useCallback(() => {
-    webSpeechActiveRef.current = false;
-    if (webSpeechRef.current) {
-      try {
-        webSpeechRef.current.stop();
-      } catch (e) {}
-      webSpeechRef.current = null;
-    }
-  }, []);
-
-  const startWebSpeech = useCallback(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    if (webSpeechRef.current) {
-      try {
-        webSpeechRef.current.stop();
-      } catch (e) {}
-      webSpeechRef.current = null;
-    }
-    const recognition = new SR();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    const sl = staffLangRef.current || "ko";
-    recognition.lang =
-      { ko: "ko-KR", en: "en-US", zh: "zh-CN", ja: "ja-JP", vi: "vi-VN", th: "th-TH" }[sl] || `${sl}-KR`;
-    recognition.onresult = (event) => {
-      let interim = "";
-      let clearedByFinal = false;
-      const rid = roomIdRef.current;
-      const pid = participantIdRef.current;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        const piece = res[0]?.transcript || "";
-        if (res.isFinal) {
-          const transcript = piece.trim();
-          if (transcript && rid && pid) {
-            pendingSenderRef.current = "staff";
-            const msgId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-            seenIdsRef.current.add(msgId);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: msgId,
-                originalText: transcript,
-                translatedText: "",
-                isStaff: true,
-                senderPid: pid,
-                timestamp: Date.now(),
-                streaming: false,
-              },
-            ]);
-            socket.emit("send-message", {
-              roomId: rid,
-              participantId: pid,
-              message: { id: msgId, text: transcript },
-              senderRole: "host",
-            });
-            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-            clearedByFinal = true;
-          }
-        } else {
-          interim += piece;
-        }
-      }
-      setWebSpeechInterim(clearedByFinal ? "" : interim.trim());
-    };
-    recognition.onerror = (e) => {
-      if (e.error === "no-speech" || e.error === "aborted") return;
-      console.error("[WebSpeech] error:", e.error);
-    };
-    recognition.onend = () => {
-      if (webSpeechActiveRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {}
-      }
-    };
-    try {
-      recognition.start();
-      webSpeechRef.current = recognition;
-      webSpeechActiveRef.current = true;
-    } catch (e) {
-      console.error("[WebSpeech] start failed:", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (inputMode === "vad" && vadActive && sttProvider === "webspeech") {
-      startWebSpeech();
-    } else {
-      stopWebSpeech();
-    }
-    return () => stopWebSpeech();
-  }, [inputMode, vadActive, sttProvider, startWebSpeech, stopWebSpeech]);
 
   // List audio devices
   useEffect(() => {
@@ -741,15 +706,14 @@ export default function DualConsultation() {
     }
   }, [vadActive, vadStart, vadPause]);
 
-  // Pause Silero VAD when switching back to PTT (hook always mounted).
+  // Pause Silero VAD when switching back to PTT / Web Speech (hook always mounted).
   useEffect(() => {
     if (inputMode !== "vad") {
       vadPause();
-      stopWebSpeech();
       vadActiveRef.current = false;
       setVadActive(false);
     }
-  }, [inputMode, vadPause, stopWebSpeech]);
+  }, [inputMode, vadPause]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
@@ -792,6 +756,12 @@ export default function DualConsultation() {
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
+      <style>{`
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+`}</style>
       {/* Top bar */}
       <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -1043,43 +1013,111 @@ export default function DualConsultation() {
         ) : null}
         {connected && settingsExpanded && (
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "8px 0" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <button
                   type="button"
-                  onClick={() => setInputMode("ptt")}
+                  onClick={() => {
+                    setInputMode("ptt");
+                    setWebSpeechActive(false);
+                  }}
                   style={{
-                    padding: "6px 16px",
-                    borderRadius: 20,
-                    border: "1px solid #d1d5db",
-                    background: inputMode === "ptt" ? "#3B82F6" : "white",
-                    color: inputMode === "ptt" ? "white" : "#374151",
-                    fontSize: 13,
-                    fontWeight: 600,
+                    flex: 1,
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: inputMode === "ptt" ? "2px solid #4A90D9" : "1px solid #ddd",
+                    background: inputMode === "ptt" ? "#EBF3FC" : "#fff",
+                    fontWeight: inputMode === "ptt" ? 700 : 400,
+                    fontSize: 14,
                     cursor: "pointer",
                   }}
                 >
-                  Dual Mic (PTT)
+                  {"\uD83C\uDFA4 PTT (\uBC84\uD2BC)"}
                 </button>
                 <button
                   type="button"
-                  disabled
-                  title={"\uC900\uBE44 \uC911 (Coming Soon)"}
+                  onClick={() => {
+                    setInputMode("webspeech");
+                    setWebSpeechActive(false);
+                  }}
                   style={{
-                    padding: "6px 16px",
-                    borderRadius: 20,
-                    border: "1px solid #d1d5db",
-                    background: "#e5e7eb",
-                    color: "#6b7280",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "not-allowed",
-                    opacity: 0.4,
+                    flex: 1,
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: inputMode === "webspeech" ? "2px solid #4A90D9" : "1px solid #ddd",
+                    background: inputMode === "webspeech" ? "#EBF3FC" : "#fff",
+                    fontWeight: inputMode === "webspeech" ? 700 : 400,
+                    fontSize: 14,
+                    cursor: "pointer",
                   }}
                 >
-                  Single Mic (Auto)
+                  {"\uD83D\uDD0A \uC74C\uC131\uC778\uC2DD (\uC790\uB3D9)"}
                 </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: inputMode === "vad" ? "1fr" : "1fr 1fr", gap: "12px", fontSize: "12px" }}>
+              {inputMode === "webspeech" && (
+                <div style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setWebSpeechActive((prev) => !prev)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 0",
+                      borderRadius: 8,
+                      border: "none",
+                      background: webSpeechActive ? "#EF4444" : "#22C55E",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 16,
+                      cursor: "pointer",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {webSpeechActive
+                      ? "\u23F9 \uC74C\uC131\uC778\uC2DD \uC911\uC9C0"
+                      : "\u25B6 \uC74C\uC131\uC778\uC2DD \uC2DC\uC791"}
+                  </button>
+                  {webSpeechActive && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setWebSpeechSpeaker("staff")}
+                        style={{
+                          flex: 1,
+                          padding: "10px 0",
+                          borderRadius: 8,
+                          border: webSpeechSpeaker === "staff" ? "2px solid #3B82F6" : "1px solid #ddd",
+                          background: webSpeechSpeaker === "staff" ? "#DBEAFE" : "#fff",
+                          fontWeight: webSpeechSpeaker === "staff" ? 700 : 400,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {"\uD83E\uDE7A \uC9C1\uC6D0 ("}
+                        {staffLang}
+                        {")"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWebSpeechSpeaker("patient")}
+                        style={{
+                          flex: 1,
+                          padding: "10px 0",
+                          borderRadius: 8,
+                          border: webSpeechSpeaker === "patient" ? "2px solid #F59E0B" : "1px solid #ddd",
+                          background: webSpeechSpeaker === "patient" ? "#FEF3C7" : "#fff",
+                          fontWeight: webSpeechSpeaker === "patient" ? 700 : 400,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {"\uD83E\uDDD1\u200D\uD83E\uDD1D\u200D\uD83E\uDDD1 \uD658\uC790 ("}
+                        {patientLang}
+                        {")"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: inputMode === "ptt" ? "1fr 1fr" : "1fr", gap: "12px", fontSize: "12px" }}>
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
                   <select
@@ -1146,12 +1184,7 @@ export default function DualConsultation() {
       </header>
 
       {/* Single unified chat area */}
-      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px" }}>
-        {inputMode === "vad" && webSpeechInterim ? (
-          <div style={{ padding: "8px 16px", fontSize: 14, color: "#9ca3af", fontStyle: "italic", minHeight: 24 }}>
-            {`${"\uBC88\uC5ED \uC911..."} ${webSpeechInterim}`}
-          </div>
-        ) : null}
+      <main style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px", display: "flex", flexDirection: "column" }}>
         {messages.map((m) => (
           <div
             key={m.id}
@@ -1188,6 +1221,44 @@ export default function DualConsultation() {
           </div>
         ))}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
+        {inputMode === "webspeech" && webSpeechActive && (
+          <div
+            style={{
+              marginTop: "auto",
+              padding: "8px 16px",
+              background: webSpeechSpeaker === "staff" ? "#EFF6FF" : "#FFFBEB",
+              borderTop: "1px solid #e5e7eb",
+              minHeight: 40,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            {webSpeechListening && (
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#EF4444",
+                  animation: "pulse 1.5s infinite",
+                }}
+              />
+            )}
+            <span style={{ color: "#6B7280", fontSize: 14, fontStyle: "italic" }}>
+              {webSpeechInterim ||
+                (webSpeechListening
+                  ? "\uC74C\uC131 \uB300\uAE30 \uC911..."
+                  : "\uC2DC\uC791 \uBC84\uD2BC\uC744 \uB20C\uB7EC\uC8FC\uC138\uC694")}
+            </span>
+            {webSpeechError && (
+              <span style={{ color: "#EF4444", fontSize: 12, marginLeft: "auto" }}>
+                {"\u26A0 "} {webSpeechError}
+              </span>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Mic buttons - full width */}
@@ -1229,7 +1300,7 @@ export default function DualConsultation() {
               {patientRecording ? "Stop" : patientDisplayName.trim() || "Patient"}
             </button>
           </>
-        ) : (
+        ) : inputMode === "webspeech" ? null : (
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
             <button
               type="button"
