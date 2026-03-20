@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspens
 import { useNavigate } from "react-router-dom";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
-import { getLanguageByCode } from "../constants/languages";
+import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import {
   BarChart3,
   Users,
@@ -34,7 +34,21 @@ import {
   Sparkles,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
-import LanguageFlagPicker from "../components/LanguageFlagPicker";
+
+/** consultation_dual patient language dropdown: common hospital langs first, then A–Z by English name. */
+const DUAL_PATIENT_LANG_PRIORITY = ["en", "ja", "zh", "vi", "th", "ru"];
+const DUAL_PATIENT_LANG_OPTIONS = (() => {
+  const byCode = new Map(LANGUAGES.map((l) => [l.code, l]));
+  const priority = [];
+  for (const code of DUAL_PATIENT_LANG_PRIORITY) {
+    const row = byCode.get(code);
+    if (row) priority.push(row);
+  }
+  const rest = LANGUAGES.filter((l) => !DUAL_PATIENT_LANG_PRIORITY.includes(l.code)).sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "en", { sensitivity: "base" })
+  );
+  return [...priority, ...rest];
+})();
 import {
   BarChart,
   Bar,
@@ -606,13 +620,6 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
   const [copiedTablet, setCopiedTablet] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [dualDoctor, setDualDoctor] = useState("");
-  const [dualStaffLang, setDualStaffLang] = useState(() => {
-    try {
-      return localStorage.getItem("dualConsult_staffLang") || "ko";
-    } catch {
-      return "ko";
-    }
-  });
   const [dualPtNumber, setDualPtNumber] = useState("");
   const [dualPatientName, setDualPatientName] = useState("");
   const [dualPatientLang, setDualPatientLang] = useState(() => {
@@ -662,14 +669,15 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
   const isConsultationDual = room.template === "consultation_dual";
 
   const handleStartDualConsultation = () => {
+    const staffLang = "ko";
     try {
-      localStorage.setItem("dualConsult_staffLang", dualStaffLang);
+      localStorage.setItem("dualConsult_staffLang", staffLang);
       localStorage.setItem("dualConsult_patientLang", dualPatientLang);
     } catch (_) {}
     const q = new URLSearchParams();
     q.set("room", room.id);
     if (orgCode) q.set("org", orgCode);
-    q.set("staffLang", dualStaffLang);
+    q.set("staffLang", staffLang);
     q.set("patientLang", dualPatientLang);
     const d = dualDoctor.trim();
     if (d) q.set("doctor", d);
@@ -700,103 +708,104 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
         {templateLabel}
       </span>
       {isConsultationDual ? (
-        <div className="w-full mb-4 space-y-3 text-left">
-          <p className="text-[13px] font-bold text-[var(--color-text)]">상담 시작</p>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">담당 의사</label>
+        <div className="w-full space-y-2 text-left mb-1">
+          <p className="text-[12px] font-bold text-[var(--color-text)] border-b border-[var(--color-border)] pb-1.5 mb-1">
+            상담 시작
+          </p>
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">담당자</label>
             <input
               type="text"
               value={dualDoctor}
               onChange={(e) => setDualDoctor(e.target.value)}
-              placeholder="담당 의사 이름"
-              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+              placeholder="담당자 이름"
+              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">병원쪽 언어</label>
-            <div className="w-full [&_p]:hidden">
-              <LanguageFlagPicker
-                selectedLang={dualStaffLang}
-                showGrid
-                onToggleGrid={() => {}}
-                onSelect={(code) => setDualStaffLang(code)}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 차트번호</label>
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 차트번호</label>
             <input
               type="text"
               value={dualPtNumber}
               onChange={(e) => setDualPtNumber(e.target.value)}
               placeholder="PT-XXXXXX 또는 차트번호"
-              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 이름</label>
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 이름</label>
             <input
               type="text"
               value={dualPatientName}
               onChange={(e) => setDualPatientName(e.target.value)}
               placeholder="환자 이름"
-              className="w-full px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-medium text-[var(--color-text-secondary)]">환자 언어 (외국어)</label>
-            <div className="w-full [&_p]:hidden">
-              <LanguageFlagPicker
-                selectedLang={dualPatientLang}
-                showGrid
-                onToggleGrid={() => {}}
-                onSelect={(code) => setDualPatientLang(code)}
-              />
-            </div>
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">환자 언어 (외국어)</label>
+            <select
+              value={dualPatientLang}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDualPatientLang(v);
+                try {
+                  localStorage.setItem("dualConsult_patientLang", v);
+                } catch (_) {}
+              }}
+              className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+            >
+              {DUAL_PATIENT_LANG_OPTIONS.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {(l.flag ? `${l.flag} ` : "") + (l.nativeName || l.name || l.code)}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
             onClick={handleStartDualConsultation}
-            className="w-full py-3 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-bold hover:bg-[#1D4ED8] shadow-sm"
+            className="w-full py-2.5 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-bold hover:bg-[#1D4ED8] shadow-sm mt-1"
           >
             상담 시작
           </button>
-          <div className="border-t border-[var(--color-border)] pt-4 mt-1 w-full" />
         </div>
       ) : null}
-      <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
-        <Suspense fallback={<span className="inline-block w-[160px] h-[160px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
-          <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
-        </Suspense>
-      </div>
-      <div className="flex flex-wrap gap-2 w-full justify-center">
-        <button
-          type="button"
-          onClick={() => onPrintQR(room)}
-          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
-        >
-          <Printer size={14} />
-          QR 인쇄
-        </button>
-        <button
-          type="button"
-          onClick={handleCopyStaff}
-          className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
-        >
-          <Copy size={14} />
-          {copied ? "복사됨" : isConsultationDual ? "상담실 열기" : "직원 PC용 링크 복사"}
-        </button>
-        {!isConsultationDual && (
-          <button
-            type="button"
-            onClick={handleCopyTablet}
-            className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
-          >
-            <Copy size={14} />
-            {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
-          </button>
-        )}
-      </div>
+      {!isConsultationDual ? (
+        <>
+          <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
+            <Suspense fallback={<span className="inline-block w-[160px] h-[160px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
+              <QRCode value={qrUrl} size={160} bgColor="#FFFFFF" fgColor="#3B82F6" level="M" />
+            </Suspense>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full justify-center">
+            <button
+              type="button"
+              onClick={() => onPrintQR(room)}
+              className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+            >
+              <Printer size={14} />
+              QR 인쇄
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyStaff}
+              className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+            >
+              <Copy size={14} />
+              {copied ? "복사됨" : "직원 PC용 링크 복사"}
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyTablet}
+              className="flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)]"
+            >
+              <Copy size={14} />
+              {copiedTablet ? "복사됨" : "태블릿용 링크 복사"}
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
