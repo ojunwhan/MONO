@@ -869,6 +869,15 @@ export default function DualConsultation() {
               {settingsExpanded ? "\u25BC" : "\u25B6"}
             </button>
           )}
+          {connected && (
+            <button
+              type="button"
+              onClick={handleEndSession}
+              style={{ padding: "6px 16px", background: "#ef4444", color: "#fff", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+            >
+              ?? ??
+            </button>
+          )}
         </div>
         {ptNumber.trim() && !patientDisplayName ? (
           <div
