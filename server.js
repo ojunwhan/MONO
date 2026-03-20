@@ -975,6 +975,7 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {})
         response_format: "json",
         temperature: 0.0,
         ...(lang ? { language: lang } : {}),
+        ...(forceGroq ? { prompt: "Medical consultation: headache, backache, stomachache, rhinoplasty, blepharoplasty, botox, filler, liposuction, facelift, swelling, bruising, anesthesia, recovery, appointment, prescription, diagnosis, surgery, consultation, injection, laser treatment" } : {}),
       });
       return (result.text || "").trim();
     }
@@ -1028,6 +1029,7 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = 
         response_format: "json",
         temperature: 0.0,
         ...(language ? { language } : {}),
+        ...(forceGroq ? { prompt: "Medical consultation: headache, backache, stomachache, rhinoplasty, blepharoplasty, botox, filler, liposuction, facelift, swelling, bruising, anesthesia, recovery, appointment, prescription, diagnosis, surgery, consultation, injection, laser treatment" } : {}),
       });
       return (result.text || "").trim();
     }
