@@ -26,6 +26,29 @@ function patientTopBarFlagFallbackUrl(langCode) {
   return (lang?.flag && twemojiFlagSvgUrl(lang.flag)) || getFlagUrlByLang(key);
 }
 
+const REGISTRATION_LANG_OPTIONS = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "Chinese (\u4E2D\u6587)" },
+  { value: "ja", label: "Japanese (\u65E5\u672C\u8A9E)" },
+  { value: "vi", label: "Vietnamese" },
+  { value: "ru", label: "Russian" },
+  { value: "th", label: "Thai" },
+  { value: "id", label: "Indonesian" },
+  { value: "ko", label: "Korean (\uD55C\uAD6D\uC5B4)" },
+  { value: "es", label: "Spanish" },
+  { value: "ar", label: "Arabic" },
+];
+
+function getRegistrationOrgCode() {
+  if (typeof window === "undefined") return "ORG-0001";
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("orgCode") || p.get("org") || "ORG-0001";
+  } catch {
+    return "ORG-0001";
+  }
+}
+
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
   const u8 = new Uint8Array(buf);
@@ -56,6 +79,13 @@ export default function DualConsultation() {
     }
   });
   const [patientDisplayName, setPatientDisplayName] = useState("");
+  const [regPatientName, setRegPatientName] = useState("");
+  const [regPatientLang, setRegPatientLang] = useState("en");
+  const [patientEditOpen, setPatientEditOpen] = useState(false);
+  const [editPatientName, setEditPatientName] = useState("");
+  const [editPatientLang, setEditPatientLang] = useState("en");
+  const [registerSubmitting, setRegisterSubmitting] = useState(false);
+  const [registerError, setRegisterError] = useState("");
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
@@ -153,6 +183,13 @@ export default function DualConsultation() {
   }, [staffName]);
 
   useEffect(() => {
+    setPatientEditOpen(false);
+    setRegPatientName("");
+    setRegPatientLang("en");
+    setRegisterError("");
+  }, [ptNumber]);
+
+  useEffect(() => {
     const q = ptNumber.trim();
     if (!q) {
       setPatientDisplayName("");
@@ -165,6 +202,11 @@ export default function DualConsultation() {
         if (cancelled) return;
         const n = data?.patient_name;
         setPatientDisplayName(typeof n === "string" && n.trim() ? n.trim() : "");
+        const pl = data?.patient_lang;
+        if (typeof pl === "string" && pl.trim()) {
+          const code = pl.trim().toLowerCase().split("-")[0];
+          if (LANG_TO_LABEL[code] !== undefined) setPatientLang(code);
+        }
       })
       .catch(() => {
         if (!cancelled) setPatientDisplayName("");
@@ -173,6 +215,52 @@ export default function DualConsultation() {
       cancelled = true;
     };
   }, [ptNumber]);
+
+  const submitPatientUpsert = useCallback(async ({ name, lang }) => {
+    const token = ptNumber.trim();
+    const trimmedName = String(name || "").trim();
+    if (!token || !trimmedName) return false;
+    setRegisterSubmitting(true);
+    setRegisterError("");
+    try {
+      const res = await fetch("/api/hospital/patient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientToken: token,
+          name: trimmedName,
+          lang,
+          orgCode: getRegistrationOrgCode(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        setRegisterError(data?.error || data?.message || "Registration failed");
+        return false;
+      }
+      setPatientDisplayName(trimmedName);
+      setPatientLang(lang);
+      return true;
+    } catch (e) {
+      setRegisterError(e?.message || "Network error");
+      return false;
+    } finally {
+      setRegisterSubmitting(false);
+    }
+  }, [ptNumber]);
+
+  const handleRegisterPatient = useCallback(async () => {
+    const ok = await submitPatientUpsert({ name: regPatientName, lang: regPatientLang });
+    if (ok) {
+      setRegPatientName("");
+      setRegPatientLang("en");
+    }
+  }, [regPatientName, regPatientLang, submitPatientUpsert]);
+
+  const handleSavePatientEdit = useCallback(async () => {
+    const ok = await submitPatientUpsert({ name: editPatientName, lang: editPatientLang });
+    if (ok) setPatientEditOpen(false);
+  }, [editPatientName, editPatientLang, submitPatientUpsert]);
 
   const stopWebSpeech = useCallback(() => {
     webSpeechActiveRef.current = false;
@@ -699,6 +787,32 @@ export default function DualConsultation() {
             <span style={{ fontSize: 13, color: "#374151", marginLeft: 8, flex: "1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {patientDisplayName || "\u2014"}
             </span>
+            {patientDisplayName ? (
+              <button
+                type="button"
+                title="Edit patient"
+                onClick={() => {
+                  setPatientEditOpen(true);
+                  setEditPatientName(patientDisplayName);
+                  setEditPatientLang(patientLang);
+                  setRegisterError("");
+                }}
+                style={{
+                  flexShrink: 0,
+                  marginRight: 6,
+                  padding: "4px 6px",
+                  border: "none",
+                  borderRadius: 4,
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  lineHeight: 1,
+                  color: "#6b7280",
+                }}
+              >
+                {"\u270E"}
+              </button>
+            ) : null}
           </div>
           <button
             type="button"
@@ -719,6 +833,168 @@ export default function DualConsultation() {
             </button>
           )}
         </div>
+        {ptNumber.trim() && !patientDisplayName ? (
+          <div
+            style={{
+              borderTop: "1px solid #e5e7eb",
+              paddingTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#4b5563", minWidth: 96 }}>Patient Name:</span>
+              <input
+                type="text"
+                placeholder="Patient name (English)"
+                value={regPatientName}
+                onChange={(e) => setRegPatientName(e.target.value)}
+                style={{
+                  flex: "1 1 200px",
+                  minWidth: 160,
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  padding: "8px 10px",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#4b5563", minWidth: 96 }}>Language:</span>
+              <select
+                value={regPatientLang}
+                onChange={(e) => setRegPatientLang(e.target.value)}
+                style={{
+                  minWidth: 200,
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  padding: "8px 10px",
+                  fontSize: 14,
+                  background: "#fff",
+                }}
+              >
+                {REGISTRATION_LANG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleRegisterPatient}
+                disabled={registerSubmitting || !regPatientName.trim()}
+                style={{
+                  borderRadius: 8,
+                  background: registerSubmitting || !regPatientName.trim() ? "#9ca3af" : "#059669",
+                  color: "#fff",
+                  padding: "8px 16px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  border: "none",
+                  cursor: registerSubmitting || !regPatientName.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                {registerSubmitting ? "Registering\u2026" : "Register Patient"}
+              </button>
+            </div>
+            {registerError ? <div style={{ fontSize: 12, color: "#b91c1c" }}>{registerError}</div> : null}
+          </div>
+        ) : null}
+        {ptNumber.trim() && patientDisplayName && patientEditOpen ? (
+          <div
+            style={{
+              borderTop: "1px solid #e5e7eb",
+              paddingTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#4b5563", minWidth: 96 }}>Patient Name:</span>
+              <input
+                type="text"
+                placeholder="Patient name (English)"
+                value={editPatientName}
+                onChange={(e) => setEditPatientName(e.target.value)}
+                style={{
+                  flex: "1 1 200px",
+                  minWidth: 160,
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  padding: "8px 10px",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#4b5563", minWidth: 96 }}>Language:</span>
+              <select
+                value={editPatientLang}
+                onChange={(e) => setEditPatientLang(e.target.value)}
+                style={{
+                  minWidth: 200,
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  padding: "8px 10px",
+                  fontSize: 14,
+                  background: "#fff",
+                }}
+              >
+                {REGISTRATION_LANG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleSavePatientEdit}
+                disabled={registerSubmitting || !editPatientName.trim()}
+                style={{
+                  borderRadius: 8,
+                  background: registerSubmitting || !editPatientName.trim() ? "#9ca3af" : "#2563EB",
+                  color: "#fff",
+                  padding: "8px 16px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  border: "none",
+                  cursor: registerSubmitting || !editPatientName.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                {registerSubmitting ? "Saving\u2026" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPatientEditOpen(false);
+                  setRegisterError("");
+                }}
+                disabled={registerSubmitting}
+                style={{
+                  borderRadius: 8,
+                  padding: "8px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  color: "#374151",
+                  cursor: registerSubmitting ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            {registerError ? <div style={{ fontSize: 12, color: "#b91c1c" }}>{registerError}</div> : null}
+          </div>
+        ) : null}
         {connected && settingsExpanded && (
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "8px 0" }}>
