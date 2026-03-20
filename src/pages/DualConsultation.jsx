@@ -617,6 +617,7 @@ export default function DualConsultation() {
         audio: base64Audio,
         mimeType,
         senderRole: isStaff ? "host" : "guest",
+        orgCode: getRegistrationOrgCode(),
       };
       if (inputModeRef.current === "vad") {
         payload.vadStaffLang = staffLangRef.current;
