@@ -557,17 +557,23 @@ export default function DualConsultation() {
       setTimeout(scrollToBottom, 50);
     };
 
+    const onDualConsultationEnded = () => {
+      window.location.href = "/hospital-dashboard";
+    };
+
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:result", onSttResult);
+    socket.on("dual-consultation:ended", onDualConsultationEnded);
     return () => {
       socket.off("receive-message", onReceiveMessage);
       socket.off("receive-message-stream", onStream);
       socket.off("receive-message-stream-end", onStreamEnd);
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:result", onSttResult);
+      socket.off("dual-consultation:ended", onDualConsultationEnded);
     };
   }, [roomId, scrollToBottom]);
 
@@ -774,6 +780,15 @@ export default function DualConsultation() {
     console.log("[TextInput] send-message emitted, msgId:", msgId, "text:", trimmed);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, [textInputValue, connected]);
+
+  const handleEndSession = useCallback(() => {
+    if (!window.confirm("??? ?????????")) return;
+    const rid = roomIdRef.current;
+    if (rid && socket) {
+      socket.emit("dual-consultation:end", { roomId: rid });
+    }
+    window.location.href = "/hospital-dashboard";
+  }, []);
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>

@@ -2190,6 +2190,28 @@ io.on('connection', (socket) => {
     io.to(roomId).emit("fixed-room:end", { roomId });
   });
 
+  socket.on("dual-consultation:end", async ({ roomId } = {}) => {
+    if (!roomId) return;
+    console.log("[dual-consultation:end]", roomId, socket.id);
+    try {
+      const activeSess = await dbGet(
+        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' LIMIT 1",
+        [roomId]
+      );
+      if (activeSess) {
+        await dbRun(
+          "UPDATE hospital_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?",
+          [activeSess.id]
+        );
+        console.log("[hospital] Session", activeSess.id, "ended by dual-consultation:end");
+        extractMedicalSummary(activeSess.id).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("[dual-consultation:end] error:", e?.message);
+    }
+    io.to(roomId).emit("dual-consultation:ended", { roomId });
+  });
+
   // ── vad:gain — 직원이 환자 마이크 감도/게인 원격 조절 ──
   socket.on("vad:gain", ({ roomId, target, gain, vadThreshold, minSpeechMs } = {}) => {
     if (!roomId) return;
