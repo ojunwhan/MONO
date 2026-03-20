@@ -2706,7 +2706,7 @@ io.on('connection', (socket) => {
   });
 
   // --- join 핸들러 (call sign system, idempotent) ---
-  socket.on("join", async ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode, siteContext }) => {
+  socket.on("join", async ({ roomId, fromLang, participantId, role: selectedRole, localName, roleHint, saveMessages, summaryOnly, contextInject, inputMode, siteContext, orgCode }) => {
     if (!roomId || !participantId) return;
     if (typeof roomId !== 'string' || roomId.length > 200) return;
     if (typeof participantId !== 'string' || participantId.length > 128) return;
@@ -2807,6 +2807,9 @@ io.on('connection', (socket) => {
     const meta = ensureRoomMeta(roomId);
     if (siteContext && siteContext !== "general") {
       meta.siteContext = siteContext;
+    }
+    if (orgCode != null && String(orgCode).trim()) {
+      meta.orgCode = String(orgCode).trim();
     }
     if (meta.expiresAt && Date.now() > Number(meta.expiresAt)) {
       socket.emit("room-status", { status: "room-expired", roomId });
@@ -3329,7 +3332,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on("stt:segment_end", async ({ roomId, participantId }) => {
+  socket.on("stt:segment_end", async ({ roomId, participantId, senderRole: segmentPayloadSenderRole }) => {
     const tServer = Date.now();
     if (!consumeRate(socket.id, 'stt:segment_end', LIMITS.STT_SEGMENT_END_PER_30S, 30000)) {
       return;
@@ -3637,7 +3640,10 @@ io.on('connection', (socket) => {
             // Session log: append ONLY after hqTranslate completes; use SENDER's role (stt:segment_end emitter), not receiver's
             if (isHospital1to1) {
               const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
-              const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
+              const srLog = (segmentPayloadSenderRole === 'host' || segmentPayloadSenderRole === 'guest')
+                ? segmentPayloadSenderRole
+                : (senderRec.role === 'owner' ? 'host' : 'guest');
+              const roleLabel = srLog === 'host' ? '직원' : '환자';
               appendHospitalSessionLog(roomId, roleLabel, finalText, finalizedForTts);
             }
           }
@@ -3673,7 +3679,9 @@ io.on('connection', (socket) => {
                 [roomId]
               ).catch(() => null);
             }
-            const senderRole = rec.role === 'owner' ? 'host' : 'guest';
+            const senderRole = (segmentPayloadSenderRole === 'host' || segmentPayloadSenderRole === 'guest')
+              ? segmentPayloadSenderRole
+              : (rec.role === 'owner' ? 'host' : 'guest');
             // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt; encrypted store makes plaintext query useless)
             const recentDup = await isRecentMessageDuplicate(roomId, finalText);
             if (!recentDup) {
@@ -3884,7 +3892,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on("stt:whisper", async (data = {}, ack) => {
-    const { roomId, participantId, lang, audio, mimeType, vadStaffLang, vadPatientLang } = data || {};
+    const { roomId, participantId, lang, audio, mimeType, vadStaffLang, vadPatientLang, senderRole: whisperPayloadSenderRole } = data || {};
     const optionalToLang = data?.toLang != null && String(data.toLang).trim() !== "" ? data.toLang : null;
     console.log("[stt:whisper] received roomId:", roomId, "pid:", participantId);
     const ackReply = (payload) => {
@@ -3963,7 +3971,9 @@ io.on('connection', (socket) => {
         const isHospital1to1 = meta.roomType === "oneToOne" && String(meta.siteContext || "").startsWith("hospital_");
         if (isHospital1to1 && !meta.hospitalEndedSession) {
           const rec = SOCKET_ROLES.get(socket.id) || {};
-          const senderRole = rec.role === "owner" ? "host" : "guest";
+          const senderRole = (whisperPayloadSenderRole === "host" || whisperPayloadSenderRole === "guest")
+            ? whisperPayloadSenderRole
+            : (rec.role === "owner" ? "host" : "guest");
           fromLang = mapLang(lang || "en");
           const sessionRow = await dbGet("SELECT patient_token FROM hospital_sessions WHERE room_id = ?", [roomId]).catch(() => null);
           const pToken = meta?.patientToken ?? ROOMS.get(roomId)?.patientToken ?? sessionRow?.patient_token ?? null;
@@ -4039,8 +4049,7 @@ io.on('connection', (socket) => {
             );
           }
           const senderSocketId = socket.id;
-          const senderRec = SOCKET_ROLES.get(senderSocketId) || {};
-          const roleLabel = senderRec.role === 'owner' ? '직원' : '환자';
+          const roleLabel = senderRole === "host" ? "직원" : "환자";
           appendHospitalSessionLog(roomId, roleLabel, normalized, translatedText);
         }
       } catch (dbErr) {
@@ -4286,7 +4295,9 @@ io.on('connection', (socket) => {
               [roomId]
             ).catch(() => null);
           }
-          const senderRole = rec.role === 'owner' ? 'host' : 'guest';
+          const senderRole = (data.senderRole === 'host' || data.senderRole === 'guest')
+            ? data.senderRole
+            : (rec.role === 'owner' ? 'host' : 'guest');
           // Dedup: skip if same room+plaintext already saved in last 10s (compare after decrypt)
           const recentDup = await isRecentMessageDuplicate(roomId, trimmedText);
           if (!recentDup) {

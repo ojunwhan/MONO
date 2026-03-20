@@ -312,6 +312,7 @@ export default function DualConsultation() {
               roomId: rid,
               participantId: pid,
               message: { id: msgId, text: transcript },
+              senderRole: "host",
             });
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
             clearedByFinal = true;
@@ -393,6 +394,7 @@ export default function DualConsultation() {
       roleHint: "host",
       localName: "Staff",
       siteContext,
+      orgCode: getRegistrationOrgCode(),
     });
     setConnected(true);
   }, [ptNumber, staffLang]);
@@ -607,7 +609,15 @@ export default function DualConsultation() {
           : asStaff
             ? (patientLangRef.current || "en")
             : (staffLang || "ko");
-      const payload = { roomId: rid, participantId: pid, lang, toLang, audio: base64Audio, mimeType };
+      const payload = {
+        roomId: rid,
+        participantId: pid,
+        lang,
+        toLang,
+        audio: base64Audio,
+        mimeType,
+        senderRole: isStaff ? "host" : "guest",
+      };
       if (inputModeRef.current === "vad") {
         payload.vadStaffLang = staffLangRef.current;
         payload.vadPatientLang = patientLangRef.current;
@@ -758,6 +768,7 @@ export default function DualConsultation() {
       participantId: participantIdRef.current,
       message: { id: msgId, text: trimmed },
       toLang: patientLangRef.current || "en",
+      senderRole: "host",
     });
     console.log("[TextInput] send-message emitted, msgId:", msgId, "text:", trimmed);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
