@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Translation Cache Seeder for MONO Hospital Mode
- * Generates ko→{targetLang} translations for 50 standard hospital sentences
- * across 50 languages and inserts them into the translation_cache SQLite table.
+ * Generates ko→{targetLang} translations for the standard hospital sentence set
+ * (see seed-sentences.js) across 50 languages into translation_cache.
  *
  * Usage:
  *   node scripts/seed-translation-cache.js
@@ -15,18 +15,19 @@
  * Safety:
  *   - Uses INSERT OR IGNORE (won't overwrite existing cache entries)
  *   - Dry-run mode: SEED_DRY_RUN=1 node scripts/seed-translation-cache.js
- *   - Resume support: skips languages that already have all 50 entries cached
+ *   - Resume support: skips languages that already have a full sentence set cached
  */
 
 require('dotenv').config();
 const OpenAI = require('openai');
 const Database = require('better-sqlite3');
 const path = require('path');
+const KOREAN_SENTENCES = require('./seed-sentences');
 
 const DB_PATH = process.env.MONO_DB_PATH || path.join(__dirname, '..', 'state', 'mono_phase1.sqlite');
 const DRY_RUN = process.env.SEED_DRY_RUN === '1';
 const SITE_CONTEXT = 'hospital_plastic_surgery';
-const BATCH_SIZE = 10; // sentences per API call (balance quality vs cost)
+const BATCH_SIZE = 25; // sentences per API call (balance quality vs cost)
 const DELAY_MS = 500;  // delay between API calls to avoid rate limits
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -86,73 +87,6 @@ const TARGET_LANGUAGES = [
   { code: 'bg', name: 'Bulgarian', formality: 'formal-vie' },
   { code: 'mk', name: 'Macedonian', formality: 'formal-vie' },
   { code: 'sq', name: 'Albanian', formality: 'formal-ju' },
-];
-
-// ============================================================
-// 50 Standard Korean Sentences (Plastic Surgery Hospital)
-// ============================================================
-const KOREAN_SENTENCES = [
-  // --- Reception (접수/안내) ---
-  '안녕하세요, 예약하셨나요?',
-  '여권 보여주시겠어요?',
-  '이 서류에 서명해 주세요.',
-  '대기실에서 잠시 기다려 주세요.',
-  '상담료는 무료입니다.',
-  '수술 전 동의서를 작성해 주세요.',
-  '보호자가 함께 오셨나요?',
-  '알레르기가 있으신가요?',
-  '현재 복용 중인 약이 있나요?',
-  '이전에 수술 받으신 적 있나요?',
-
-  // --- Consultation (상담) ---
-  '어떤 부분이 고민이세요?',
-  '원하시는 스타일이 있으신가요?',
-  '사진으로 보여드릴게요.',
-  '이 시술은 약 1시간 정도 걸립니다.',
-  '회복 기간은 약 2주입니다.',
-  '부기는 1~2주 안에 빠집니다.',
-  '실밥은 5~7일 후에 제거합니다.',
-  '마취는 수면마취로 진행합니다.',
-  '부작용 가능성에 대해 설명드리겠습니다.',
-  '비용은 상담 후 안내드립니다.',
-
-  // --- Procedure Names (시술명) ---
-  '쌍꺼풀 수술 (눈 성형)',
-  '코 성형 (융비술)',
-  '지방흡입',
-  '안면윤곽 수술 (턱 수술)',
-  '실리프팅',
-  '보톡스 시술',
-  '필러 시술',
-  '레이저 토닝',
-  '가슴 성형',
-  '지방이식',
-
-  // --- Pre/Post-op Instructions (수술 전후 안내) ---
-  '수술 8시간 전부터 금식해 주세요.',
-  '수술 당일에는 화장을 하지 마세요.',
-  '콘택트렌즈는 빼고 오세요.',
-  '수술 후 냉찜질을 해주세요.',
-  '처방약을 반드시 복용해 주세요.',
-  '수술 후 음주와 흡연은 2주간 금지입니다.',
-  '다음 내원일은 일주일 후입니다.',
-  '이상이 있으면 바로 연락해 주세요.',
-  '수술 부위를 만지지 마세요.',
-  '세안은 3일 후부터 가능합니다.',
-
-  // --- Payment/Admin (결제/행정) ---
-  '카드 결제 가능합니다.',
-  '현금영수증 발행해 드릴까요?',
-  '진단서가 필요하시면 말씀해 주세요.',
-  '환불 규정을 안내드리겠습니다.',
-  '계약금을 먼저 납부해 주세요.',
-  '잔금은 수술 당일 결제해 주세요.',
-
-  // --- General Guidance (일상 안내) ---
-  '화장실은 복도 끝에 있습니다.',
-  '와이파이 비밀번호를 알려드릴게요.',
-  '택시를 불러드릴까요?',
-  '통역이 필요하시면 말씀해 주세요.',
 ];
 
 // ============================================================
