@@ -409,20 +409,16 @@ async function sendConnectionAlert(type, details = {}) {
   if (msg) sendTelegram(msg);
 }
 
-let lastHourlyReportKey = '';
-function sendHourlyReport() {
+let lastDailyReportKey = '';
+function sendDailyReport() {
   resetDailyStats();
   const now = new Date();
-  const hour = now.getHours();
 
-  // 새벽 1시~7시는 전송 안 함
-  if (hour >= 1 && hour <= 7) return;
+  const dayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  if (lastDailyReportKey === dayKey) return;
+  lastDailyReportKey = dayKey;
 
-  const hourKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${hour}`;
-  if (lastHourlyReportKey === hourKey) return;
-  lastHourlyReportKey = hourKey;
-
-  const msg = `📊 <b>MONO 시간별 리포트</b>
+  const msg = `📊 <b>MONO 일일 리포트</b>
 ⏰ ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
 
 👥 현재 접속: <b>${usageStats.currentConnections}명</b>
@@ -7278,8 +7274,8 @@ setInterval(() => {
   const now = new Date();
   resetDailyStats();
   syncRoomsActive();
-  if (now.getMinutes() === 0) {
-    sendHourlyReport();
+  if (now.getHours() === 9 && now.getMinutes() === 0) {
+    sendDailyReport();
   }
 }, 60 * 1000).unref?.();
 
