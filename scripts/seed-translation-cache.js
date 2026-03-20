@@ -23,6 +23,7 @@ const OpenAI = require('openai');
 const Database = require('better-sqlite3');
 const path = require('path');
 const KOREAN_SENTENCES = require('./seed-sentences');
+const PATIENT_SENTENCES_EN = require('./seed-patient-sentences');
 
 const DB_PATH = process.env.MONO_DB_PATH || path.join(__dirname, '..', 'state', 'mono_phase1.sqlite');
 const DRY_RUN = process.env.SEED_DRY_RUN === '1';
@@ -135,6 +136,56 @@ INPUT (Korean, one sentence per line):`;
   return cleaned;
 }
 
+/**
+ * Translate English patient sentences into a target language AND Korean.
+ * Returns array of { inTargetLang, inKorean } objects.
+ */
+async function translatePatientBatch(sentences, targetLang) {
+  const { code, name, formality } = targetLang;
+
+  const systemPrompt = `You are a professional medical translator working in a Korean plastic surgery clinic.
+
+TASK: For each English sentence, provide TWO translations:
+1. Translation into ${name} (${code}) — this is what a ${name}-speaking patient would naturally say
+2. Translation into Korean — this is what the Korean staff would hear/read
+
+RULES:
+- Use casual/polite patient speech (not formal medical language — these are patients talking)
+- For ${name}: use ${formality} register appropriate for a patient speaking to medical staff
+- For Korean: use polite 존댓말 (as the Korean staff would interpret it)
+- Output format: one line per sentence, with the two translations separated by ||| delimiter
+- Line format: {${name} translation}|||{Korean translation}
+- Do NOT number the lines
+- Do NOT add notes or alternatives
+- Output exactly ${sentences.length} lines
+
+INPUT (English patient sentences, one per line):`;
+
+  const userContent = sentences.join('\n');
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    temperature: 0.2,
+    max_tokens: 8000,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+  });
+
+  const output = response.choices?.[0]?.message?.content?.trim() || '';
+  const lines = output.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const cleaned = lines.map(l => l.replace(/^\d+[\.\)\-]\s*/, ''));
+
+  return cleaned.map(line => {
+    const parts = line.split('|||').map(p => p.trim());
+    return {
+      inTargetLang: parts[0] || '',
+      inKorean: parts[1] || parts[0] || '',
+    };
+  });
+}
+
 // ============================================================
 // Main
 // ============================================================
@@ -229,9 +280,121 @@ async function main() {
     await new Promise(r => setTimeout(r, DELAY_MS));
   }
 
+  // ============================================================
+  // PASS 2: Patient direction ({targetLang} → ko)
+  // ============================================================
+  console.log('\n=== Pass 2: Patient sentences (foreign → Korean) ===\n');
+
+  // First, handle English→Korean directly (no intermediate translation needed)
+  console.log('[en→ko] Seeding English patient sentences...');
+  try {
+    const enToKoBatches = [];
+    for (let i = 0; i < PATIENT_SENTENCES_EN.length; i += BATCH_SIZE) {
+      const batch = PATIENT_SENTENCES_EN.slice(i, i + BATCH_SIZE);
+      // Translate English → Korean only
+      const systemPrompt = `You are a professional medical translator. Translate each English sentence into Korean (polite 존댓말). These are sentences patients say at a plastic surgery clinic. Output one Korean translation per line. Do NOT number lines.`;
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature: 0.2,
+        max_tokens: 4000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: batch.join('\n') },
+        ],
+      });
+      const output = response.choices?.[0]?.message?.content?.trim() || '';
+      const lines = output.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const cleaned = lines.map(l => l.replace(/^\d+[\.\)\-]\s*/, ''));
+      enToKoBatches.push(...cleaned);
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+
+    const enInsertMany = db.transaction((entries) => {
+      for (const { key, text } of entries) {
+        if (DRY_RUN) {
+          console.log(`  [DRY] ${key} → ${text.substring(0, 50)}...`);
+        } else {
+          const result = insertStmt.run(key, text);
+          if (result.changes > 0) totalInserted++;
+          else totalSkipped++;
+        }
+      }
+    });
+
+    const enEntries = PATIENT_SENTENCES_EN.map((sentence, idx) => ({
+      key: `en:ko:${SITE_CONTEXT}:${sentence.trim()}`,
+      text: enToKoBatches[idx] || sentence,
+    }));
+    enInsertMany(enEntries);
+    console.log(`  ✓ en→ko done (${enEntries.length} entries)`);
+  } catch (err) {
+    console.error(`  ✗ en→ko error: ${err.message}`);
+    totalErrors++;
+  }
+
+  // Now handle all other languages
+  for (let li = 0; li < TARGET_LANGUAGES.length; li++) {
+    const lang = TARGET_LANGUAGES[li];
+    if (lang.code === 'en') continue; // already handled above
+
+    const progress = `[${li + 1}/${TARGET_LANGUAGES.length}]`;
+
+    // Check existing entries for this language→ko direction
+    const existingCount = db.prepare(
+      'SELECT COUNT(*) as cnt FROM translation_cache WHERE cache_key LIKE ?'
+    ).get(`${lang.code}:ko:${SITE_CONTEXT}:%`)?.cnt || 0;
+
+    if (existingCount >= PATIENT_SENTENCES_EN.length) {
+      console.log(`${progress} ${lang.code}→ko: already seeded (${existingCount} entries). Skipping.`);
+      totalSkipped += PATIENT_SENTENCES_EN.length;
+      continue;
+    }
+
+    console.log(`${progress} ${lang.code}→ko (${lang.name}): translating patient sentences...`);
+
+    try {
+      const allResults = [];
+      for (let i = 0; i < PATIENT_SENTENCES_EN.length; i += BATCH_SIZE) {
+        const batch = PATIENT_SENTENCES_EN.slice(i, i + BATCH_SIZE);
+        const results = await translatePatientBatch(batch, lang);
+        allResults.push(...results);
+        if (i + BATCH_SIZE < PATIENT_SENTENCES_EN.length) {
+          await new Promise(r => setTimeout(r, DELAY_MS));
+        }
+      }
+
+      const patientInsertMany = db.transaction((entries) => {
+        for (const { key, text } of entries) {
+          if (DRY_RUN) {
+            console.log(`  [DRY] ${key} → ${text.substring(0, 50)}...`);
+          } else {
+            const result = insertStmt.run(key, text);
+            if (result.changes > 0) totalInserted++;
+            else totalSkipped++;
+          }
+        }
+      });
+
+      const entries = allResults.map((result, idx) => ({
+        key: `${lang.code}:ko:${SITE_CONTEXT}:${(result.inTargetLang || PATIENT_SENTENCES_EN[idx]).trim()}`,
+        text: result.inKorean || PATIENT_SENTENCES_EN[idx],
+      }));
+      patientInsertMany(entries);
+      console.log(`  ✓ Done (${allResults.length} translations)`);
+
+    } catch (err) {
+      console.error(`  ✗ Error for ${lang.code}→ko: ${err.message}`);
+      totalErrors++;
+    }
+
+    await new Promise(r => setTimeout(r, DELAY_MS));
+  }
+
   db.close();
 
   console.log('\n=== Summary ===');
+  console.log(`Staff sentences (ko→foreign): ${KOREAN_SENTENCES.length} × ${TARGET_LANGUAGES.length} languages`);
+  console.log(`Patient sentences (foreign→ko): ${PATIENT_SENTENCES_EN.length} × ${TARGET_LANGUAGES.length} languages`);
   console.log(`Inserted: ${totalInserted}`);
   console.log(`Skipped (already existed): ${totalSkipped}`);
   console.log(`Errors: ${totalErrors}`);
