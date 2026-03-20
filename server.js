@@ -7274,7 +7274,7 @@ setInterval(() => {
   const now = new Date();
   resetDailyStats();
   syncRoomsActive();
-  if (now.getHours() === 9 && now.getMinutes() === 0) {
+  if (now.getHours() === 0 && now.getMinutes() === 0) {
     sendDailyReport();
   }
 }, 60 * 1000).unref?.();
