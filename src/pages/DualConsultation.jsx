@@ -60,6 +60,7 @@ export default function DualConsultation() {
   const [routerSearchParams] = useSearchParams();
   const urlRoomName = routerSearchParams.get("roomName") || "";
   const modeParam = routerSearchParams.get("mode");
+  const isConsultationSingle = modeParam === "vad";
   const initialInputMode =
     modeParam === "vad" ? "vad" : modeParam === "webspeech" ? "webspeech" : "ptt";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
@@ -95,7 +96,7 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
-  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "webspeech" | "vad" (vad UI unused)
+  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad" | "webspeech"
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
   const [sttProvider, setSttProvider] = useState("webspeech");
@@ -125,6 +126,13 @@ export default function DualConsultation() {
   useEffect(() => {
     inputModeRef.current = inputMode;
   }, [inputMode]);
+
+  // ?????(consultation_single) URL? Web Speech ??? ?? ?? ? ??? ?? ??
+  useEffect(() => {
+    if (!isConsultationSingle) return;
+    setWebSpeechActive(false);
+    setInputMode((m) => (m === "webspeech" ? "vad" : m));
+  }, [isConsultationSingle]);
   useEffect(() => {
     staffLangRef.current = staffLang;
   }, [staffLang]);
@@ -1039,7 +1047,14 @@ export default function DualConsultation() {
         ) : null}
         {connected && settingsExpanded && (
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 12,
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -1047,13 +1062,13 @@ export default function DualConsultation() {
                     setWebSpeechActive(false);
                   }}
                   style={{
-                    flex: 1,
-                    padding: "10px 0",
+                    flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
+                    padding: "10px 6px",
                     borderRadius: 8,
                     border: inputMode === "ptt" ? "2px solid #4A90D9" : "1px solid #ddd",
                     background: inputMode === "ptt" ? "#EBF3FC" : "#fff",
                     fontWeight: inputMode === "ptt" ? 700 : 400,
-                    fontSize: 14,
+                    fontSize: 13,
                     cursor: "pointer",
                   }}
                 >
@@ -1062,23 +1077,100 @@ export default function DualConsultation() {
                 <button
                   type="button"
                   onClick={() => {
-                    setInputMode("webspeech");
+                    setInputMode("vad");
                     setWebSpeechActive(false);
                   }}
                   style={{
-                    flex: 1,
-                    padding: "10px 0",
+                    flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
+                    padding: "10px 6px",
                     borderRadius: 8,
-                    border: inputMode === "webspeech" ? "2px solid #4A90D9" : "1px solid #ddd",
-                    background: inputMode === "webspeech" ? "#EBF3FC" : "#fff",
-                    fontWeight: inputMode === "webspeech" ? 700 : 400,
-                    fontSize: 14,
+                    border: inputMode === "vad" ? "2px solid #4A90D9" : "1px solid #ddd",
+                    background: inputMode === "vad" ? "#EBF3FC" : "#fff",
+                    fontWeight: inputMode === "vad" ? 700 : 400,
+                    fontSize: 13,
                     cursor: "pointer",
                   }}
                 >
                   {"\uD83D\uDD0A \uC74C\uC131\uC778\uC2DD (\uC790\uB3D9)"}
                 </button>
+                {!isConsultationSingle ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputMode("webspeech");
+                      setWebSpeechActive(false);
+                    }}
+                    style={{
+                      flex: "1 1 90px",
+                      padding: "10px 6px",
+                      borderRadius: 8,
+                      border: inputMode === "webspeech" ? "2px solid #4A90D9" : "1px solid #ddd",
+                      background: inputMode === "webspeech" ? "#EBF3FC" : "#fff",
+                      fontWeight: inputMode === "webspeech" ? 700 : 400,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {"\uD83C\uDF10 Web Speech (PC\uC804\uC6A9)"}
+                  </button>
+                ) : null}
               </div>
+              {inputMode === "vad" && (
+                <div style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    onClick={handleVADToggle}
+                    disabled={!connected || (vadActive && !vadListening)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 0",
+                      borderRadius: 8,
+                      border: "none",
+                      background:
+                        !connected || (vadActive && !vadListening)
+                          ? "#9ca3af"
+                          : vadActive
+                            ? "#EF4444"
+                            : "#22C55E",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 16,
+                      cursor: !connected || (vadActive && !vadListening) ? "not-allowed" : "pointer",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {vadActive
+                      ? "\u23F9 \uC74C\uC131\uC778\uC2DD \uC911\uC9C0"
+                      : "\u25B6 \uC74C\uC131\uC778\uC2DD \uC2DC\uC791"}
+                  </button>
+                  {vadActive && !vadListening ? (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#92400e",
+                        textAlign: "center",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 14,
+                          height: 14,
+                          border: "2px solid #ca8a04",
+                          borderTopColor: "transparent",
+                          borderRadius: "50%",
+                          animation: "dual-vad-spin 0.7s linear infinite",
+                        }}
+                      />
+                      Initializing microphone\u2026
+                    </div>
+                  ) : null}
+                </div>
+              )}
               {inputMode === "webspeech" && (
                 <div style={{ marginBottom: 12 }}>
                   <button
