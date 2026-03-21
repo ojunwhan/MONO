@@ -632,7 +632,7 @@ function RoomsPanel({ authUser }) {
       }
       if (tpl === "consultation_single" || tpl === "consultation-single") {
         const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=webspeech`;
+        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=vad`;
       }
       const urlTemplate =
         tpl === "consultation" || tpl === "consultation-tablet" ? "consultation" : tpl === "reception" || !tpl ? "reception" : tpl;
@@ -684,7 +684,7 @@ function RoomsPanel({ authUser }) {
           setAddName("");
           setAddTemplate(TEMPLATE_UI.RECEPTION);
           navigate(
-            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}&mode=webspeech`
+            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}&mode=vad`
           );
           setSubmitting(false);
           return;
@@ -888,7 +888,7 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
     room.template === "consultation_dual" || room.template === "consultation_single";
 
   const openDualConsultation = () => {
-    const modeSuffix = room.template === "consultation_single" ? "&mode=webspeech" : "";
+    const modeSuffix = room.template === "consultation_single" ? "&mode=vad" : "";
     navigate(
       `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}&roomName=${encodeURIComponent(room.name)}${modeSuffix}`
     );
@@ -1080,7 +1080,7 @@ function OverviewPanel({ authUser }) {
     }
     if (room.template === "consultation_single") {
       const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=webspeech`;
+      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=vad`;
     }
     const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
     const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
