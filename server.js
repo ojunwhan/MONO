@@ -1917,16 +1917,6 @@ async function generateNameAdaptations(roomId) {
 
 // ─────────────────────────────────────────────────────────────────────
 
-const GROQ_TRANSLATE_LANGS = ['en', 'de', 'fr', 'it', 'pt', 'hi', 'es', 'th'];
-
-function shouldUseGroqTranslate(from, to) {
-  const base = (c) => String(c || '').toLowerCase().split('-')[0];
-  const f = base(from);
-  const t = base(to);
-  const inGroqSet = (c) => c === 'ko' || GROQ_TRANSLATE_LANGS.includes(c);
-  return inGroqSet(f) && inGroqSet(t);
-}
-
 async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   const cacheKey = `${from}:${to}:${siteContext || ''}:${text.trim()}`;
@@ -1986,27 +1976,6 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
       const streamResult = full.trim() || text;
       await dbRun('INSERT OR REPLACE INTO translation_cache (cache_key, translated_text) VALUES (?, ?)', [cacheKey, streamResult]).catch(() => {});
       return streamResult;
-    }
-    const _perfTranslateStart = Date.now();
-    if (groq && shouldUseGroqTranslate(from, to) && !useStream) {
-      try {
-        const groqR = await groq.chat.completions.create({
-          model: 'llama-3.3-70b-versatile',
-          temperature: 0.3,
-          max_tokens: 1024,
-          messages: [
-            { role: 'system', content: sys },
-            ...recentContext,
-            { role: 'user', content: `Translate the following from ${label(from)} to ${label(to)}:\n\n${text}` },
-          ],
-        });
-        const groqResult = groqR.choices?.[0]?.message?.content?.trim() || text;
-        await dbRun('INSERT OR REPLACE INTO translation_cache (cache_key, translated_text) VALUES (?, ?)', [cacheKey, groqResult]).catch(() => {});
-        console.log(`[PERF] Groq translation done in ${Date.now() - _perfTranslateStart}ms | ${from}→${to}`);
-        return groqResult;
-      } catch (e) {
-        console.log(`[GROQ-TRANSLATE-FALLBACK] ${e?.message || e}`);
-      }
     }
     const r = await openai.chat.completions.create({
       model: 'gpt-4o',
