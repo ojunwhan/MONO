@@ -48,6 +48,20 @@ function getRegistrationOrgCode() {
   }
 }
 
+const MONO_CONSULTATION_PATIENT_LANG_KEY = "mono_consultation_patient_lang";
+
+function readStoredPatientLang() {
+  if (typeof window === "undefined") return "en";
+  try {
+    const raw = localStorage.getItem(MONO_CONSULTATION_PATIENT_LANG_KEY);
+    if (!raw || !String(raw).trim()) return "en";
+    const code = String(raw).trim().toLowerCase().split("-")[0];
+    return getLanguageByCode(code) ? code : "en";
+  } catch {
+    return "en";
+  }
+}
+
 async function toBase64FromBlob(blob) {
   const buf = await blob.arrayBuffer();
   const u8 = new Uint8Array(buf);
@@ -96,6 +110,7 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
+  const [patientLangHeaderOpen, setPatientLangHeaderOpen] = useState(false);
   const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad" | "webspeech"
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
@@ -139,6 +154,29 @@ export default function DualConsultation() {
   useEffect(() => {
     patientLangRef.current = patientLang;
   }, [patientLang]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MONO_CONSULTATION_PATIENT_LANG_KEY, patientLang);
+    } catch {
+      /* ignore */
+    }
+  }, [patientLang]);
+
+  useEffect(() => {
+    if (!patientLangHeaderOpen) return;
+    const onDocMouseDown = (e) => {
+      if (!patientLangHeaderDropdownRef.current) return;
+      if (patientLangHeaderDropdownRef.current.contains(e.target)) return;
+      setPatientLangHeaderOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [patientLangHeaderOpen]);
+
+  useEffect(() => {
+    if (inputMode !== "vad") setPatientLangHeaderOpen(false);
+  }, [inputMode]);
 
   // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
   // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
@@ -798,7 +836,7 @@ export default function DualConsultation() {
 `}</style>
       {/* Top bar */}
       <header style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e7eb", background: "#fff", padding: "12px", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", width: "100%" }}>
           <div style={{ display: "flex", alignItems: "center", flex: "1 1 120px", minWidth: 0, border: "1px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
             <input
               type="text"
@@ -855,33 +893,113 @@ export default function DualConsultation() {
               </button>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={handleConnect}
-            disabled={connected || !ptNumber.trim()}
-            style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginLeft: "auto",
+              flexShrink: 0,
+            }}
           >
-            {connected ? "Connected" : "Connect"}
-          </button>
-          {connected && (
+            {inputMode === "vad" ? (
+              <div
+                ref={patientLangHeaderDropdownRef}
+                style={{ position: "relative", zIndex: patientLangHeaderOpen ? 50 : undefined }}
+              >
+                <button
+                  type="button"
+                  title="Patient language"
+                  onClick={() => setPatientLangHeaderOpen((p) => !p)}
+                  style={{
+                    maxWidth: 80,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#374151",
+                    cursor: "pointer",
+                    lineHeight: 1,
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }} aria-hidden>
+                    {getLanguageByCode(patientLang)?.flag || "\uD83C\uDF10"}
+                  </span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {LANG_TO_LABEL[patientLang] || String(patientLang || "en").toUpperCase().slice(0, 2)}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0 }} aria-hidden>
+                    {"\u25BC"}
+                  </span>
+                </button>
+                {patientLangHeaderOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      right: 0,
+                      marginTop: 4,
+                      width: 280,
+                      maxWidth: "calc(100vw - 24px)",
+                      background: "#fff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                      padding: 8,
+                    }}
+                  >
+                    <LanguageFlagPicker
+                      layout="gridOnly"
+                      selectedLang={patientLang}
+                      showGrid={false}
+                      onToggleGrid={() => {}}
+                      onSelect={(code) => {
+                        setPatientLang(code);
+                        patientLangRef.current = code;
+                        setPatientLangHeaderOpen(false);
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <button
               type="button"
-              onClick={() => setSettingsExpanded((p) => !p)}
-              title={settingsExpanded ? "Collapse" : "Expand"}
-              style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
+              onClick={handleConnect}
+              disabled={connected || !ptNumber.trim()}
+              style={{ borderRadius: "8px", background: "#2563EB", padding: "8px 16px", fontSize: "14px", fontWeight: 500, color: "#fff", opacity: connected || !ptNumber.trim() ? 0.5 : 1 }}
             >
-              {settingsExpanded ? "\u25BC" : "\u25B6"}
+              {connected ? "Connected" : "Connect"}
             </button>
-          )}
-          {connected && (
-            <button
-              type="button"
-              onClick={handleEndSession}
-              style={{ padding: "6px 16px", background: "#ef4444", color: "#fff", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
-            >
-              {"\uC0C1\uB2F4 \uC885\uB8CC"}
-            </button>
-          )}
+            {connected && (
+              <button
+                type="button"
+                onClick={() => setSettingsExpanded((p) => !p)}
+                title={settingsExpanded ? "Collapse" : "Expand"}
+                style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563" }}
+              >
+                {settingsExpanded ? "\u25BC" : "\u25B6"}
+              </button>
+            )}
+            {connected && (
+              <button
+                type="button"
+                onClick={handleEndSession}
+                style={{ padding: "6px 16px", background: "#ef4444", color: "#fff", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+              >
+                {"\uC0C1\uB2F4 \uC885\uB8CC"}
+              </button>
+            )}
+          </div>
         </div>
         {ptNumber.trim() && !patientDisplayName ? (
           <div

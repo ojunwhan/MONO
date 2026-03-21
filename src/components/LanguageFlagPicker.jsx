@@ -16,8 +16,45 @@ function getFlagImageUrl(code) {
   return emojiFlagUrl || getFlagUrlByLang(code);
 }
 
-export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGrid, onSelect }) {
+/** layout="gridOnly" — flag grid only for compact dropdowns (parent controls open state). */
+export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGrid, onSelect, layout = "default" }) {
   const selected = getLanguageByCode(selectedLang) || LANGUAGES[0];
+
+  const renderGrid = (gridClassName) => (
+    <div className={gridClassName}>
+      {LANGUAGES.map((p) => {
+        const isSelected = selected?.code === p.code;
+        return (
+          <button
+            key={p.code}
+            type="button"
+            onClick={() => onSelect?.(p.code)}
+            className={`rounded-[12px] border-2 px-2 py-3 text-center transition-colors ${
+              isSelected
+                ? "border-[#3B82F6] bg-[#EFF6FF]"
+                : "border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[#F8FAFC]"
+            }`}
+          >
+            <img
+              src={getFlagImageUrl(p.code)}
+              alt={`${p.name} flag`}
+              width={48}
+              height={48}
+              className="w-12 h-12 mx-auto rounded-[8px] object-cover"
+              loading="lazy"
+            />
+            <div className="mt-2 text-[12px] font-semibold tracking-wide text-[var(--color-text)]">
+              {getLabelFromCode(p.code) || String(p.code || "").toUpperCase()}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (layout === "gridOnly") {
+    return <div className="w-full">{renderGrid("grid grid-cols-4 gap-2 max-h-[min(50vh,320px)] overflow-y-auto p-1")}</div>;
+  }
 
   return (
     <div className="w-full">
@@ -44,37 +81,7 @@ export default function LanguageFlagPicker({ selectedLang, showGrid, onToggleGri
         </div>
       </button>
 
-      {showGrid ? (
-        <div className="mt-4 grid grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto">
-          {LANGUAGES.map((p) => {
-            const isSelected = selected?.code === p.code;
-            return (
-              <button
-                key={p.code}
-                type="button"
-                onClick={() => onSelect?.(p.code)}
-                className={`rounded-[12px] border-2 px-2 py-3 text-center transition-colors ${
-                  isSelected
-                    ? "border-[#3B82F6] bg-[#EFF6FF]"
-                    : "border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <img
-                  src={getFlagImageUrl(p.code)}
-                  alt={`${p.name} flag`}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 mx-auto rounded-[8px] object-cover"
-                  loading="lazy"
-                />
-                <div className="mt-2 text-[12px] font-semibold tracking-wide text-[var(--color-text)]">
-                  {getLabelFromCode(p.code) || String(p.code || "").toUpperCase()}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {showGrid ? renderGrid("mt-4 grid grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto") : null}
     </div>
   );
 }
