@@ -5,6 +5,7 @@
  * Uses existing socket events: join, stt:whisper, receive-message, receive-message-stream, receive-message-stream-end.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import socket from "../socket";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { getFlagUrlByLang } from "../constants/languageProfiles";
@@ -56,8 +57,9 @@ async function toBase64FromBlob(blob) {
 }
 
 export default function DualConsultation() {
-  const searchParams = new URLSearchParams(window.location.search);
-  const urlRoomName = searchParams.get("roomName") || "";
+  const [routerSearchParams] = useSearchParams();
+  const urlRoomName = routerSearchParams.get("roomName") || "";
+  const initialInputMode = routerSearchParams.get("mode") === "webspeech" ? "webspeech" : "ptt";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
@@ -91,7 +93,7 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
-  const [inputMode, setInputMode] = useState("ptt"); // "ptt" | "webspeech" | "vad" (vad UI unused)
+  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "webspeech" | "vad" (vad UI unused)
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
   const [sttProvider, setSttProvider] = useState("webspeech");

@@ -6599,7 +6599,7 @@ app.post('/api/hospital/rooms', requireHospitalAdminJwt, async (req, res) => {
     const { name, template: rawTemplate } = req.body || {};
     const roomName = String(name || '').trim();
     const templateStr = String(rawTemplate || 'reception').toLowerCase();
-    const VALID_TEMPLATES = ['reception', 'consultation', 'consultation_dual'];
+    const VALID_TEMPLATES = ['reception', 'consultation', 'consultation_dual', 'consultation_single'];
     const roomTemplate = VALID_TEMPLATES.includes(templateStr) ? templateStr : 'reception';
     if (!roomName) return res.status(400).json({ error: 'name_required' });
     const id = uuidv4();

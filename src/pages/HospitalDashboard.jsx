@@ -455,7 +455,7 @@ export default function HospitalDashboard() {
 // ═══════════════════════════════════════════
 // ROOMS PANEL — \uBC29 \uB9CC\uB4E4\uAE30 (추가, QR, 인쇄, 링크 복사)
 // ═══════════════════════════════════════════
-/** UI template keys (cards). API/DB still use reception | consultation | consultation_dual (server VALID_TEMPLATES). */
+/** UI template keys (cards). API/DB use reception | consultation | consultation_dual | consultation_single (server VALID_TEMPLATES). */
 const TEMPLATE_UI = {
   RECEPTION: "reception",
   CONSULTATION_SINGLE: "consultation-single",
@@ -466,6 +466,7 @@ const TEMPLATE_UI = {
 
 function templateUiToApi(ui) {
   if (ui === TEMPLATE_UI.CONSULTATION_DUAL) return "consultation_dual";
+  if (ui === TEMPLATE_UI.CONSULTATION_SINGLE) return "consultation_single";
   if (ui === TEMPLATE_UI.CONSULTATION_TABLET) return "consultation";
   if (ui === TEMPLATE_UI.RECEPTION) return "reception";
   return ui;
@@ -560,7 +561,7 @@ const ROOM_TEMPLATE_CARDS = [
     value: TEMPLATE_UI.CONSULTATION_SINGLE,
     title: "상담실 · 싱글마이크 · PC 1대",
     subtitle: "PC 1대 + 마이크 1개 (VAD 자동인식)",
-    comingSoon: true,
+    comingSoon: false,
     Illustration: SvgSingleMicIllust,
   },
   {
@@ -629,6 +630,10 @@ function RoomsPanel({ authUser }) {
         const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
         return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}`;
       }
+      if (tpl === "consultation_single" || tpl === "consultation-single") {
+        const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=webspeech`;
+      }
       const urlTemplate =
         tpl === "consultation" || tpl === "consultation-tablet" ? "consultation" : tpl === "reception" || !tpl ? "reception" : tpl;
       const base = `/hospital?template=${urlTemplate}&room=${room.id}`;
@@ -670,6 +675,16 @@ function RoomsPanel({ authUser }) {
           setAddTemplate(TEMPLATE_UI.RECEPTION);
           navigate(
             `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}`
+          );
+          setSubmitting(false);
+          return;
+        }
+        if (apiTemplate === "consultation_single" && data.room) {
+          setRooms((prev) => [data.room, ...prev]);
+          setAddName("");
+          setAddTemplate(TEMPLATE_UI.RECEPTION);
+          navigate(
+            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}&mode=webspeech`
           );
           setSubmitting(false);
           return;
@@ -864,14 +879,18 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
   const templateLabel =
     room.template === "consultation_dual"
       ? "듀얼마이크 PTT"
-      : room.template === "consultation"
-        ? "상담 모드 (VAD)"
-        : "접수 모드 (탭하여 말하기)";
-  const isConsultationDual = room.template === "consultation_dual";
+      : room.template === "consultation_single"
+        ? "싱글마이크 · 음성인식"
+        : room.template === "consultation"
+          ? "상담 모드 (VAD)"
+          : "접수 모드 (탭하여 말하기)";
+  const opensDualConsultation =
+    room.template === "consultation_dual" || room.template === "consultation_single";
 
   const openDualConsultation = () => {
+    const modeSuffix = room.template === "consultation_single" ? "&mode=webspeech" : "";
     navigate(
-      `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}&roomName=${encodeURIComponent(room.name)}`
+      `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}&roomName=${encodeURIComponent(room.name)}${modeSuffix}`
     );
   };
 
@@ -894,7 +913,7 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
       <span className="text-[11px] font-medium text-[var(--color-text-secondary)] mb-3 px-2 py-1 rounded-md bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
         {templateLabel}
       </span>
-      {isConsultationDual ? (
+      {opensDualConsultation ? (
         <div className="flex flex-wrap gap-2 w-full justify-center mb-2">
           <button
             type="button"
@@ -905,7 +924,7 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
           </button>
         </div>
       ) : null}
-      {!isConsultationDual ? (
+      {!opensDualConsultation ? (
         <>
           <div className="bg-white p-3 rounded-[10px] mb-4 inline-block">
             <Suspense fallback={<span className="inline-block w-[160px] h-[160px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
@@ -1058,6 +1077,10 @@ function OverviewPanel({ authUser }) {
     if (room.template === "consultation_dual") {
       const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
       return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}`;
+    }
+    if (room.template === "consultation_single") {
+      const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
+      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=webspeech`;
     }
     const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
     const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
