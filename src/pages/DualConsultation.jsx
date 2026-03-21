@@ -137,6 +137,7 @@ export default function DualConsultation() {
   const inputModeRef = useRef(inputMode);
   const staffLangRef = useRef(staffLang);
   const patientLangRef = useRef(patientLang);
+  const patientLangHeaderDropdownRef = useRef(null);
 
   useEffect(() => {
     inputModeRef.current = inputMode;
