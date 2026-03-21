@@ -26,6 +26,7 @@ import {
   Copy,
   LayoutGrid,
   Plus,
+  Check,
   Trash2,
   Monitor,
   Tablet,
@@ -454,10 +455,135 @@ export default function HospitalDashboard() {
 // ═══════════════════════════════════════════
 // ROOMS PANEL — \uBC29 \uB9CC\uB4E4\uAE30 (추가, QR, 인쇄, 링크 복사)
 // ═══════════════════════════════════════════
-const ROOM_TEMPLATES = [
-  { value: "reception", label: "\uC811\uC218 \uBAA8\uB4DC" },
-  { value: "consultation_dual", label: "\uC0C1\uB2F4 \uBAA8\uB4DC 1 (\uB4C0\uC5BC\uB9C8\uC774\uD06C)" },
-  { value: "consultation", label: "\uC0C1\uB2F4 \uBAA8\uB4DC 2 (\uD0DC\uBE14\uB9BF)" },
+/** UI template keys (cards). API/DB still use reception | consultation | consultation_dual (server VALID_TEMPLATES). */
+const TEMPLATE_UI = {
+  RECEPTION: "reception",
+  CONSULTATION_SINGLE: "consultation-single",
+  CONSULTATION_DUAL: "consultation-dual",
+  CONSULTATION_DISPLAY: "consultation-display",
+  CONSULTATION_TABLET: "consultation-tablet",
+};
+
+function templateUiToApi(ui) {
+  if (ui === TEMPLATE_UI.CONSULTATION_DUAL) return "consultation_dual";
+  if (ui === TEMPLATE_UI.CONSULTATION_TABLET) return "consultation";
+  if (ui === TEMPLATE_UI.RECEPTION) return "reception";
+  return ui;
+}
+
+function SvgReceptionIllust() {
+  return (
+    <svg viewBox="0 0 200 88" className="w-full h-[88px]" aria-hidden>
+      <rect x="8" y="12" width="56" height="40" rx="4" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.5" />
+      <rect x="18" y="54" width="36" height="6" rx="1" fill="#CBD5E1" />
+      <rect x="100" y="18" width="36" height="48" rx="3" fill="#F1F5F9" stroke="#3B82F6" strokeWidth="1.5" />
+      <path d="M112 28h12M112 34h12M112 40h8" stroke="#3B82F6" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="156" cy="28" r="5" fill="#CBD5E1" />
+      <path d="M156 34v14M148 42h16" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="168" y="44" width="10" height="16" rx="1" fill="#3B82F6" opacity="0.35" />
+    </svg>
+  );
+}
+
+function SvgSingleMicIllust() {
+  return (
+    <svg viewBox="0 0 200 88" className="w-full h-[88px]" aria-hidden>
+      <rect x="72" y="10" width="56" height="38" rx="4" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.5" />
+      <rect x="82" y="50" width="36" height="5" rx="1" fill="#CBD5E1" />
+      <circle cx="100" cy="68" r="6" fill="#EFF6FF" stroke="#3B82F6" strokeWidth="1.5" />
+      <path d="M97 74v6M94 80h12" stroke="#3B82F6" strokeWidth="1.2" />
+      <circle cx="40" cy="52" r="5" fill="#CBD5E1" />
+      <path d="M40 58v12M34 66h12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="160" cy="52" r="5" fill="#CBD5E1" />
+      <path d="M160 58v12M154 66h12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SvgDualMicIllust() {
+  return (
+    <svg viewBox="0 0 200 88" className="w-full h-[88px]" aria-hidden>
+      <rect x="72" y="8" width="56" height="36" rx="4" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.5" />
+      <rect x="82" y="46" width="36" height="5" rx="1" fill="#CBD5E1" />
+      <circle cx="38" cy="40" r="5" fill="#CBD5E1" />
+      <path d="M38 46v14M32 54h12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="28" cy="62" r="5" fill="#EFF6FF" stroke="#3B82F6" strokeWidth="1.5" />
+      <path d="M28 68v5" stroke="#3B82F6" strokeWidth="1.2" />
+      <circle cx="162" cy="40" r="5" fill="#CBD5E1" />
+      <path d="M162 46v14M156 54h12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="172" cy="62" r="5" fill="#EFF6FF" stroke="#3B82F6" strokeWidth="1.5" />
+      <path d="M172 68v5" stroke="#3B82F6" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function SvgDisplayIllust() {
+  return (
+    <svg viewBox="0 0 200 88" className="w-full h-[88px]" aria-hidden>
+      <rect x="6" y="14" width="52" height="36" rx="3" fill="#E2E8F0" stroke="#3B82F6" strokeWidth="1.5" />
+      <rect x="16" y="52" width="32" height="4" rx="1" fill="#CBD5E1" />
+      <circle cx="32" cy="68" r="5" fill="#CBD5E1" />
+      <path d="M32 74v8" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="92" y="16" width="48" height="34" rx="3" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="1.5" />
+      <rect x="98" y="24" width="18" height="8" rx="2" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="1" />
+      <rect x="120" y="34" width="14" height="6" rx="1" fill="#E2E8F0" />
+      <rect x="98" y="38" width="22" height="6" rx="1" fill="#E2E8F0" />
+      <rect x="148" y="52" width="40" height="5" rx="1" fill="#CBD5E1" />
+    </svg>
+  );
+}
+
+function SvgTabletPairIllust() {
+  return (
+    <svg viewBox="0 0 200 88" className="w-full h-[88px]" aria-hidden>
+      <rect x="10" y="12" width="50" height="36" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.5" />
+      <rect x="20" y="50" width="30" height="4" rx="1" fill="#CBD5E1" />
+      <path d="M62 32h28" stroke="#3B82F6" strokeWidth="1.5" strokeDasharray="3 2" />
+      <rect x="96" y="18" width="38" height="48" rx="3" fill="#F1F5F9" stroke="#3B82F6" strokeWidth="1.5" />
+      <circle cx="32" cy="72" r="5" fill="#CBD5E1" />
+      <path d="M32 78v6" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="115" cy="72" r="5" fill="#CBD5E1" />
+      <path d="M115 78v6" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const ROOM_TEMPLATE_CARDS = [
+  {
+    value: TEMPLATE_UI.RECEPTION,
+    title: "접수처 · PC + QR",
+    subtitle: "직원 PC 1대 + 태블릿 QR 키오스크",
+    comingSoon: false,
+    Illustration: SvgReceptionIllust,
+  },
+  {
+    value: TEMPLATE_UI.CONSULTATION_SINGLE,
+    title: "상담실 · 싱글마이크 · PC 1대",
+    subtitle: "PC 1대 + 마이크 1개 (VAD 자동인식)",
+    comingSoon: true,
+    Illustration: SvgSingleMicIllust,
+  },
+  {
+    value: TEMPLATE_UI.CONSULTATION_DUAL,
+    title: "상담실 · 듀얼마이크 · PC 1대",
+    subtitle: "PC 1대 + 블루투스 마이크 2개",
+    comingSoon: false,
+    Illustration: SvgDualMicIllust,
+  },
+  {
+    value: TEMPLATE_UI.CONSULTATION_DISPLAY,
+    title: "상담실 · PC + 외부모니터",
+    subtitle: "직원 PC + 환자용 읽기전용 모니터",
+    comingSoon: true,
+    Illustration: SvgDisplayIllust,
+  },
+  {
+    value: TEMPLATE_UI.CONSULTATION_TABLET,
+    title: "상담실 · PC + 태블릿",
+    subtitle: "직원 PC + 환자 전용 태블릿 (완전 분리)",
+    comingSoon: false,
+    Illustration: SvgTabletPairIllust,
+  },
 ];
 
 function RoomsPanel({ authUser }) {
@@ -465,8 +591,15 @@ function RoomsPanel({ authUser }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addName, setAddName] = useState("");
-  const [addTemplate, setAddTemplate] = useState("reception");
+  const [addTemplate, setAddTemplate] = useState(TEMPLATE_UI.RECEPTION);
   const [submitting, setSubmitting] = useState(false);
+  const [templateToast, setTemplateToast] = useState(null);
+
+  useEffect(() => {
+    if (!templateToast) return undefined;
+    const t = setTimeout(() => setTemplateToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [templateToast]);
 
   const fetchRooms = useCallback(async () => {
     setLoading(true);
@@ -491,11 +624,14 @@ function RoomsPanel({ authUser }) {
   const buildRoomUrl = useCallback(
     (room, kiosk = false) => {
       if (!origin) return "";
-      if (room.template === "consultation_dual") {
+      const tpl = room.template;
+      if (tpl === "consultation_dual" || tpl === "consultation-dual") {
         const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
         return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}`;
       }
-      const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
+      const urlTemplate =
+        tpl === "consultation" || tpl === "consultation-tablet" ? "consultation" : tpl === "reception" || !tpl ? "reception" : tpl;
+      const base = `/hospital?template=${urlTemplate}&room=${room.id}`;
       const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
       return `${origin}${base}${orgSuffix}${kiosk ? "&kiosk=true" : ""}`;
     },
@@ -516,6 +652,7 @@ function RoomsPanel({ authUser }) {
     e.preventDefault();
     const name = addName.trim();
     if (!name) return;
+    const apiTemplate = templateUiToApi(addTemplate);
     setSubmitting(true);
     try {
       const url = urlWithOrg("/api/hospital/rooms", authUser?.org_code);
@@ -523,14 +660,14 @@ function RoomsPanel({ authUser }) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, template: addTemplate }),
+        body: JSON.stringify({ name, template: apiTemplate }),
       });
       const data = await r.json();
       if (data.success) {
-        if (addTemplate === "consultation_dual" && data.room) {
+        if (apiTemplate === "consultation_dual" && data.room) {
           setRooms((prev) => [data.room, ...prev]);
           setAddName("");
-          setAddTemplate("reception");
+          setAddTemplate(TEMPLATE_UI.RECEPTION);
           navigate(
             `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}`
           );
@@ -539,13 +676,26 @@ function RoomsPanel({ authUser }) {
         }
         setRooms((prev) => [data.room, ...prev]);
         setAddName("");
-        setAddTemplate("reception");
+        setAddTemplate(TEMPLATE_UI.RECEPTION);
       }
     } catch (e) {
       console.error("add room failed:", e);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const roomNamePlaceholder =
+    addTemplate === TEMPLATE_UI.RECEPTION
+      ? "예: 접수 데스크 1, 접수 데스크 2"
+      : "예: 상담실 1, 진료실 2";
+
+  const handleTemplateCardClick = (card) => {
+    if (card.comingSoon) {
+      setTemplateToast("이 모드는 현재 준비 중입니다.");
+      return;
+    }
+    setAddTemplate(card.value);
   };
 
   const handlePrintQR = (room) => {
@@ -581,32 +731,65 @@ function RoomsPanel({ authUser }) {
 
   return (
     <div className="space-y-6">
-      <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
-        <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-4">방 추가</h2>
+      <div className="relative p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+        {templateToast ? (
+          <div
+            className="absolute left-1/2 top-3 z-10 -translate-x-1/2 px-4 py-2 rounded-[8px] bg-slate-800 text-white text-[12px] shadow-lg max-w-[90vw] text-center"
+            role="status"
+          >
+            {templateToast}
+          </div>
+        ) : null}
+        <h2 className="text-[14px] font-semibold text-[var(--color-text)] mb-2">방 추가</h2>
+        <p className="text-[12px] text-[var(--color-text-secondary)] mb-4">템플릿을 선택한 뒤 방 이름을 입력하세요.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6 justify-items-stretch">
+          {ROOM_TEMPLATE_CARDS.map((card) => {
+            const selected = addTemplate === card.value && !card.comingSoon;
+            const Ill = card.Illustration;
+            return (
+              <button
+                key={card.value}
+                type="button"
+                aria-disabled={card.comingSoon}
+                onClick={() => handleTemplateCardClick(card)}
+                className={[
+                  "relative flex flex-col w-full max-w-[240px] mx-auto sm:mx-0 rounded-[12px] border-2 p-3 text-left transition-shadow duration-150",
+                  card.comingSoon
+                    ? "opacity-60 cursor-not-allowed border-[var(--color-border)] bg-[var(--color-bg)]"
+                    : selected
+                      ? "border-[#3B82F6] bg-[#EFF6FF] shadow-sm hover:shadow-md"
+                      : "border-[var(--color-border)] bg-[var(--color-bg)] hover:shadow-md",
+                ].join(" ")}
+              >
+                {card.comingSoon ? (
+                  <span className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-100">
+                    준비중
+                  </span>
+                ) : null}
+                {selected ? (
+                  <span className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#3B82F6] text-white">
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                ) : null}
+                <div className="mb-2 pointer-events-none">
+                  <Ill />
+                </div>
+                <div className="text-[14px] font-bold text-[var(--color-text)] leading-tight pr-6">{card.title}</div>
+                <div className="text-[12px] text-[var(--color-text-secondary)] mt-1 leading-snug">{card.subtitle}</div>
+              </button>
+            );
+          })}
+        </div>
         <form onSubmit={handleAddRoom} className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
             <label className="text-[12px] text-[var(--color-text-secondary)]">방 이름</label>
             <input
               type="text"
               value={addName}
               onChange={(e) => setAddName(e.target.value)}
-              placeholder="예: 접수 데스크 1, 정형외과 진료실 2"
-              className="w-[240px] px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
+              placeholder={roomNamePlaceholder}
+              className="w-full max-w-[320px] px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] text-[var(--color-text-secondary)]">템플릿</label>
-            <select
-              value={addTemplate}
-              onChange={(e) => setAddTemplate(e.target.value)}
-              className="px-3 py-2 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px]"
-            >
-              {ROOM_TEMPLATES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
           </div>
           <button
             type="submit"
