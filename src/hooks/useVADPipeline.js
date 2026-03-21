@@ -55,7 +55,7 @@ const ADDITIONAL_AUDIO_CONSTRAINTS = {
 const MIC_VAD_SILERO_OPTIONS = {
   positiveSpeechThreshold: 0.5,
   negativeSpeechThreshold: 0.35,
-  redemptionMs: 600,
+  redemptionMs: 350,
   minSpeechMs: 250,
   preSpeechPadMs: 300,
   submitUserSpeechOnPause: true,

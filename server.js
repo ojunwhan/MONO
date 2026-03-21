@@ -1920,8 +1920,10 @@ async function generateNameAdaptations(roomId) {
 async function fastTranslate(text, from, to, ctx, siteContext, conversationHistory = [], opts = {}) {
   if (!openai || !text || !to || to === 'auto' || from === to || isOpenAIBlocked()) return text;
   const cacheKey = `${from}:${to}:${siteContext || ''}:${text.trim()}`;
+  if (opts._perfOut && typeof opts._perfOut === 'object') opts._perfOut.cached = false;
   const cached = await dbGet('SELECT translated_text FROM translation_cache WHERE cache_key = ?', [cacheKey]);
   if (cached?.translated_text != null) {
+    if (opts._perfOut) opts._perfOut.cached = true;
     await dbRun('UPDATE translation_cache SET hit_count = hit_count + 1, last_used_at = datetime(\'now\') WHERE cache_key = ?', [cacheKey]).catch(() => {});
     return cached.translated_text;
   }
@@ -1930,6 +1932,7 @@ async function fastTranslate(text, from, to, ctx, siteContext, conversationHisto
     const fallbackKey = `${from}:${to}:hospital_plastic_surgery:${text.trim()}`;
     const fallbackCached = await dbGet('SELECT translated_text FROM translation_cache WHERE cache_key = ?', [fallbackKey]);
     if (fallbackCached?.translated_text != null) {
+      if (opts._perfOut) opts._perfOut.cached = true;
       await dbRun('UPDATE translation_cache SET hit_count = hit_count + 1, last_used_at = datetime(\'now\') WHERE cache_key = ?', [fallbackKey]).catch(() => {});
       console.log(`[CACHE-FALLBACK] ${siteContext} → hospital_plastic_surgery | ${from}→${to} | "${text.trim().substring(0, 30)}..."`);
       return fallbackCached.translated_text;
@@ -3346,7 +3349,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on("stt:segment_end", async ({ roomId, participantId, senderRole: segmentPayloadSenderRole }) => {
-    const tServer = Date.now();
+    const _perfRoundTripStart = Date.now();
+    let perfRoundTripLogged = false;
+    const logPerfRoundTrip = () => {
+      if (perfRoundTripLogged) return;
+      perfRoundTripLogged = true;
+      console.log(`[PERF] Total round-trip ${Date.now() - _perfRoundTripStart}ms`);
+    };
     if (!consumeRate(socket.id, 'stt:segment_end', LIMITS.STT_SEGMENT_END_PER_30S, 30000)) {
       return;
     }
@@ -3384,7 +3393,9 @@ io.on('connection', (socket) => {
 
     let text = "";
     try {
+      const _perfSttStart = Date.now();
       text = await transcribePcm16(pcm, session.lang, session.sampleRateHz, { hospitalMode: sttHospitalMode });
+      console.log(`[PERF] STT done in ${Date.now() - _perfSttStart}ms`);
       text = normalizeRepeats(text);
       console.log(`[stt:segment] 🎙 STT result: "${text}"${sttHospitalMode ? ' [hospital]' : ''}`);
     } catch (e) {
@@ -3419,7 +3430,15 @@ io.on('connection', (socket) => {
       if (fromLang !== toLang && text.trim()) {
         try {
           if (await canTranslateForUser(socket, session.participantId)) {
-            translatedText = await fastTranslate(text, fromLang, toLang, "", siteCtx, roomContext, { contextInject: vadMeta.contextInject });
+            const _perfTranslateStart = Date.now();
+            const _perfTranslateOut = {};
+            translatedText = await fastTranslate(text, fromLang, toLang, "", siteCtx, roomContext, {
+              contextInject: vadMeta.contextInject,
+              _perfOut: _perfTranslateOut,
+            });
+            console.log(
+              `[PERF] Translation done in ${Date.now() - _perfTranslateStart}ms | cached: ${_perfTranslateOut.cached === true}`
+            );
             await consumeTranslationUsage(session.participantId);
           }
         } catch (err) {
@@ -3440,6 +3459,7 @@ io.on('connection', (socket) => {
         isStaff,
         final: true,
       });
+      logPerfRoundTrip();
 
       try {
         const room = ROOMS.get(session.roomId);
@@ -3533,6 +3553,8 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
+              const _perfTranslateStart = Date.now();
+              const _perfTranslateOut = {};
               translated = await fastTranslate(finalText, fromLang, toLang, "", siteCtx, roomContext, {
                 contextInject: meta.contextInject,
                 stream: true,
@@ -3549,7 +3571,11 @@ io.on('connection', (socket) => {
                     });
                   }
                 },
+                _perfOut: _perfTranslateOut,
               });
+              console.log(
+                `[PERF] Translation done in ${Date.now() - _perfTranslateStart}ms | cached: ${_perfTranslateOut.cached === true}`
+              );
               if (otherP?.socketId) {
                 io.to(otherP.socketId).emit("receive-message-stream-end", {
                   roomId,
@@ -3573,6 +3599,7 @@ io.on('connection', (socket) => {
         // 태블릿→의사 PC: otherP가 없을 때도 같은 방(roomId)의 다른 소켓에 전달
         const targetSocketId = otherP?.socketId;
         if (targetSocketId) {
+          logPerfRoundTrip();
           if (fromLang === toLang) {
             io.to(targetSocketId).emit("receive-message", {
               id: msgId, roomId, roomType,
@@ -3606,6 +3633,7 @@ io.on('connection', (socket) => {
             });
           }
         } else {
+          logPerfRoundTrip();
           socket.to(roomId).emit("receive-message", {
             id: msgId, roomId, roomType,
             senderPid: participantId,
@@ -3735,13 +3763,22 @@ io.on('connection', (socket) => {
         if (fromLang !== toLang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+              const _perfTranslateStart = Date.now();
+              const _perfTranslateOut = {};
+              translated = await fastTranslate(cleanText, fromLang, toLang, "", siteCtx, roomContext, {
+                contextInject: meta.contextInject,
+                _perfOut: _perfTranslateOut,
+              });
+              console.log(
+                `[PERF] Translation done in ${Date.now() - _perfTranslateStart}ms | cached: ${_perfTranslateOut.cached === true}`
+              );
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
         }
 
         if (targetP.socketId) {
+          logPerfRoundTrip();
           io.to(targetP.socketId).emit("receive-message", {
             id: msgId, roomId, roomType,
             senderPid: participantId, senderCallSign,
@@ -3759,6 +3796,7 @@ io.on('connection', (socket) => {
           url: `/room/${roomId}`,
         }).catch(() => {});
         // Echo to sender
+        if (!targetP.socketId) logPerfRoundTrip();
         socket.emit("receive-message", {
           id: msgId, roomId, roomType,
           senderPid: participantId, senderCallSign,
@@ -3799,7 +3837,15 @@ io.on('connection', (socket) => {
         if (fromLang !== lang) {
           try {
             if (await canTranslateForUser(socket, participantId)) {
-              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx, roomContext, { contextInject: meta.contextInject });
+              const _perfTranslateStart = Date.now();
+              const _perfTranslateOut = {};
+              translated = await fastTranslate(finalText, fromLang, lang, "", siteCtx, roomContext, {
+                contextInject: meta.contextInject,
+                _perfOut: _perfTranslateOut,
+              });
+              console.log(
+                `[PERF] Translation done in ${Date.now() - _perfTranslateStart}ms | cached: ${_perfTranslateOut.cached === true}`
+              );
               await consumeTranslationUsage(participantId);
             }
           } catch (e) { console.warn("[translate]:", e?.message); }
@@ -3811,6 +3857,7 @@ io.on('connection', (socket) => {
             pid => meta.participants[pid] === listener
           );
           if (listener.socketId) {
+            logPerfRoundTrip();
             io.to(listener.socketId).emit("receive-message", {
               id: msgId, roomId, roomType,
               senderPid: participantId, senderCallSign,
