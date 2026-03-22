@@ -852,6 +852,7 @@ export default function DualConsultation() {
   const handleCopy = (url, setCopied) => {
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
+      setShowDisplayPanel(false);
       setTimeout(() => setCopied(false), 2000);
     });
   };

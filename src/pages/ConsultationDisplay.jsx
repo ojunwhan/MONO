@@ -360,8 +360,8 @@ export default function ConsultationDisplay() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#1a1a2e",
-        color: "#eee",
+        background: "linear-gradient(135deg, #fff5f7 0%, #fce4ec 30%, #f3e5f5 70%, #e8eaf6 100%)",
+        color: "#37474f",
         display: "flex",
         flexDirection: "column",
         boxSizing: "border-box",
@@ -373,11 +373,13 @@ export default function ConsultationDisplay() {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "12px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          borderBottom: "1px solid rgba(236, 64, 122, 0.12)",
           flexShrink: 0,
+          background: "rgba(255, 255, 255, 0.85)",
+          backdropFilter: "blur(10px)",
         }}
       >
-        <span style={{ fontSize: 14, fontWeight: 600, color: "#ccc" }}>{roomId || "—"}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#d81b60" }}>{roomId || "—"}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 22 }} title={lang}>
             {patientLangFlag(lang)}
@@ -386,10 +388,10 @@ export default function ConsultationDisplay() {
             style={{
               fontSize: 12,
               fontWeight: 600,
-              padding: "4px 10px",
-              borderRadius: 8,
-              background: connected ? "rgba(76,175,80,0.25)" : "rgba(255,80,80,0.2)",
-              color: connected ? "#81c784" : "#ff8a80",
+              padding: "6px 14px",
+              borderRadius: 20,
+              background: connected ? "#ec407a" : "rgba(183, 28, 28, 0.12)",
+              color: connected ? "#fff" : "#c62828",
             }}
           >
             {connected ? "Connected" : "Disconnected"}
@@ -401,7 +403,12 @@ export default function ConsultationDisplay() {
         style={{
           flex: 1,
           overflow: "auto",
-          padding: "16px 16px 100px",
+          padding: "20px 20px 100px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          scrollbarWidth: "thin",
+          scrollbarColor: "#f48fb1 #fce4ec",
         }}
       >
         {messages.map((m) =>
@@ -409,30 +416,30 @@ export default function ConsultationDisplay() {
             <div
               key={m.id}
               style={{
-                background: "rgba(255,255,255,0.1)",
-                borderLeft: "4px solid #4a9eff",
-                borderRadius: 12,
-                padding: 20,
-                marginBottom: 16,
+                background: "rgba(255, 255, 255, 0.9)",
+                borderLeft: "4px solid #ec407a",
+                borderRadius: 16,
+                boxShadow: "0 2px 12px rgba(236, 64, 122, 0.1)",
+                padding: 24,
               }}
             >
-              <div style={{ fontSize: 16, color: "#888", marginBottom: 8 }}>{m.originalText}</div>
-              <div style={{ fontSize: 28, fontWeight: 600, color: "#fff" }}>{m.translatedText}</div>
+              <div style={{ fontSize: 14, color: "#b0849e", marginBottom: 8 }}>{m.originalText}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#37474f" }}>{m.translatedText}</div>
             </div>
           ) : (
             <div
               key={m.id}
               style={{
-                background: "rgba(76,175,80,0.15)",
-                borderRight: "4px solid #4caf50",
-                borderRadius: 12,
-                padding: 20,
-                marginBottom: 16,
+                background: "linear-gradient(135deg, #fce4ec, #f8bbd0)",
+                borderRight: "4px solid #f48fb1",
+                borderRadius: 16,
+                boxShadow: "0 2px 12px rgba(244, 143, 177, 0.15)",
+                padding: 24,
                 textAlign: "right",
               }}
             >
-              <div style={{ fontSize: 28, fontWeight: 600, color: "#81c784" }}>{m.originalText}</div>
-              <div style={{ fontSize: 16, color: "#888", marginTop: 8 }}>{m.translatedText}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#880e4f" }}>{m.originalText}</div>
+              <div style={{ fontSize: 14, color: "#ad6a8e", marginTop: 8 }}>{m.translatedText}</div>
             </div>
           )
         )}
@@ -460,10 +467,11 @@ export default function ConsultationDisplay() {
               height: 80,
               borderRadius: "50%",
               border: "none",
-              background: micActive ? "#388e3c" : "#4caf50",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.35)",
+              background: micActive ? "#d81b60" : "linear-gradient(135deg, #ec407a, #f48fb1)",
+              boxShadow: "0 4px 20px rgba(236, 64, 122, 0.3)",
               cursor: "pointer",
               fontSize: 32,
+              color: "#fff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
