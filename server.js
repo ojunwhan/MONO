@@ -3582,6 +3582,15 @@ io.on('connection', (socket) => {
                       senderPid: participantId,
                       originalText: finalText,
                     });
+                    io.to(roomId).emit("display:stream", {
+                      roomId,
+                      messageId: msgId,
+                      chunk,
+                      fromLang,
+                      toLang,
+                      senderPid: participantId,
+                      originalText: finalText,
+                    });
                   }
                 },
                 _perfOut: _perfTranslateOut,
@@ -3591,6 +3600,14 @@ io.on('connection', (socket) => {
               );
               if (otherP?.socketId) {
                 io.to(otherP.socketId).emit("receive-message-stream-end", {
+                  roomId,
+                  messageId: msgId,
+                  fullText: translated || finalText,
+                  fromLang,
+                  toLang,
+                  originalText: finalText,
+                });
+                io.to(roomId).emit("display:stream-end", {
                   roomId,
                   messageId: msgId,
                   fullText: translated || finalText,
@@ -3623,9 +3640,27 @@ io.on('connection', (socket) => {
               text: translated || finalText,
               isDraft: true, at: Date.now(), timestamp: Date.now(),
             });
+            io.to(roomId).emit("display:message", {
+              id: msgId, roomId, roomType,
+              senderPid: participantId,
+              senderDisplayName,
+              senderCallSign: senderDisplayName,
+              originalText: finalText, translatedText: translated,
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
+            });
           } else {
             // 번역 경로에서도 최종 receive-message 전송 (클라이언트가 stream-end만 놓칠 수 있음)
             io.to(targetSocketId).emit("receive-message", {
+              id: msgId, roomId, roomType,
+              senderPid: participantId,
+              senderDisplayName,
+              senderCallSign: senderDisplayName,
+              originalText: finalText, translatedText: translated,
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
+            });
+            io.to(roomId).emit("display:message", {
               id: msgId, roomId, roomType,
               senderPid: participantId,
               senderDisplayName,
@@ -3648,6 +3683,15 @@ io.on('connection', (socket) => {
         } else {
           logPerfRoundTrip();
           socket.to(roomId).emit("receive-message", {
+            id: msgId, roomId, roomType,
+            senderPid: participantId,
+            senderDisplayName,
+            senderCallSign: senderDisplayName,
+            originalText: finalText, translatedText: translated,
+            text: translated || finalText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
+          });
+          io.to(roomId).emit("display:message", {
             id: msgId, roomId, roomType,
             senderPid: participantId,
             senderDisplayName,
@@ -3799,6 +3843,13 @@ io.on('connection', (socket) => {
             text: translated || cleanText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
           });
+          io.to(roomId).emit("display:message", {
+            id: msgId, roomId, roomType,
+            senderPid: participantId, senderCallSign,
+            originalText: cleanText, translatedText: translated,
+            text: translated || cleanText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
+          });
         addToRoomContext(roomId, { text: translated || cleanText, lang: toLang, role: 'assistant' });
         }
         sendPushToUser(csMatch.targetPid, {
@@ -3872,6 +3923,13 @@ io.on('connection', (socket) => {
           if (listener.socketId) {
             logPerfRoundTrip();
             io.to(listener.socketId).emit("receive-message", {
+              id: msgId, roomId, roomType,
+              senderPid: participantId, senderCallSign,
+              originalText: finalText, translatedText: translated,
+              text: translated || finalText,
+              isDraft: true, at: Date.now(), timestamp: Date.now(),
+            });
+            io.to(roomId).emit("display:message", {
               id: msgId, roomId, roomType,
               senderPid: participantId, senderCallSign,
               originalText: finalText, translatedText: translated,
@@ -4263,6 +4321,15 @@ io.on('connection', (socket) => {
           text: draft || trimmedText,
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
+        io.to(roomId).emit("display:message", {
+          id, roomId, roomType,
+          senderPid: participantId,
+          senderDisplayName,
+          senderCallSign: senderDisplayName,
+          originalText: trimmedText, translatedText: draft,
+          text: draft || trimmedText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
+        });
         addToRoomContext(roomId, { text: draft || trimmedText, lang: toLang, role: 'assistant' });
         io.to(targetSocketId).emit("notify", {
           title: senderDisplayName || "MONO",
@@ -4280,6 +4347,15 @@ io.on('connection', (socket) => {
         }
       } else {
         socket.to(roomId).emit('receive-message', {
+          id, roomId, roomType,
+          senderPid: participantId,
+          senderDisplayName,
+          senderCallSign: senderDisplayName,
+          originalText: trimmedText, translatedText: draft,
+          text: draft || trimmedText,
+          isDraft: true, at: Date.now(), timestamp: Date.now(),
+        });
+        io.to(roomId).emit("display:message", {
           id, roomId, roomType,
           senderPid: participantId,
           senderDisplayName,
@@ -4429,6 +4505,13 @@ io.on('connection', (socket) => {
             text: draft || cleanText,
             isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
+        io.to(roomId).emit("display:message", {
+            id, roomId, roomType,
+            senderPid: participantId, senderCallSign,
+          originalText: cleanText, translatedText: draft,
+            text: draft || cleanText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
+        });
         addToRoomContext(roomId, { text: draft || cleanText, lang: toLang, role: 'assistant' });
       }
       maybeSendPushToUser(csMatch.targetPid, {
@@ -4487,6 +4570,13 @@ io.on('connection', (socket) => {
         );
         if (listener.socketId) {
           io.to(listener.socketId).emit('receive-message', {
+            id, roomId, roomType,
+            senderPid: participantId, senderCallSign,
+            originalText: trimmedText, translatedText: draft,
+            text: draft || trimmedText,
+            isDraft: true, at: Date.now(), timestamp: Date.now(),
+          });
+          io.to(roomId).emit("display:message", {
             id, roomId, roomType,
             senderPid: participantId, senderCallSign,
             originalText: trimmedText, translatedText: draft,
