@@ -12,6 +12,7 @@ import { getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
 import { useWebSpeechSTT } from "../hooks/useWebSpeechSTT";
+import useTabNotification from "../hooks/useTabNotification";
 
 function twemojiFlagSvgUrl(flag) {
   const codePoints = Array.from(String(flag || ""))
@@ -261,6 +262,8 @@ export default function DualConsultation() {
     onInterim: () => {},
   });
 
+  const { notifyNewMessage } = useTabNotification();
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -454,6 +457,7 @@ export default function DualConsultation() {
       if (!id || (incomingRoomId && incomingRoomId !== rid)) return;
       const isStaff = pendingSenderRef.current === "staff";
       if (pendingSenderRef.current) pendingSenderRef.current = null;
+      if (senderPidResolved !== participantIdRef.current) notifyNewMessage();
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === id);
         if (idx >= 0) {

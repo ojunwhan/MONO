@@ -14,6 +14,7 @@ import SITE_CONTEXTS from "../constants/siteContexts";
 import languages from "../constants/languages";
 import useNetworkStatus from "../hooks/useNetworkStatus";
 import useOutbox from "../hooks/useOutbox";
+import useTabNotification from "../hooks/useTabNotification";
 import { touchRoom, recordRoomActivity, saveMessage, getMessages } from "../db";
 import { saveHospitalConversation } from "../db/hospitalConversations";
 import { fetchAuthMe } from "../auth/session";
@@ -787,6 +788,8 @@ export default function ChatScreen() {
         }
         return;
       }
+
+      notifyNewMessage();
 
       // Other's message → show translated text (my language); 또는 스트림으로 온 메시지의 HQ 덮어쓰기
       const incoming = dedupeRepeats(translatedText || originalText || "");
