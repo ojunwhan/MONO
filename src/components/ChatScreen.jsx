@@ -208,6 +208,7 @@ export default function ChatScreen() {
   // ── Network & Offline queue ──
   const { isConnected, isOnline, isSocketConnected } = useNetworkStatus();
   const { sendOrQueue } = useOutbox();
+  const { notifyNewMessage } = useTabNotification();
 
   // My language label (user-centric, no pairs)
   const myLangLabel = useMemo(() => {
