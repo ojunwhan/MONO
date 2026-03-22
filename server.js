@@ -6396,6 +6396,50 @@ app.post('/api/hospital/message', requireHospitalOrg, async (req, res) => {
   }
 });
 
+// ── Usage stats for billing tab ──
+app.get('/api/hospital/usage-stats', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || req.query.org_code || 'UNKNOWN';
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const monthStart = `${year}-${month}-01`;
+    const nextMonth = now.getMonth() + 2 > 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(now.getMonth() + 2).padStart(2, '0')}-01`;
+
+    const rows = await dbAll(
+      `SELECT
+         strftime('%m/%d', created_at) AS date,
+         COUNT(*) AS cases,
+         COALESCE(SUM(
+           CASE WHEN ended_at IS NOT NULL AND created_at IS NOT NULL
+           THEN MAX(0, ROUND((julianday(ended_at) - julianday(created_at)) * 24 * 60))
+           ELSE 0 END
+         ), 0) AS mins
+       FROM hospital_sessions
+       WHERE org_code = ?
+         AND status = 'ended'
+         AND created_at >= ?
+         AND created_at < ?
+       GROUP BY strftime('%m/%d', created_at)
+       ORDER BY MIN(created_at)`,
+      [orgCode, monthStart, nextMonth]
+    );
+
+    const sessions = rows.map(r => ({
+      date: r.date,
+      cases: r.cases || 0,
+      mins: Math.round(r.mins || 0),
+    }));
+
+    res.json({ sessions });
+  } catch (err) {
+    console.error('[usage-stats]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════
 // HOSPITAL DASHBOARD — 통계 API
 // ═══════════════════════════════════════════════════════════════
