@@ -118,6 +118,9 @@ export default function DualConsultation() {
   const [sttProvider, setSttProvider] = useState("webspeech");
   const [webSpeechSpeaker, setWebSpeechSpeaker] = useState("staff"); // "staff" | "patient"
   const [webSpeechActive, setWebSpeechActive] = useState(false);
+  const [showDisplayPanel, setShowDisplayPanel] = useState(false);
+  const [copiedMonitor, setCopiedMonitor] = useState(false);
+  const [copiedTablet, setCopiedTablet] = useState(false);
   const staffRecordingRef = useRef(false);
 
   const participantIdRef = useRef("");
@@ -846,6 +849,13 @@ export default function DualConsultation() {
     window.location.href = "/hospital-dashboard";
   }, []);
 
+  const handleCopy = (url, setCopied) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", flexDirection: "column", background: "#f5f5f5" }}>
       <style>{`
@@ -943,6 +953,95 @@ export default function DualConsultation() {
               >
                 {settingsExpanded ? "\u25BC" : "\u25B6"}
               </button>
+            )}
+            {connected && (
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  title="\uB514\uC2A4\uD50C\uB808\uC774 \uB9C1\uD06C"
+                  onClick={() => setShowDisplayPanel((p) => !p)}
+                  style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", fontSize: "14px", color: "#4b5563", cursor: "pointer" }}
+                >
+                  {"\uD83D\uDCFA"}
+                </button>
+                {showDisplayPanel ? (
+                  <>
+                    <div
+                      role="presentation"
+                      aria-hidden
+                      onClick={() => setShowDisplayPanel(false)}
+                      style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 999,
+                        background: "transparent",
+                      }}
+                    />
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        right: 0,
+                        marginTop: 8,
+                        background: "#fff",
+                        borderRadius: 12,
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                        padding: 20,
+                        zIndex: 1000,
+                        minWidth: 340,
+                        border: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uC678\uBD80 \uBAA8\uB2C8\uD130 (\uB9C8\uC774\uD06C \uC5C6\uC74C)"}</div>
+                        <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uB9C8\uC774\uD06C \uC5C6\uC774 \uBC88\uC5ED \uD654\uBA74\uB9CC \uD45C\uC2DC"}</div>
+                        <div style={{ fontSize: 11, color: "#666", background: "#f5f5f5", padding: "6px 8px", borderRadius: 6, wordBreak: "break-all", marginBottom: 8 }}>
+                          {`${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=false`}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopy(
+                              `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=false`,
+                              setCopiedMonitor
+                            )
+                          }
+                          style={{ padding: "6px 14px", background: "#4a9eff", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                        >
+                          {copiedMonitor ? "\uBCF5\uC0AC\uB428!" : "\uB9C1\uD06C \uBCF5\uC0AC"}
+                        </button>
+                      </div>
+                      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 16, paddingTop: 16 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uD0DC\uBE14\uB9BF \uC5F0\uACB0 (\uB9C8\uC774\uD06C \uC0AC\uC6A9)"}</div>
+                        <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uD658\uC790 \uB9C8\uC774\uD06C \uD65C\uC131\uD654 + \uBC88\uC5ED \uD654\uBA74"}</div>
+                        <img
+                          alt=""
+                          src={`https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(
+                            `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`
+                          )}`}
+                          style={{ display: "block", margin: "8px auto" }}
+                        />
+                        <div style={{ fontSize: 11, color: "#666", background: "#f5f5f5", padding: "6px 8px", borderRadius: 6, wordBreak: "break-all", marginBottom: 8 }}>
+                          {`${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopy(
+                              `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`,
+                              setCopiedTablet
+                            )
+                          }
+                          style={{ padding: "6px 14px", background: "#4a9eff", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                        >
+                          {copiedTablet ? "\uBCF5\uC0AC\uB428!" : "\uB9C1\uD06C \uBCF5\uC0AC"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             )}
             {connected && (
               <button
