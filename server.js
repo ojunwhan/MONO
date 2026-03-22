@@ -3506,6 +3506,18 @@ io.on('connection', (socket) => {
         console.error("[stt:segment_end] hospital logging error:", err?.message);
       }
 
+      // Broadcast to display viewers
+      io.to(session.roomId).emit("display:message", {
+        id: uuidv4(),
+        roomId: session.roomId,
+        originalText: text,
+        translatedText: translatedText,
+        fromLang: fromLang,
+        senderPid: participantId,
+        participantId: participantId,
+        final: true,
+      });
+
       session.chunks = [];
       session.bytes = 0;
       return;
