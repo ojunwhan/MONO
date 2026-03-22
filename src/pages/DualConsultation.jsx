@@ -1020,6 +1020,7 @@ export default function DualConsultation() {
                           {copiedMonitor ? "\uBCF5\uC0AC\uB428!" : "\uB9C1\uD06C \uBCF5\uC0AC"}
                         </button>
                       </div>
+                      {!isConsultationSingle && (
                       <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 16, paddingTop: 16 }}>
                         {(() => {
                           const tabletUrl = `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`;
@@ -1033,6 +1034,7 @@ export default function DualConsultation() {
                           );
                         })()}
                       </div>
+                      )}
                     </div>
                   </>
                 ) : null}

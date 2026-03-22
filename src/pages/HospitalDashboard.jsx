@@ -572,17 +572,10 @@ const ROOM_TEMPLATE_CARDS = [
     Illustration: SvgDualMicIllust,
   },
   {
-    value: TEMPLATE_UI.CONSULTATION_DISPLAY,
-    title: "상담실 · PC + 외부모니터",
-    subtitle: "직원 PC + 환자용 읽기전용 모니터",
-    comingSoon: true,
-    Illustration: SvgDisplayIllust,
-  },
-  {
     value: TEMPLATE_UI.CONSULTATION_TABLET,
     title: "상담실 · PC + 태블릿",
     subtitle: "직원 PC + 환자 전용 태블릿 (완전 분리)",
-    comingSoon: false,
+    comingSoon: true,
     Illustration: SvgTabletPairIllust,
   },
 ];
