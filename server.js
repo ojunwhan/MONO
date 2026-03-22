@@ -3471,8 +3471,21 @@ io.on('connection', (socket) => {
             "SELECT id, patient_token FROM hospital_sessions WHERE room_id = ? ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1",
             [session.roomId]
           ).catch(() => null);
-          if (sessionRow?.id) {
-            const pToken = room.patientToken ?? sessionRow.patient_token ?? null;
+          let effectiveSession = sessionRow;
+          if (!effectiveSession) {
+            const newSessionId = require("uuid").v4();
+            const pToken = room.patientToken || null;
+            const orgCode = room.orgCode || null;
+            await dbRun(
+              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at)
+               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'))`,
+              [newSessionId, session.roomId, pToken, orgCode, session.roomId]
+            ).catch(() => null);
+            effectiveSession = { id: newSessionId, patient_token: pToken };
+            console.log("[hospital] Auto-created session in stt:segment_end for room:", session.roomId, "sessionId:", newSessionId);
+          }
+          if (effectiveSession?.id) {
+            const pToken = room.patientToken ?? effectiveSession.patient_token ?? null;
             const orgRow = await dbGet("SELECT org_code FROM hospital_sessions WHERE room_id = ? LIMIT 1", [session.roomId]).catch(() => null);
             const keyHex = await getOrgEncryptionKey(orgRow?.org_code || null);
             const msgId = uuidv4();
@@ -3484,7 +3497,7 @@ io.on('connection', (socket) => {
               await dbRun(
                 `INSERT INTO hospital_messages (id, session_id, room_id, sender_role, sender_lang, original_text, translated_text, translated_lang, patient_token)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [msgId, sessionRow.id, session.roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken]
+                [msgId, effectiveSession.id, session.roomId, senderRole, fromLang, encOriginal, encTranslated, toLang, pToken]
               ).catch((e) => console.error("[stt:segment_end] hospital_messages insert error:", e?.message));
             }
           }
