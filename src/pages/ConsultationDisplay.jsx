@@ -255,6 +255,9 @@ export default function ConsultationDisplay() {
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
+    socket.on("display:message", onReceiveMessage);
+    socket.on("display:stream", onStream);
+    socket.on("display:stream-end", onStreamEnd);
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:result", onSttResult);
 
@@ -262,6 +265,9 @@ export default function ConsultationDisplay() {
       socket.off("receive-message", onReceiveMessage);
       socket.off("receive-message-stream", onStream);
       socket.off("receive-message-stream-end", onStreamEnd);
+      socket.off("display:message", onReceiveMessage);
+      socket.off("display:stream", onStream);
+      socket.off("display:stream-end", onStreamEnd);
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:result", onSttResult);
     };
