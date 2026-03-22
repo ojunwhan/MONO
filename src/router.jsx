@@ -172,6 +172,13 @@ const router = createBrowserRouter([
     element: <DualConsultation />,
   },
   {
+    path: "/consultation-display/:roomId",
+    lazy: async () => {
+      const { default: C } = await import("./pages/ConsultationDisplay.jsx");
+      return { Component: C };
+    },
+  },
+  {
     path: "/admin",
     children: [
       {
