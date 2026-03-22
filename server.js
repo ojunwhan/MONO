@@ -5503,10 +5503,15 @@ app.post('/api/hospital/register', async (req, res) => {
     const orgCode = 'HOSP-' + Math.random().toString(36).substring(2, 6).toUpperCase();
     const passwordHash = await bcrypt.hash(pwd, 10);
 
+    const trialDays = 30;
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + trialDays);
+    const trialEndsAt = trialEnd.toISOString().split('T')[0];
+
     await dbRun(
-      `INSERT INTO organizations (org_code, name, org_type, plan, default_lang, created_at, updated_at)
-       VALUES (?, ?, 'hospital', 'pending', 'ko', datetime('now'), datetime('now'))`,
-      [orgCode, nameTrim]
+      `INSERT INTO organizations (org_code, name, org_type, plan, trial_ends_at, default_lang, created_at, updated_at)
+       VALUES (?, ?, 'hospital', 'trial', ?, 'ko', datetime('now'), datetime('now'))`,
+      [orgCode, nameTrim, trialEndsAt]
     );
 
     await dbRun(
@@ -5516,7 +5521,7 @@ app.post('/api/hospital/register', async (req, res) => {
     );
 
     console.log(`[hospital:register] New registration: org=${orgCode} email=${emailTrim} hospital=${nameTrim} phone=${phoneTrim}`);
-    return res.json({ success: true, message: '등록 신청이 완료되었습니다.' });
+    return res.json({ success: true, org_code: orgCode, trial_ends_at: trialEndsAt });
   } catch (e) {
     console.error('[hospital:register]', e?.message);
     if (e?.message?.includes('UNIQUE constraint')) {
