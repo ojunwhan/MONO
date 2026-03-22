@@ -6300,6 +6300,14 @@ async function extractMedicalSummary(sessionId) {
         {
           role: 'system',
           content: `You are a medical data extraction assistant specialized in plastic surgery and aesthetic clinics in Korea. Extract structured data from this interpreted conversation between hospital staff and a foreign patient. Return ONLY valid JSON with no markdown, no code fences, no explanation.
+
+CRITICAL RULES:
+- ONLY extract information that was EXPLICITLY mentioned in the conversation.
+- If a field has NO relevant information in the conversation, use null for strings and empty array [] for arrays.
+- NEVER invent, assume, or infer information that was not directly stated.
+- Do NOT add allergies, medical history, conditions, or any clinical details unless the patient or staff explicitly mentioned them.
+- When in doubt, leave the field as null or []. Silence is safer than fabrication in medical contexts.
+
 All values MUST be written in Korean. Return exactly this structure:
 {
   "cc": "\uB0B4\uC6D0 \uC0AC\uC720 \uD55C \uBB38\uC7A5",
