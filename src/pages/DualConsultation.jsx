@@ -371,22 +371,35 @@ export default function DualConsultation() {
     if (ok) setPatientEditOpen(false);
   }, [editPatientName, editPatientLang, submitPatientUpsert]);
 
-  // List audio devices
-  useEffect(() => {
-    let cancelled = false;
+  // List audio devices (refresh on mount and when hardware is plugged/unplugged)
+  const refreshAudioDevices = useCallback(() => {
     navigator.mediaDevices
       .enumerateDevices()
       .then((list) => {
-        if (cancelled) return;
         const audio = list.filter((d) => d.kind === "audioinput");
         setDevices(audio);
-        if (audio.length > 0 && !staffDeviceId) setStaffDeviceId(audio[0].deviceId);
-        if (audio.length > 1 && !patientDeviceId) setPatientDeviceId(audio[1].deviceId);
-        else if (audio.length === 1 && !patientDeviceId) setPatientDeviceId(audio[0].deviceId);
+        setStaffDeviceId((prev) => {
+          if (prev && audio.some((d) => d.deviceId === prev)) return prev;
+          return audio[0]?.deviceId ?? "";
+        });
+        setPatientDeviceId((prev) => {
+          if (prev && audio.some((d) => d.deviceId === prev)) return prev;
+          if (audio.length > 1) return audio[1].deviceId;
+          return audio[0]?.deviceId ?? "";
+        });
       })
       .catch(() => {});
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    refreshAudioDevices();
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return undefined;
+    md.addEventListener("devicechange", refreshAudioDevices);
+    return () => {
+      md.removeEventListener("devicechange", refreshAudioDevices);
+    };
+  }, [refreshAudioDevices]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
