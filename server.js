@@ -2995,6 +2995,9 @@ io.on('connection', (socket) => {
       if (isHospitalRoom) {
         const pids = Object.keys(meta.participants);
         console.log(`[consultation:join] roomId=${roomId} participantId=${participantId} roleHint=${roleHint} participantsCount=${pids.length} pids=[${pids.join(",")}]`);
+        if (String(participantId || "").startsWith("display-")) {
+          io.to(roomId).emit("display:viewer-joined", { roomId, participantId });
+        }
       }
       emitRoutes(roomId);
       emitParticipants(roomId);

@@ -601,12 +601,17 @@ export default function DualConsultation() {
       window.location.href = "/hospital-dashboard";
     };
 
+    const onViewerJoined = () => {
+      setShowDisplayPanel(false);
+    };
+
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
     socket.on("revise-message", onReviseMessage);
     socket.on("stt:result", onSttResult);
     socket.on("dual-consultation:ended", onDualConsultationEnded);
+    socket.on("display:viewer-joined", onViewerJoined);
     return () => {
       socket.off("receive-message", onReceiveMessage);
       socket.off("receive-message-stream", onStream);
@@ -614,6 +619,7 @@ export default function DualConsultation() {
       socket.off("revise-message", onReviseMessage);
       socket.off("stt:result", onSttResult);
       socket.off("dual-consultation:ended", onDualConsultationEnded);
+      socket.off("display:viewer-joined", onViewerJoined);
     };
   }, [roomId, scrollToBottom]);
 
@@ -1014,30 +1020,23 @@ export default function DualConsultation() {
                         </button>
                       </div>
                       <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 16, paddingTop: 16 }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uD0DC\uBE14\uB9BF \uC5F0\uACB0 (\uB9C8\uC774\uD06C \uC0AC\uC6A9)"}</div>
-                        <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uD658\uC790 \uB9C8\uC774\uD06C \uD65C\uC131\uD654 + \uBC88\uC5ED \uD654\uBA74"}</div>
-                        <img
-                          alt=""
-                          src={`https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(
-                            `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`
-                          )}`}
-                          style={{ display: "block", margin: "8px auto" }}
-                        />
-                        <div style={{ fontSize: 11, color: "#666", background: "#f5f5f5", padding: "6px 8px", borderRadius: 6, wordBreak: "break-all", marginBottom: 8 }}>
-                          {`${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCopy(
-                              `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`,
-                              setCopiedTablet
-                            )
-                          }
-                          style={{ padding: "6px 14px", background: "#4a9eff", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-                        >
-                          {copiedTablet ? "\uBCF5\uC0AC\uB428!" : "\uB9C1\uD06C \uBCF5\uC0AC"}
-                        </button>
+                        {(() => {
+                          const tabletUrl = `${window.location.origin}/consultation-display/${roomId}?lang=${encodeURIComponent(patientLang)}&mic=true`;
+                          return (
+                            <>
+                              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uD0DC\uBE14\uB9BF \uC5F0\uACB0 (\uB9C8\uC774\uD06C \uC0AC\uC6A9)"}</div>
+                              <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uD0DC\uBE14\uB9BF\uC73C\uB85C \uC544\uB798 QR\uC744 \uC2A4\uCE94\uD558\uC138\uC694"}</div>
+                              <img
+                                src={"https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=" + encodeURIComponent(tabletUrl)}
+                                width={200}
+                                height={200}
+                                alt="\uD0DC\uBE14\uB9BF QR"
+                                style={{ display: "block", margin: "12px auto", borderRadius: 8 }}
+                              />
+                              <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", wordBreak: "break-all" }}>{tabletUrl}</div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </>
