@@ -70,8 +70,8 @@ export default function HospitalRegister() {
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <p className="text-[15px] font-semibold text-[var(--color-text)] mb-2">등록 신청이 완료되었습니다.</p>
-          <p className="text-[13px] text-[var(--color-text-secondary)] mb-6">검토 후 연락드리겠습니다.</p>
+          <p className="text-[15px] font-semibold text-[var(--color-text)] mb-2">가입이 완료되었습니다!</p>
+          <p className="text-[13px] text-[var(--color-text-secondary)] mb-6">지금 바로 로그인하여 무료 체험을 시작하세요.</p>
           <button
             type="button"
             onClick={() => navigate("/hospital-login")}

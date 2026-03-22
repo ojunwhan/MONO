@@ -2202,7 +2202,7 @@ function UsageBillingTab({ authUser }) {
           }`}
         >
           {trialStatus.allowed
-            ? `무료 체험 잔여 ${trialStatus.daysLeft}일 (${trialStatus.trialEndsAt}까지) | 이번 달 예상 청구액 기준 ${fmtWon(projectedBill)}`
+            ? `무료 체험${trialStatus.daysLeft != null ? ` 잔여 ${trialStatus.daysLeft}일` : ''}${trialStatus.trialEndsAt ? ` (${trialStatus.trialEndsAt}까지)` : ''} | 이번 달 예상 청구액 기준 ${fmtWon(projectedBill)}`
             : "무료 체험 기간이 만료되었습니다. 유료 전환은 mono@lingora.chat로 문의해주세요."}
         </div>
       )}

@@ -5419,7 +5419,7 @@ function readHospitalToken(req) {
 
 function getOrgTrialStatus(org) {
   if (!org) return { allowed: false, reason: 'not_found' };
-  if (org.plan === 'active' || org.plan === 'enterprise') return { allowed: true };
+  if (['active', 'enterprise', 'pro', 'basic', 'free'].includes(org.plan)) return { allowed: true };
   if (org.plan === 'trial') {
     if (!org.trial_ends_at) return { allowed: true }; // no end date = unlimited trial
     const now = new Date().toISOString().split('T')[0];
