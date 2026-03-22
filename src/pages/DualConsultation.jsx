@@ -1027,7 +1027,7 @@ export default function DualConsultation() {
                               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uD0DC\uBE14\uB9BF \uC5F0\uACB0 (\uB9C8\uC774\uD06C \uC0AC\uC6A9)"}</div>
                               <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uD0DC\uBE14\uB9BF\uC73C\uB85C \uC544\uB798 QR\uC744 \uC2A4\uCE94\uD558\uC138\uC694"}</div>
                               <img
-                                src={"https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=" + encodeURIComponent(tabletUrl)}
+                                src={"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(tabletUrl)}
                                 width={200}
                                 height={200}
                                 alt="\uD0DC\uBE14\uB9BF QR"
