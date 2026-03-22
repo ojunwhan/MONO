@@ -113,6 +113,7 @@ export default function DualConsultation() {
   const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad" | "webspeech"
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
+  const wasVadActiveRef = useRef(false);
   const [sttProvider, setSttProvider] = useState("webspeech");
   const [webSpeechSpeaker, setWebSpeechSpeaker] = useState("staff"); // "staff" | "patient"
   const [webSpeechActive, setWebSpeechActive] = useState(false);
@@ -781,6 +782,26 @@ export default function DualConsultation() {
       setVadActive(false);
     }
   }, [inputMode, vadPause]);
+
+  useEffect(() => {
+    if (inputMode !== "vad") {
+      wasVadActiveRef.current = false;
+      return;
+    }
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (vadListening) {
+          vadPause();
+          wasVadActiveRef.current = true;
+        }
+      } else if (wasVadActiveRef.current) {
+        vadStart();
+        wasVadActiveRef.current = false;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [inputMode, vadListening, vadStart, vadPause]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
