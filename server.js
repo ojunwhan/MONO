@@ -3351,7 +3351,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on("stt:segment_end", async ({ roomId, participantId, senderRole: segmentPayloadSenderRole }) => {
+  socket.on("stt:segment_end", async (data) => {
+    // Trial expiry check for hospital rooms
+    if (data?.orgCode || socket.orgCode) {
+      const oc = data?.orgCode || socket.orgCode;
+      const org = await dbGet('SELECT plan, trial_ends_at FROM organizations WHERE org_code = ?', [oc]);
+      const trialStatus = getOrgTrialStatus(org);
+      if (!trialStatus.allowed) {
+        socket.emit('trial:expired', { reason: trialStatus.reason });
+        return;
+      }
+    }
+    const { roomId, participantId, senderRole: segmentPayloadSenderRole } = data || {};
     const _perfRoundTripStart = Date.now();
     let perfRoundTripLogged = false;
     const logPerfRoundTrip = () => {
@@ -5406,6 +5417,22 @@ function readHospitalToken(req) {
   return '';
 }
 
+function getOrgTrialStatus(org) {
+  if (!org) return { allowed: false, reason: 'not_found' };
+  if (org.plan === 'active' || org.plan === 'enterprise') return { allowed: true };
+  if (org.plan === 'trial') {
+    if (!org.trial_ends_at) return { allowed: true }; // no end date = unlimited trial
+    const now = new Date().toISOString().split('T')[0];
+    if (now <= org.trial_ends_at) {
+      const daysLeft = Math.ceil((new Date(org.trial_ends_at) - new Date(now)) / (1000 * 60 * 60 * 24));
+      return { allowed: true, daysLeft, trialEndsAt: org.trial_ends_at };
+    }
+    return { allowed: false, reason: 'trial_expired', trialEndsAt: org.trial_ends_at };
+  }
+  // pending, cancelled, or unknown plan
+  return { allowed: false, reason: 'inactive_plan', plan: org.plan };
+}
+
 function requireHospitalAdminJwt(req, res, next) {
   if (!process.env.JWT_SECRET) {
     return res.status(500).json({ error: 'server_misconfig_jwt_secret' });
@@ -5472,6 +5499,17 @@ app.post('/api/hospital/auth/login', async (req, res) => {
   } catch (e) {
     console.error('[hospital:auth:login]', e?.message);
     res.status(500).json({ error: 'login_failed' });
+  }
+});
+
+app.get('/api/hospital/trial-status', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode;
+    const org = await dbGet('SELECT plan, trial_ends_at, is_active FROM organizations WHERE org_code = ?', [orgCode]);
+    const status = getOrgTrialStatus(org);
+    res.json({ ok: true, ...status, plan: org?.plan, trial_ends_at: org?.trial_ends_at });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 

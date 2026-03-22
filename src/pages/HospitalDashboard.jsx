@@ -2013,6 +2013,7 @@ const USAGE_BILLING_MOCK = {
 function UsageBillingTab({ authUser }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trialStatus, setTrialStatus] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2028,6 +2029,15 @@ function UsageBillingTab({ authUser }) {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, [authUser?.org_code]);
+
+  useEffect(() => {
+    fetch(urlWithOrg("/api/hospital/trial-status", authUser?.org_code), { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) setTrialStatus(d);
+      })
+      .catch(() => {});
   }, [authUser?.org_code]);
 
   if (loading || !data) {
@@ -2181,11 +2191,24 @@ function UsageBillingTab({ authUser }) {
       </div>
 
       {/* Section D — Trial banner */}
-      {(data.trialDaysLeft > 0) && (
-        <div className="p-4 rounded-[16px] bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100">
-          <p className="text-[14px] font-medium">
-            무료 체험 D+{Math.max(0, (data.trialDaysTotal || 14) - (data.trialDaysLeft || 0))} | 잔여 {data.trialDaysLeft}일 | 이번 달 예상 청구액 기준 월 {fmtWon(projectedBill)} 예상
-          </p>
+      {trialStatus && trialStatus.plan === "trial" && (
+        <div
+          className={`p-4 rounded-[12px] text-[13px] font-medium ${
+            trialStatus.allowed && trialStatus.daysLeft > 7
+              ? "bg-[#FEF3C7] text-[#92400E]"
+              : trialStatus.allowed && trialStatus.daysLeft <= 7
+                ? "bg-[#FEE2E2] text-[#991B1B]"
+                : "bg-[#FEE2E2] text-[#991B1B]"
+          }`}
+        >
+          {trialStatus.allowed
+            ? `무료 체험 잔여 ${trialStatus.daysLeft}일 (${trialStatus.trialEndsAt}까지) | 이번 달 예상 청구액 기준 ${fmtWon(projectedBill)}`
+            : "무료 체험 기간이 만료되었습니다. 유료 전환은 mono@lingora.chat로 문의해주세요."}
+        </div>
+      )}
+      {trialStatus && trialStatus.plan === "active" && (
+        <div className="p-4 rounded-[12px] text-[13px] font-medium bg-[#D1FAE5] text-[#065F46]">
+          유료 구독 중 | 이번 달 예상 청구액 기준 {fmtWon(projectedBill)}
         </div>
       )}
     </div>
