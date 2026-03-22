@@ -2088,8 +2088,9 @@ function UsageBillingTab({ authUser }) {
           <p className="text-[28px] font-bold text-[var(--color-text)]">{tierInfo.label} · ₩{tierInfo.rate}원/분</p>
         </div>
         <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
-          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">이번 달 예상 청구액</p>
+          <p className="text-[12px] text-[var(--color-text-secondary)] font-medium mb-1">이번 달 예상 청구액 (부가세 별도)</p>
           <p className="text-[28px] font-bold text-[#16A34A]">{fmtWon(projectedBill)}</p>
+          <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">VAT 포함: {fmtWon(Math.round(projectedBill * 1.1))}</p>
         </div>
       </div>
 
@@ -2126,7 +2127,10 @@ function UsageBillingTab({ authUser }) {
               );
             })}
           </div>
-          <p className="text-[18px] font-bold text-[#16A34A] mb-3">총 예상: {fmtWon(projectedBill)}</p>
+          <p className="text-[15px] font-semibold text-[var(--color-text)] mb-1">공급가액: {fmtWon(projectedBill)}</p>
+          <p className="text-[13px] text-[var(--color-text-secondary)] mb-1">부가세(10%): {fmtWon(Math.round(projectedBill * 0.1))}</p>
+          <div className="border-t border-[var(--color-border)] my-2" />
+          <p className="text-[18px] font-bold text-[#16A34A] mb-3">합계(VAT포함): {fmtWon(Math.round(projectedBill * 1.1))}</p>
           <p className="text-[12px] text-[var(--color-text-secondary)]">
             전문 통역사 동일 건수: {fmtWon(humanTotal)} — MONO 대비 {fmtWon(savings)} 절감
           </p>

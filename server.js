@@ -5130,7 +5130,6 @@ app.post("/api/auth/convert-guest", async (req, res) => {
 
     // 병원 관리자 시드 (없으면 추가). organizations 행은 004 블록에서 생성 후 채움.
     const hospitalAdminSeeds = [
-      { org_code: 'CHEONGDAM', email: 'cheongdam@lingora.chat', password: 'Cheongdam2026!', name: '청담 관리자' },
       { org_code: 'ORG-0001', email: 'seoul@lingora.chat', password: 'Seoul2026!', name: '서울 관리자' },
     ];
     for (const seed of hospitalAdminSeeds) {
@@ -5360,9 +5359,9 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     await dbRun(
       `INSERT OR IGNORE INTO admin_settings (key, value) VALUES ('admin_setup_done', 'false')`
     );
-    // 병원 관리자 시드용 기관 등록 (CHEONGDAM, ORG-0001)
+    // 병원 관리자 시드용 기관 등록 (ORG-0001)
     try {
-      for (const oc of ['CHEONGDAM', 'ORG-0001']) {
+      for (const oc of ['ORG-0001']) {
         const ex = await dbGet('SELECT id FROM organizations WHERE org_code = ? LIMIT 1', [oc]);
         if (!ex) {
           await dbRun('INSERT INTO organizations (org_code, name, org_type, plan) VALUES (?, ?, ?, ?)', [oc, oc + ' 병원', 'hospital', 'trial']);
