@@ -34,7 +34,6 @@ import {
   MicOff,
   Sparkles,
   Lock,
-  LogOut,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
@@ -60,7 +59,7 @@ const MENU_ITEMS = [
   { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
   { id: "ai-summary", label: "AI 요약", icon: Sparkles },
-  { id: "admin", label: "🔒 관리자", icon: Lock },
+  { id: "admin", label: "관리자", icon: Lock },
 ];
 
 const LANG_LABELS = {
@@ -896,19 +895,6 @@ export default function HospitalDashboard() {
             {MENU_ITEMS.find((m) => m.id === activeMenu)?.label || "대시보드"}
           </h1>
           <div className="ml-auto flex items-center gap-4">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
-                } catch (_) { /* ignore */ }
-                window.location.href = "/hospital-login";
-              }}
-              className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
-            >
-              <LogOut size={14} strokeWidth={2} aria-hidden />
-              로그아웃
-            </button>
             <button
               type="button"
               onClick={() => {
