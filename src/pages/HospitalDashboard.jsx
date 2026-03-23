@@ -205,19 +205,16 @@ function aiSummaryFirstLinePreview(ai) {
 function AdminDataPanel({ authUser }) {
   const [sessions, setSessions] = useState([]);
   const [summaries, setSummaries] = useState([]);
+  const [trashSessions, setTrashSessions] = useState([]);
   const [loadingSess, setLoadingSess] = useState(false);
   const [loadingSum, setLoadingSum] = useState(false);
+  const [loadingTrash, setLoadingTrash] = useState(false);
   const [bulkWorking, setBulkWorking] = useState(false);
 
   const loadAdminSessions = useCallback(async () => {
     setLoadingSess(true);
     try {
-      const params = new URLSearchParams({
-        page: "1",
-        limit: "100",
-        startDate: monthStartStr(),
-        endDate: todayStr(),
-      });
+      const params = new URLSearchParams({ page: "1", limit: "100" });
       const url = urlWithOrg(`/api/hospital/dashboard/sessions?${params}`, authUser?.org_code);
       const r = await fetch(url, { credentials: "include" });
       const data = await r.json().catch(() => ({}));
@@ -243,49 +240,124 @@ function AdminDataPanel({ authUser }) {
     }
   }, [authUser?.org_code]);
 
+  const loadTrash = useCallback(async () => {
+    setLoadingTrash(true);
+    try {
+      const url = urlWithOrg("/api/hospital/sessions/trash", authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
+      const data = await r.json().catch(() => ({}));
+      if (data.success) setTrashSessions(data.sessions || []);
+    } catch (e) {
+      console.error("admin load trash", e);
+    } finally {
+      setLoadingTrash(false);
+    }
+  }, [authUser?.org_code]);
+
   useEffect(() => {
     loadAdminSessions();
     loadAdminAiSummaries();
-  }, [loadAdminSessions, loadAdminAiSummaries]);
+    loadTrash();
+  }, [loadAdminSessions, loadAdminAiSummaries, loadTrash]);
 
-  const deleteOneSession = async (sessionId) => {
-    const url = urlWithOrg(`/api/hospital/sessions/${encodeURIComponent(sessionId)}`, authUser?.org_code);
+  const softDeleteSession = async (sessionId) => {
+    const url = urlWithOrg(
+      `/api/hospital/sessions/${encodeURIComponent(sessionId)}/soft-delete`,
+      authUser?.org_code
+    );
+    const r = await fetch(url, { method: "PATCH", credentials: "include" });
+    const data = await r.json().catch(() => ({}));
+    return !!data.success;
+  };
+
+  const clearSummaryOnly = async (sessionId) => {
+    const url = urlWithOrg(
+      `/api/hospital/sessions/${encodeURIComponent(sessionId)}/clear-summary`,
+      authUser?.org_code
+    );
+    const r = await fetch(url, { method: "PATCH", credentials: "include" });
+    const data = await r.json().catch(() => ({}));
+    return !!data.success;
+  };
+
+  const restoreSession = async (sessionId) => {
+    const url = urlWithOrg(
+      `/api/hospital/sessions/${encodeURIComponent(sessionId)}/restore`,
+      authUser?.org_code
+    );
+    const r = await fetch(url, { method: "PATCH", credentials: "include" });
+    const data = await r.json().catch(() => ({}));
+    return !!data.success;
+  };
+
+  const permanentDeleteSession = async (sessionId) => {
+    const url = urlWithOrg(
+      `/api/hospital/sessions/${encodeURIComponent(sessionId)}/permanent`,
+      authUser?.org_code
+    );
     const r = await fetch(url, { method: "DELETE", credentials: "include" });
     const data = await r.json().catch(() => ({}));
     return !!data.success;
   };
 
-  const handleDeleteSessionRow = async (session) => {
+  const handleSoftDeleteRow = async (session) => {
     if (!session?.id) return;
-    if (!window.confirm("이 기록을 삭제하시겠습니까?")) return;
-    await deleteOneSession(session.id);
-    await loadAdminSessions();
-    await loadAdminAiSummaries();
+    if (!window.confirm("이 기록을 휴지통으로 이동하시겠습니까?")) return;
+    setBulkWorking(true);
+    try {
+      const ok = await softDeleteSession(session.id);
+      if (ok) {
+        setSessions((prev) => prev.filter((row) => row.id !== session.id));
+        await loadAdminSessions();
+        await loadTrash();
+      }
+    } finally {
+      setBulkWorking(false);
+    }
   };
 
-  const handleDeleteAllSessions = async () => {
-    if (!window.confirm("정말 전체 삭제하시겠습니까?")) return;
-    if (!window.confirm("되돌릴 수 없습니다. 정말 삭제합니까?")) return;
+  const handleSoftDeleteAllListed = async () => {
+    if (!window.confirm("목록에 보이는 모든 통역 이력을 휴지통으로 이동하시겠습니까?")) return;
+    if (!window.confirm("한 번 더 확인합니다. 계속하시겠습니까?")) return;
     if (sessions.length === 0) return;
     setBulkWorking(true);
     try {
       for (const s of sessions) {
-        if (s?.id) await deleteOneSession(s.id);
+        if (s?.id) await softDeleteSession(s.id);
       }
       await loadAdminSessions();
       await loadAdminAiSummaries();
+      await loadTrash();
     } finally {
       setBulkWorking(false);
     }
   };
 
-  const handleDeleteSummaryRow = async (item) => {
+  const handleClearSummaryRow = async (item) => {
     const sid = item?.session_id;
     if (!sid) return;
-    if (!window.confirm("이 AI 요약을 삭제하시겠습니까?")) return;
+    if (!window.confirm("이 세션의 AI 요약만 삭제합니다. 계속하시겠습니까?")) return;
     setBulkWorking(true);
     try {
-      await deleteOneSession(sid);
+      const ok = await clearSummaryOnly(sid);
+      if (ok) {
+        await loadAdminSessions();
+        await loadAdminAiSummaries();
+      }
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const handleClearAllSummaries = async () => {
+    if (!window.confirm("목록에 있는 모든 AI 요약을 삭제하시겠습니까? (세션 데이터는 유지됩니다)")) return;
+    if (!window.confirm("한 번 더 확인합니다. 계속하시겠습니까?")) return;
+    if (summaries.length === 0) return;
+    setBulkWorking(true);
+    try {
+      for (const item of summaries) {
+        if (item?.session_id) await clearSummaryOnly(item.session_id);
+      }
       await loadAdminSessions();
       await loadAdminAiSummaries();
     } finally {
@@ -293,24 +365,43 @@ function AdminDataPanel({ authUser }) {
     }
   };
 
-  const handleDeleteAllSummaries = async () => {
-    if (!window.confirm("정말 전체 삭제하시겠습니까?")) return;
-    if (!window.confirm("되돌릴 수 없습니다. 정말 삭제합니까?")) return;
+  const handleRestore = async (row) => {
+    if (!row?.id) return;
     setBulkWorking(true);
     try {
-      let guard = 0;
-      while (guard++ < 500) {
-        const url = urlWithOrg("/api/hospital/ai-summaries", authUser?.org_code);
-        const r = await fetch(url, { credentials: "include" });
-        const data = await r.json().catch(() => ({}));
-        const list = data.summaries || [];
-        if (list.length === 0) break;
-        for (const item of list) {
-          if (item?.session_id) await deleteOneSession(item.session_id);
-        }
+      const ok = await restoreSession(row.id);
+      if (ok) {
+        await loadTrash();
+        await loadAdminSessions();
+        await loadAdminAiSummaries();
       }
-      await loadAdminSessions();
-      await loadAdminAiSummaries();
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const handlePermanentDelete = async (row) => {
+    if (!row?.id) return;
+    if (!window.confirm("영구 삭제하면 되돌릴 수 없습니다")) return;
+    setBulkWorking(true);
+    try {
+      const ok = await permanentDeleteSession(row.id);
+      if (ok) await loadTrash();
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (!window.confirm("휴지통의 모든 항목을 영구 삭제하시겠습니까?")) return;
+    if (!window.confirm("되돌릴 수 없습니다. 정말 비우시겠습니까?")) return;
+    if (trashSessions.length === 0) return;
+    setBulkWorking(true);
+    try {
+      for (const row of trashSessions) {
+        if (row?.id) await permanentDeleteSession(row.id);
+      }
+      await loadTrash();
     } finally {
       setBulkWorking(false);
     }
@@ -322,17 +413,17 @@ function AdminDataPanel({ authUser }) {
         관리자 — 데이터 관리
       </h2>
 
-      {/* Section 1: 통역 이력 */}
+      {/* SECTION 1 — 통역 이력 관리 */}
       <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">통역 이력 삭제</h3>
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">통역 이력 관리</h3>
           <button
             type="button"
             disabled={bulkWorking || loadingSess || sessions.length === 0}
-            onClick={handleDeleteAllSessions}
+            onClick={handleSoftDeleteAllListed}
             className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-500 text-red-600 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            전체 삭제
+            전체 휴지통으로
           </button>
         </div>
         {loadingSess ? (
@@ -348,7 +439,7 @@ function AdminDataPanel({ authUser }) {
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">환자이름</th>
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">날짜</th>
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">언어</th>
-                  <th className="w-[52px] px-2 py-2" aria-label="삭제" />
+                  <th className="w-[52px] px-2 py-2" aria-label="휴지통" />
                 </tr>
               </thead>
               <tbody>
@@ -362,10 +453,10 @@ function AdminDataPanel({ authUser }) {
                       <button
                         type="button"
                         disabled={bulkWorking}
-                        onClick={() => handleDeleteSessionRow(s)}
+                        onClick={() => handleSoftDeleteRow(s)}
                         className="inline-flex items-center justify-center min-w-[36px] h-8 rounded-[8px] bg-red-600 text-white text-[16px] hover:bg-red-700 disabled:opacity-40"
-                        title="삭제"
-                        aria-label="삭제"
+                        title="휴지통으로"
+                        aria-label="휴지통으로"
                       >
                         🗑️
                       </button>
@@ -378,23 +469,23 @@ function AdminDataPanel({ authUser }) {
         )}
       </div>
 
-      {/* Section 2: AI 요약 */}
+      {/* SECTION 2 — AI 요약 관리 */}
       <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">AI 요약 삭제</h3>
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">AI 요약 관리</h3>
           <button
             type="button"
             disabled={bulkWorking || loadingSum || summaries.length === 0}
-            onClick={handleDeleteAllSummaries}
+            onClick={handleClearAllSummaries}
             className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-500 text-red-600 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            전체 삭제
+            전체 요약 삭제
           </button>
         </div>
         {loadingSum ? (
           <LoadingSpinner />
         ) : summaries.length === 0 ? (
-          <p className="text-[13px] text-[var(--color-text-secondary)]">삭제할 AI 요약이 없습니다.</p>
+          <p className="text-[13px] text-[var(--color-text-secondary)]">표시할 AI 요약이 없습니다.</p>
         ) : (
           <div className="overflow-x-auto rounded-[12px] border border-[var(--color-border)]">
             <table className="w-full text-[13px]">
@@ -403,7 +494,7 @@ function AdminDataPanel({ authUser }) {
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">PT번호</th>
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">날짜</th>
                   <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">요약 미리보기</th>
-                  <th className="w-[52px] px-2 py-2" aria-label="삭제" />
+                  <th className="w-[52px] px-2 py-2" aria-label="요약 삭제" />
                 </tr>
               </thead>
               <tbody>
@@ -418,12 +509,70 @@ function AdminDataPanel({ authUser }) {
                       <button
                         type="button"
                         disabled={bulkWorking}
-                        onClick={() => handleDeleteSummaryRow(item)}
+                        onClick={() => handleClearSummaryRow(item)}
                         className="inline-flex items-center justify-center min-w-[36px] h-8 rounded-[8px] bg-red-600 text-white text-[16px] hover:bg-red-700 disabled:opacity-40"
-                        title="삭제"
-                        aria-label="삭제"
+                        title="요약만 삭제"
+                        aria-label="요약만 삭제"
                       >
                         🗑️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 3 — 휴지통 */}
+      <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">🗑️ 휴지통</h3>
+          <button
+            type="button"
+            disabled={bulkWorking || loadingTrash || trashSessions.length === 0}
+            onClick={handleEmptyTrash}
+            className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-800 text-red-900 dark:text-red-200 bg-transparent hover:bg-red-900/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            휴지통 비우기
+          </button>
+        </div>
+        {loadingTrash ? (
+          <LoadingSpinner />
+        ) : trashSessions.length === 0 ? (
+          <p className="text-[13px] text-[var(--color-text-secondary)]">휴지통이 비어있습니다</p>
+        ) : (
+          <div className="overflow-x-auto rounded-[12px] border border-[var(--color-border)]">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">PT번호</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">날짜</th>
+                  <th className="text-right px-3 py-2 font-semibold text-[var(--color-text-secondary)]">작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trashSessions.map((row) => (
+                  <tr key={row.id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-3 py-2 font-mono text-[var(--color-text)]">{formatChartNumber(row.chart_number || row.room_id)}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)]">{formatDate(row.deleted_at || row.created_at)}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => handleRestore(row)}
+                        className="mr-2 px-3 py-1 rounded-[8px] text-[12px] font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+                      >
+                        복원
+                      </button>
+                      <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => handlePermanentDelete(row)}
+                        className="px-3 py-1 rounded-[8px] text-[12px] font-semibold bg-[#7f1d1d] text-white hover:bg-[#991b1b] disabled:opacity-40"
+                      >
+                        영구 삭제
                       </button>
                     </td>
                   </tr>
@@ -443,6 +592,7 @@ function AdminDataPanel({ authUser }) {
 export default function HospitalDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState("overview");
+  const [menuBeforeAdmin, setMenuBeforeAdmin] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("pending");
@@ -539,8 +689,10 @@ export default function HospitalDashboard() {
                 type="button"
                 onClick={() => {
                   if (item.id === "admin") {
-                    if (adminUnlocked) setActiveMenu("admin");
-                    else {
+                    if (adminUnlocked) {
+                      if (activeMenu !== "admin") setMenuBeforeAdmin(activeMenu);
+                      setActiveMenu("admin");
+                    } else {
                       setAdminPasswordInput("");
                       setShowAdminPasswordModal(true);
                     }
@@ -592,10 +744,16 @@ export default function HospitalDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => { window.location.href = "/hospital?template=reception"; }}
+              onClick={() => {
+                if (activeMenu === "admin") {
+                  setActiveMenu(menuBeforeAdmin || "overview");
+                } else {
+                  window.location.href = "/hospital?template=reception";
+                }
+              }}
               className="text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
             >
-              ← 통역 대기창
+              {activeMenu === "admin" ? "← 관리자 나가기" : "← 통역 대기창"}
             </button>
           </div>
         </header>
@@ -759,6 +917,7 @@ export default function HospitalDashboard() {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
+                    setMenuBeforeAdmin(activeMenu);
                     setAdminUnlocked(true);
                     setShowAdminPasswordModal(false);
                     setAdminPasswordInput("");
@@ -785,6 +944,7 @@ export default function HospitalDashboard() {
                 type="button"
                 onClick={() => {
                   if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
+                    setMenuBeforeAdmin(activeMenu);
                     setAdminUnlocked(true);
                     setShowAdminPasswordModal(false);
                     setAdminPasswordInput("");
