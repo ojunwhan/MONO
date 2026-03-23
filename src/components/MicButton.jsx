@@ -432,6 +432,17 @@ export default function MicButton({
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === "AudioVolumeUp" || e.key === "AudioVolumeUp") {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [listening, pending]);
+
   return (
     <button
       onClick={toggle}
