@@ -5630,6 +5630,34 @@ app.post('/api/hospital/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/hospital/auth/change-password — 병원 관리자 비밀번호 변경 (JWT의 hospital_admins 행, bcrypt)
+app.post('/api/hospital/auth/change-password', requireHospitalAdminJwt, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+  try {
+    const orgCode = req.hospitalOrgCode;
+    const adminId = req.hospitalAdminId;
+    const row = await dbGet(
+      'SELECT password_hash FROM hospital_admins WHERE id = ? AND org_code = ? LIMIT 1',
+      [adminId, orgCode]
+    );
+    if (!row || !(await bcrypt.compare(String(currentPassword), row.password_hash))) {
+      return res.status(401).json({ error: 'Invalid current password' });
+    }
+    const newHash = await bcrypt.hash(String(newPassword), 10);
+    await dbRun(
+      'UPDATE hospital_admins SET password_hash = ? WHERE id = ? AND org_code = ?',
+      [newHash, adminId, orgCode]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('change-password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get("/api/hospital/stt-provider", async (req, res) => {
   try {
     const { orgCode } = req.query;
