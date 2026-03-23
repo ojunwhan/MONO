@@ -5658,6 +5658,38 @@ app.post('/api/hospital/auth/change-password', requireHospitalAdminJwt, async (r
   }
 });
 
+// GET /api/hospital/auth/admin-password-status — 현재 JWT 관리자 행에 비밀번호 해시 존재 여부
+app.get('/api/hospital/auth/admin-password-status', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const admin = await dbGet(
+      'SELECT password_hash FROM hospital_admins WHERE id = ? AND org_code = ? LIMIT 1',
+      [req.hospitalAdminId, req.hospitalOrgCode]
+    );
+    const h = admin && admin.password_hash != null ? String(admin.password_hash).trim() : '';
+    res.json({ hasPassword: h.length > 0 });
+  } catch (err) {
+    console.error('[hospital:admin-password-status]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/hospital/auth/set-admin-password — 최초 비밀번호 설정 (현재 JWT 관리자 행)
+app.post('/api/hospital/auth/set-admin-password', requireHospitalAdminJwt, async (req, res) => {
+  const { newPassword } = req.body || {};
+  if (!newPassword) return res.status(400).json({ error: 'Missing fields' });
+  try {
+    const hash = await bcrypt.hash(String(newPassword), 10);
+    await dbRun(
+      'UPDATE hospital_admins SET password_hash = ? WHERE id = ? AND org_code = ?',
+      [hash, req.hospitalAdminId, req.hospitalOrgCode]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[hospital:set-admin-password]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get("/api/hospital/stt-provider", async (req, res) => {
   try {
     const { orgCode } = req.query;
