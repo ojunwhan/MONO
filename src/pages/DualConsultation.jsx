@@ -169,6 +169,12 @@ export default function DualConsultation() {
     }
   }, [patientLang]);
 
+  useEffect(() => {
+    if (isConsultationSingle) {
+      setPatientDeviceId(staffDeviceId);
+    }
+  }, [isConsultationSingle, staffDeviceId]);
+
   // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
   // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
   const {
