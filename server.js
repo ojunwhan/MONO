@@ -5365,6 +5365,7 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     }
 
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN ai_summary TEXT").catch(() => {});
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN deleted_at TEXT DEFAULT NULL").catch(() => {});
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
@@ -5624,6 +5625,7 @@ app.post('/api/hospital/auth/logout', (req, res) => {
   res.clearCookie(HOSPITAL_TOKEN_COOKIE, {
     httpOnly: true,
     sameSite: 'lax',
+    path: '/',
   });
   res.json({ success: true });
 });
@@ -6428,6 +6430,7 @@ app.get('/api/hospital/usage-stats', requireHospitalAdminJwt, async (req, res) =
        FROM hospital_sessions
        WHERE org_code = ?
          AND status = 'ended'
+         AND (deleted_at IS NULL)
          AND created_at >= ?
          AND created_at < ?
        GROUP BY strftime('%m/%d', created_at)
@@ -6459,7 +6462,7 @@ app.get('/api/hospital/dashboard/stats', requireHospitalAdminJwt, async (req, re
     const monthStart = today.substring(0, 7) + '-01';
 
     const orgCodeFilter = req.hospitalOrgCode || 'UNKNOWN';
-    const whereOrg = "(COALESCE(org_code, 'UNKNOWN') = ?)";
+    const whereOrg = "(COALESCE(org_code, 'UNKNOWN') = ?) AND (deleted_at IS NULL)";
     const params = [orgCodeFilter];
 
     // 오늘 통역 건수
@@ -6554,7 +6557,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
          LEFT JOIN hospital_patients hp ON hp.chart_number = hs.chart_number
-         WHERE hs.room_id = ? AND (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
+         WHERE hs.room_id = ? AND (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND (hs.deleted_at IS NULL) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC`,
         [ptNumber, orgCode]
       );
@@ -6565,7 +6568,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
          LEFT JOIN hospital_patients hp ON hp.chart_number = hs.chart_number
-         WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND hs.ai_summary IS NOT NULL
+         WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND (hs.deleted_at IS NULL) AND hs.ai_summary IS NOT NULL
          ORDER BY hs.created_at DESC
          LIMIT 30`,
         [orgCode]
@@ -6682,7 +6685,7 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req,
     const offset = (page - 1) * limit;
 
     const orgCodeFilter = req.hospitalOrgCode || 'UNKNOWN';
-    let where = "(COALESCE(hs.org_code, 'UNKNOWN') = ?)";
+    let where = "(COALESCE(hs.org_code, 'UNKNOWN') = ?) AND (hs.deleted_at IS NULL)";
     const params = [orgCodeFilter];
 
     if (startDate) { where += ' AND DATE(COALESCE(hs.started_at, hs.created_at)) >= ?'; params.push(startDate); }
@@ -6739,6 +6742,21 @@ app.get('/api/hospital/dashboard/sessions', requireHospitalAdminJwt, async (req,
   }
 });
 
+// GET /api/hospital/sessions/trash — 휴지통(소프트 삭제) 세션 목록
+app.get('/api/hospital/sessions/trash', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const sessions = await dbAll(
+      `SELECT * FROM hospital_sessions WHERE (COALESCE(org_code, 'UNKNOWN') = ?) AND deleted_at IS NOT NULL ORDER BY deleted_at DESC`,
+      [orgCode]
+    );
+    res.json({ success: true, sessions: sessions || [] });
+  } catch (e) {
+    console.error('[hospital:sessions:trash]', e?.message);
+    res.status(500).json({ error: 'trash_query_failed' });
+  }
+});
+
 // GET /api/hospital/sessions — roomId면 sessionId만 반환; 아니면 차트번호 등으로 세션 목록 조회 (org 기준)
 app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
   const orgCode = req.hospitalOrgCode || 'UNKNOWN';
@@ -6746,7 +6764,7 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
   if (roomId) {
     try {
       const row = await dbGet(
-        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' AND (COALESCE(org_code, 'UNKNOWN') = ?) LIMIT 1",
+        "SELECT id FROM hospital_sessions WHERE room_id = ? AND status = 'active' AND (COALESCE(org_code, 'UNKNOWN') = ?) AND (deleted_at IS NULL) LIMIT 1",
         [roomId, orgCode]
       );
       return res.json({ success: true, sessionId: row ? row.id : null });
@@ -6758,7 +6776,7 @@ app.get('/api/hospital/sessions', requireHospitalAdminJwt, async (req, res) => {
     const { chartNumber, stationId, date, limit: lim } = req.query;
     let sql = `SELECT hs.*,
       (SELECT hm.original_text FROM hospital_messages hm WHERE hm.session_id = hs.id ORDER BY hm.created_at DESC LIMIT 1) as last_message
-      FROM hospital_sessions hs WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?)`;
+      FROM hospital_sessions hs WHERE (COALESCE(hs.org_code, 'UNKNOWN') = ?) AND (hs.deleted_at IS NULL)`;
     const params = [orgCode];
     if (chartNumber) { sql += ' AND hs.chart_number = ?'; params.push(chartNumber); }
     if (stationId) { sql += ' AND hs.station_id = ?'; params.push(stationId); }
@@ -6800,6 +6818,91 @@ app.get('/api/hospital/sessions/:sessionId/messages', requireHospitalAdminJwt, a
     res.json({ success: true, session, messages: decrypted });
   } catch (e) {
     res.status(500).json({ error: 'messages_query_failed' });
+  }
+});
+
+// PATCH /api/hospital/sessions/:sessionId/clear-summary — AI 요약만 제거 (세션 유지)
+app.patch('/api/hospital/sessions/:sessionId/clear-summary', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const { sessionId } = req.params;
+    const r = await dbRun(
+      `UPDATE hospital_sessions SET ai_summary = NULL WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?)`,
+      [sessionId, orgCode]
+    );
+    if (!r || r.changes === 0) return res.status(404).json({ error: 'session_not_found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[hospital:clear-summary]', e?.message);
+    res.status(500).json({ error: 'clear_summary_failed' });
+  }
+});
+
+// PATCH /api/hospital/sessions/:sessionId/soft-delete — 휴지통으로 이동
+app.patch('/api/hospital/sessions/:sessionId/soft-delete', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const { sessionId } = req.params;
+    const r = await dbRun(
+      `UPDATE hospital_sessions SET deleted_at = datetime('now') WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?) AND deleted_at IS NULL`,
+      [sessionId, orgCode]
+    );
+    if (!r || r.changes === 0) return res.status(404).json({ error: 'session_not_found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[hospital:soft-delete]', e?.message);
+    res.status(500).json({ error: 'soft_delete_failed' });
+  }
+});
+
+// PATCH /api/hospital/sessions/:sessionId/restore — 휴지통에서 복원
+app.patch('/api/hospital/sessions/:sessionId/restore', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const { sessionId } = req.params;
+    const r = await dbRun(
+      `UPDATE hospital_sessions SET deleted_at = NULL WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?) AND deleted_at IS NOT NULL`,
+      [sessionId, orgCode]
+    );
+    if (!r || r.changes === 0) return res.status(404).json({ error: 'session_not_found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[hospital:restore-session]', e?.message);
+    res.status(500).json({ error: 'restore_failed' });
+  }
+});
+
+// DELETE /api/hospital/sessions/:sessionId/permanent — 휴지통에서 영구 삭제
+app.delete('/api/hospital/sessions/:sessionId/permanent', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode || 'UNKNOWN';
+    const { sessionId } = req.params;
+    const session = await dbGet(
+      "SELECT id, room_id, patient_token FROM hospital_sessions WHERE id = ? AND (COALESCE(org_code, 'UNKNOWN') = ?) AND deleted_at IS NOT NULL LIMIT 1",
+      [sessionId, orgCode]
+    );
+    if (!session) return res.status(404).json({ error: 'session_not_found' });
+    const roomId = session.room_id || null;
+    const patientToken = session.patient_token || null;
+
+    await dbRun('DELETE FROM hospital_sessions WHERE id = ?', [sessionId]);
+
+    if (roomId) {
+      const sessionPath = path.join(LOGS_SESSIONS_DIR, `${roomId}.txt`);
+      const archiveBase = patientToken ? `${patientToken}_${roomId}` : roomId;
+      const archivePath = path.join(LOGS_RECORDS_DIR, `${archiveBase}.txt`);
+      try {
+        if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath);
+      } catch (_) {}
+      try {
+        if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
+      } catch (_) {}
+    }
+
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('[hospital:delete-session-permanent]', e?.message);
+    res.status(500).json({ error: 'delete_failed' });
   }
 });
 
