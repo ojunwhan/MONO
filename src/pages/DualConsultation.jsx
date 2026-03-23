@@ -1397,7 +1397,7 @@ export default function DualConsultation() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: isConsultationSingle ? "1fr" : "1fr 1fr",
                   gap: "12px",
                   fontSize: "12px",
                 }}
@@ -1416,20 +1416,22 @@ export default function DualConsultation() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
-                  <select
-                    value={patientDeviceId}
-                    onChange={(e) => setPatientDeviceId(e.target.value)}
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                  >
-                    {devices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {!isConsultationSingle && (
+                  <div>
+                    <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
+                    <select
+                      value={patientDeviceId}
+                      onChange={(e) => setPatientDeviceId(e.target.value)}
+                      style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                    >
+                      {devices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12px", marginTop: "12px" }}>
                 <div>
