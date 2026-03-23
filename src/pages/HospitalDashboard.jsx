@@ -34,6 +34,7 @@ import {
   MicOff,
   Sparkles,
   Lock,
+  LogOut,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
@@ -575,13 +576,28 @@ export default function HospitalDashboard() {
           <h1 className="text-[16px] font-semibold text-[var(--color-text)]">
             {MENU_ITEMS.find((m) => m.id === activeMenu)?.label || "대시보드"}
           </h1>
-          <button
-            type="button"
-            onClick={() => { window.location.href = "/hospital?template=reception"; }}
-            className="ml-auto text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
-          >
-            ← 통역 대기창
-          </button>
+          <div className="ml-auto flex items-center gap-4">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
+                } catch (_) { /* ignore */ }
+                window.location.href = "/hospital-login";
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
+            >
+              <LogOut size={14} strokeWidth={2} aria-hidden />
+              로그아웃
+            </button>
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/hospital?template=reception"; }}
+              className="text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
+            >
+              ← 통역 대기창
+            </button>
+          </div>
         </header>
 
         {/* Content */}
