@@ -776,6 +776,18 @@ export default function DualConsultation() {
     }
   }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
+  // Bluetooth remote / keyboard: Volume Up toggles patient PTT (same as patient mic button); PTT tab only.
+  useEffect(() => {
+    if (inputMode !== "ptt") return;
+    const onKeyDown = (e) => {
+      if (e.key !== "AudioVolumeUp") return;
+      e.preventDefault();
+      startPatientRecording();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [inputMode, startPatientRecording]);
+
   const handleVADToggle = useCallback(() => {
     if (vadActive) {
       vadPause();
