@@ -342,7 +342,6 @@ export default function MicButton({
   const toggleRef = useRef(null);
 
   const toggle = async () => {
-    toggleRef.current = toggle;
     if (pending) return;
     if (!listening) {
       setPending(true);
@@ -434,6 +433,10 @@ export default function MicButton({
       }
     }
   };
+
+  useEffect(() => {
+    toggleRef.current = toggle;
+  });
 
   useEffect(() => {
     const handleKeyDown = (e) => {
