@@ -582,7 +582,90 @@ function AdminDataPanel({ authUser }) {
           </div>
         )}
       </div>
+
+      {/* SECTION 4 — 관리자 비밀번호 변경 */}
+      <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
+        <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-4">🔑 관리자 비밀번호 변경</h3>
+        <AdminPasswordChangeForm authUser={authUser} />
+      </div>
     </div>
+  );
+}
+
+function AdminPasswordChangeForm({ authUser }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) return;
+    setSubmitting(true);
+    try {
+      const url = urlWithOrg("/api/hospital/auth/change-password", authUser?.org_code);
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
+        alert("비밀번호가 변경되었습니다");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        alert("현재 비밀번호가 올바르지 않습니다");
+      }
+    } catch {
+      alert("현재 비밀번호가 올바르지 않습니다");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3 max-w-[400px]">
+      <label className="flex flex-col gap-1 text-[13px]">
+        <span className="text-[var(--color-text-secondary)]">현재 비밀번호</span>
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          className="h-10 px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px]"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-[13px]">
+        <span className="text-[var(--color-text-secondary)]">새 비밀번호</span>
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="h-10 px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px]"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-[13px]">
+        <span className="text-[var(--color-text-secondary)]">새 비밀번호 확인</span>
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          className="h-10 px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px]"
+        />
+      </label>
+      <button
+        type="submit"
+        disabled={submitting || !currentPassword || !newPassword || newPassword !== confirmPassword}
+        className="mt-1 self-start px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8] disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        변경
+      </button>
+    </form>
   );
 }
 
@@ -729,19 +812,21 @@ export default function HospitalDashboard() {
             {MENU_ITEMS.find((m) => m.id === activeMenu)?.label || "대시보드"}
           </h1>
           <div className="ml-auto flex items-center gap-4">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
-                } catch (_) { /* ignore */ }
-                window.location.href = "/hospital-login";
-              }}
-              className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
-            >
-              <LogOut size={14} strokeWidth={2} aria-hidden />
-              로그아웃
-            </button>
+            {activeMenu !== "admin" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
+                  } catch (_) { /* ignore */ }
+                  window.location.href = "/hospital-login";
+                }}
+                className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
+              >
+                <LogOut size={14} strokeWidth={2} aria-hidden />
+                로그아웃
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
