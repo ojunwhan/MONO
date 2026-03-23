@@ -669,6 +669,109 @@ function AdminPasswordChangeForm({ authUser }) {
   );
 }
 
+/** 최초 관리자 패널 비밀번호 설정 (서버에 해시 없을 때) */
+function SetPasswordModal({ authUser, open, onClose, onSuccess }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!open) return null;
+
+  const submit = async () => {
+    if (newPassword.length < 8) {
+      alert("비밀번호는 8자 이상이어야 합니다.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const url = urlWithOrg("/api/hospital/auth/set-admin-password", authUser?.org_code);
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
+        setNewPassword("");
+        setConfirmPassword("");
+        onSuccess();
+      } else {
+        alert("설정에 실패했습니다.");
+      }
+    } catch {
+      alert("설정에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="set-admin-pw-title"
+    >
+      <div className="w-full max-w-[380px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl">
+        <h2 id="set-admin-pw-title" className="text-[16px] font-bold text-[var(--color-text)] mb-4">
+          관리자 비밀번호 설정
+        </h2>
+        <p className="text-[13px] text-[var(--color-text-secondary)] mb-3">
+          최초 접속입니다. 관리자 패널용 비밀번호를 설정하세요. (8자 이상)
+        </p>
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="새 비밀번호"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+        />
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="새 비밀번호 확인"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-4 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setNewPassword("");
+              setConfirmPassword("");
+              onClose();
+            }}
+            className="px-4 py-2 rounded-[10px] text-[13px] font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            disabled={submitting || !newPassword || newPassword !== confirmPassword}
+            onClick={submit}
+            className="px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8] disabled:opacity-40"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
@@ -685,6 +788,7 @@ export default function HospitalDashboard() {
   const [aiSummarySearchInput, setAiSummarySearchInput] = useState("");
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+  const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
 
   useEffect(() => {
@@ -777,7 +881,20 @@ export default function HospitalDashboard() {
                       setActiveMenu("admin");
                     } else {
                       setAdminPasswordInput("");
-                      setShowAdminPasswordModal(true);
+                      (async () => {
+                        try {
+                          const url = urlWithOrg("/api/hospital/auth/admin-password-status", authUser?.org_code);
+                          const res = await fetch(url, { credentials: "include" });
+                          const data = await res.json().catch(() => ({}));
+                          if (data.hasPassword === false) {
+                            setShowSetPasswordModal(true);
+                          } else {
+                            setShowAdminPasswordModal(true);
+                          }
+                        } catch {
+                          setShowAdminPasswordModal(true);
+                        }
+                      })();
                     }
                   } else {
                     setActiveMenu(item.id);
@@ -980,6 +1097,18 @@ export default function HospitalDashboard() {
           )}
         </div>
       </main>
+
+      <SetPasswordModal
+        authUser={authUser}
+        open={showSetPasswordModal}
+        onClose={() => setShowSetPasswordModal(false)}
+        onSuccess={() => {
+          setMenuBeforeAdmin(activeMenu);
+          setAdminUnlocked(true);
+          setShowSetPasswordModal(false);
+          setActiveMenu("admin");
+        }}
+      />
 
       {showAdminPasswordModal && (
         <div
