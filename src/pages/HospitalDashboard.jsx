@@ -883,9 +883,15 @@ export default function HospitalDashboard() {
                       setAdminPasswordInput("");
                       (async () => {
                         try {
-                          const url = urlWithOrg("/api/hospital/auth/admin-password-status", authUser?.org_code);
-                          const res = await fetch(url, { credentials: "include" });
+                          // JWT 쿠키만 사용 (GET /api/hospital/auth/me 와 동일 — org 쿼리 불필요)
+                          const res = await fetch("/api/hospital/auth/admin-password-status", {
+                            credentials: "include",
+                          });
                           const data = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            setShowAdminPasswordModal(true);
+                            return;
+                          }
                           if (data.hasPassword === false) {
                             setShowSetPasswordModal(true);
                           } else {
@@ -955,7 +961,7 @@ export default function HospitalDashboard() {
               }}
               className="text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
             >
-              {activeMenu === "admin" ? "← 관리자 나가기" : "← 통역 대기창"}
+              {activeMenu === "admin" ? "← 관리자 나가기" : "← 통역 대기장"}
             </button>
           </div>
         </header>
