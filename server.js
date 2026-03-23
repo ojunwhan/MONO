@@ -5658,6 +5658,23 @@ app.post('/api/hospital/auth/change-password', requireHospitalAdminJwt, async (r
   }
 });
 
+app.post('/api/hospital/auth/verify-admin-password', requireHospitalAdminJwt, async (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'Missing password' });
+  try {
+    const admin = await dbGet(
+      'SELECT password_hash FROM hospital_admins WHERE id = ? AND org_code = ?',
+      [req.hospitalAdminId, req.hospitalOrgCode]
+    );
+    if (!admin) return res.status(404).json({ error: 'Admin not found' });
+    const valid = await bcrypt.compare(String(password), admin.password_hash);
+    res.json({ valid });
+  } catch (err) {
+    console.error('verify-admin-password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/hospital/auth/admin-password-status — 현재 JWT 관리자 행에 비밀번호 해시 존재 여부
 app.get('/api/hospital/auth/admin-password-status', requireHospitalAdminJwt, async (req, res) => {
   try {

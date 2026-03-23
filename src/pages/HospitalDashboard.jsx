@@ -180,8 +180,6 @@ function urlWithOrg(url, orgCode) {
   return `${url}${sep}org_code=${encodeURIComponent(orgCode)}`;
 }
 
-const ADMIN_PANEL_PASSWORD = "mono2026!";
-
 function aiSummaryFirstLinePreview(ai) {
   if (ai == null || ai === "") return "—";
   if (typeof ai === "object") {
@@ -199,10 +197,92 @@ function aiSummaryFirstLinePreview(ai) {
   return String(ai).split("\n")[0].trim().slice(0, 120);
 }
 
+/** 파괴적 작업 전에만 표시 — POST /api/hospital/auth/verify-admin-password */
+function AdminPasswordConfirmModal({ open, onClose, onVerified }) {
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!open) return null;
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/hospital/auth/verify-admin-password", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.valid !== true) {
+        alert("비밀번호가 틀렸습니다");
+        return;
+      }
+      setPassword("");
+      onVerified();
+    } catch {
+      alert("비밀번호가 틀렸습니다");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="admin-destructive-pw-title"
+    >
+      <div className="w-full max-w-[380px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl">
+        <h2 id="admin-destructive-pw-title" className="text-[16px] font-bold text-[var(--color-text)] mb-4">
+          관리자 비밀번호 확인
+        </h2>
+        <input
+          type="password"
+          autoComplete="current-password"
+          placeholder="비밀번호"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-4 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPassword("");
+              onClose();
+            }}
+            className="px-4 py-2 rounded-[10px] text-[13px] font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            disabled={submitting || !password}
+            onClick={submit}
+            className="px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8] disabled:opacity-40"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════
-// ADMIN DATA PANEL (password-gated from parent)
+// ADMIN DATA PANEL
 // ═══════════════════════════════════════════
 function AdminDataPanel({ authUser }) {
+  const destructivePendingRef = useRef(null);
+  const [destructivePwOpen, setDestructivePwOpen] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [summaries, setSummaries] = useState([]);
   const [trashSessions, setTrashSessions] = useState([]);
@@ -259,6 +339,18 @@ function AdminDataPanel({ authUser }) {
     loadAdminAiSummaries();
     loadTrash();
   }, [loadAdminSessions, loadAdminAiSummaries, loadTrash]);
+
+  const gateDestructive = (fn) => {
+    destructivePendingRef.current = fn;
+    setDestructivePwOpen(true);
+  };
+
+  const afterDestructivePasswordOk = async () => {
+    const fn = destructivePendingRef.current;
+    destructivePendingRef.current = null;
+    setDestructivePwOpen(false);
+    if (fn) await fn();
+  };
 
   const softDeleteSession = async (sessionId) => {
     const url = urlWithOrg(
@@ -420,7 +512,7 @@ function AdminDataPanel({ authUser }) {
           <button
             type="button"
             disabled={bulkWorking || loadingSess || sessions.length === 0}
-            onClick={handleSoftDeleteAllListed}
+            onClick={() => gateDestructive(() => handleSoftDeleteAllListed())}
             className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-500 text-red-600 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             전체 휴지통으로
@@ -532,7 +624,7 @@ function AdminDataPanel({ authUser }) {
           <button
             type="button"
             disabled={bulkWorking || loadingTrash || trashSessions.length === 0}
-            onClick={handleEmptyTrash}
+            onClick={() => gateDestructive(() => handleEmptyTrash())}
             className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-800 text-red-900 dark:text-red-200 bg-transparent hover:bg-red-900/10 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             휴지통 비우기
@@ -569,7 +661,7 @@ function AdminDataPanel({ authUser }) {
                       <button
                         type="button"
                         disabled={bulkWorking}
-                        onClick={() => handlePermanentDelete(row)}
+                        onClick={() => gateDestructive(() => handlePermanentDelete(row))}
                         className="px-3 py-1 rounded-[8px] text-[12px] font-semibold bg-[#7f1d1d] text-white hover:bg-[#991b1b] disabled:opacity-40"
                       >
                         영구 삭제
@@ -588,6 +680,15 @@ function AdminDataPanel({ authUser }) {
         <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-4">🔑 관리자 비밀번호 변경</h3>
         <AdminPasswordChangeForm authUser={authUser} />
       </div>
+
+      <AdminPasswordConfirmModal
+        open={destructivePwOpen}
+        onClose={() => {
+          destructivePendingRef.current = null;
+          setDestructivePwOpen(false);
+        }}
+        onVerified={afterDestructivePasswordOk}
+      />
     </div>
   );
 }
@@ -669,116 +770,12 @@ function AdminPasswordChangeForm({ authUser }) {
   );
 }
 
-/** 최초 관리자 패널 비밀번호 설정 (서버에 해시 없을 때) */
-function SetPasswordModal({ authUser, open, onClose, onSuccess }) {
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  if (!open) return null;
-
-  const submit = async () => {
-    if (newPassword.length < 8) {
-      alert("비밀번호는 8자 이상이어야 합니다.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      alert("새 비밀번호가 일치하지 않습니다.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const url = urlWithOrg("/api/hospital/auth/set-admin-password", authUser?.org_code);
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success !== false) {
-        setNewPassword("");
-        setConfirmPassword("");
-        onSuccess();
-      } else {
-        alert("설정에 실패했습니다.");
-      }
-    } catch {
-      alert("설정에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="set-admin-pw-title"
-    >
-      <div className="w-full max-w-[380px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl">
-        <h2 id="set-admin-pw-title" className="text-[16px] font-bold text-[var(--color-text)] mb-4">
-          관리자 비밀번호 설정
-        </h2>
-        <p className="text-[13px] text-[var(--color-text-secondary)] mb-3">
-          최초 접속입니다. 관리자 패널용 비밀번호를 설정하세요. (8자 이상)
-        </p>
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="새 비밀번호"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-        />
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="새 비밀번호 확인"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-4 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-        />
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setNewPassword("");
-              setConfirmPassword("");
-              onClose();
-            }}
-            className="px-4 py-2 rounded-[10px] text-[13px] font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            disabled={submitting || !newPassword || newPassword !== confirmPassword}
-            onClick={submit}
-            className="px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8] disabled:opacity-40"
-          >
-            확인
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
 export default function HospitalDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState("overview");
-  const [menuBeforeAdmin, setMenuBeforeAdmin] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("pending");
@@ -786,11 +783,6 @@ export default function HospitalDashboard() {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummarySearch, setAiSummarySearch] = useState("");
   const [aiSummarySearchInput, setAiSummarySearchInput] = useState("");
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
-  const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState("");
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -874,38 +866,7 @@ export default function HospitalDashboard() {
               <button
                 key={`sidebar-${index}-${item.id}`}
                 type="button"
-                onClick={() => {
-                  if (item.id === "admin") {
-                    if (adminUnlocked) {
-                      if (activeMenu !== "admin") setMenuBeforeAdmin(activeMenu);
-                      setActiveMenu("admin");
-                    } else {
-                      setAdminPasswordInput("");
-                      (async () => {
-                        try {
-                          // JWT 쿠키만 사용 (GET /api/hospital/auth/me 와 동일 — org 쿼리 불필요)
-                          const res = await fetch("/api/hospital/auth/admin-password-status", {
-                            credentials: "include",
-                          });
-                          const data = await res.json().catch(() => ({}));
-                          if (!res.ok) {
-                            setShowAdminPasswordModal(true);
-                            return;
-                          }
-                          if (data.hasPassword === false) {
-                            setShowSetPasswordModal(true);
-                          } else {
-                            setShowAdminPasswordModal(true);
-                          }
-                        } catch {
-                          setShowAdminPasswordModal(true);
-                        }
-                      })();
-                    }
-                  } else {
-                    setActiveMenu(item.id);
-                  }
-                }}
+                onClick={() => setActiveMenu(item.id)}
                 className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-semibold transition-colors ${
                   isActive
                     ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#2563EB] border-r-2 border-[#2563EB]"
@@ -935,33 +896,27 @@ export default function HospitalDashboard() {
             {MENU_ITEMS.find((m) => m.id === activeMenu)?.label || "대시보드"}
           </h1>
           <div className="ml-auto flex items-center gap-4">
-            {activeMenu !== "admin" && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
-                  } catch (_) { /* ignore */ }
-                  window.location.href = "/hospital-login";
-                }}
-                className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
-              >
-                <LogOut size={14} strokeWidth={2} aria-hidden />
-                로그아웃
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" });
+                } catch (_) { /* ignore */ }
+                window.location.href = "/hospital-login";
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors bg-transparent border-0 p-0 cursor-pointer"
+            >
+              <LogOut size={14} strokeWidth={2} aria-hidden />
+              로그아웃
+            </button>
             <button
               type="button"
               onClick={() => {
-                if (activeMenu === "admin") {
-                  setActiveMenu(menuBeforeAdmin || "overview");
-                } else {
-                  window.location.href = "/hospital?template=reception";
-                }
+                window.location.href = "/hospital?template=reception";
               }}
               className="text-[13px] text-[var(--color-text-secondary)] hover:text-[#2563EB] transition-colors"
             >
-              {activeMenu === "admin" ? "← 관리자 나가기" : "← 통역 대기장"}
+              ← 통역 대기장
             </button>
           </div>
         </header>
@@ -974,7 +929,7 @@ export default function HospitalDashboard() {
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
           {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
           {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
-          {activeMenu === "admin" && adminUnlocked && <AdminDataPanel authUser={authUser} />}
+          {activeMenu === "admin" && <AdminDataPanel authUser={authUser} />}
           {activeMenu === "ai-summary" && (
             <div style={{ padding: "24px" }}>
               <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
@@ -1104,83 +1059,6 @@ export default function HospitalDashboard() {
         </div>
       </main>
 
-      <SetPasswordModal
-        authUser={authUser}
-        open={showSetPasswordModal}
-        onClose={() => setShowSetPasswordModal(false)}
-        onSuccess={() => {
-          setMenuBeforeAdmin(activeMenu);
-          setAdminUnlocked(true);
-          setShowSetPasswordModal(false);
-          setActiveMenu("admin");
-        }}
-      />
-
-      {showAdminPasswordModal && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="admin-pw-title"
-        >
-          <div className="w-full max-w-[380px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl">
-            <h2 id="admin-pw-title" className="text-[16px] font-bold text-[var(--color-text)] mb-4">
-              관리자 인증
-            </h2>
-            <p className="text-[13px] text-[var(--color-text-secondary)] mb-3">비밀번호를 입력하세요.</p>
-            <input
-              type="password"
-              autoComplete="off"
-              value={adminPasswordInput}
-              onChange={(e) => setAdminPasswordInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
-                    setMenuBeforeAdmin(activeMenu);
-                    setAdminUnlocked(true);
-                    setShowAdminPasswordModal(false);
-                    setAdminPasswordInput("");
-                    setActiveMenu("admin");
-                  } else {
-                    alert("비밀번호가 틀렸습니다");
-                  }
-                }
-              }}
-              className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-4 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAdminPasswordModal(false);
-                  setAdminPasswordInput("");
-                }}
-                className="px-4 py-2 rounded-[10px] text-[13px] font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
-                    setMenuBeforeAdmin(activeMenu);
-                    setAdminUnlocked(true);
-                    setShowAdminPasswordModal(false);
-                    setAdminPasswordInput("");
-                    setActiveMenu("admin");
-                  } else {
-                    alert("비밀번호가 틀렸습니다");
-                  }
-                }}
-                className="px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8]"
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
