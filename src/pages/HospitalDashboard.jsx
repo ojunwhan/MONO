@@ -33,6 +33,7 @@ import {
   Mic,
   MicOff,
   Sparkles,
+  Lock,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
@@ -58,6 +59,7 @@ const MENU_ITEMS = [
   { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
   { id: "ai-summary", label: "AI 요약", icon: Sparkles },
+  { id: "admin", label: "🔒 관리자", icon: Lock },
 ];
 
 const LANG_LABELS = {
@@ -177,6 +179,263 @@ function urlWithOrg(url, orgCode) {
   return `${url}${sep}org_code=${encodeURIComponent(orgCode)}`;
 }
 
+const ADMIN_PANEL_PASSWORD = "mono2026!";
+
+function aiSummaryFirstLinePreview(ai) {
+  if (ai == null || ai === "") return "—";
+  if (typeof ai === "object") {
+    const s = ai.summary ?? ai.cc;
+    if (s != null && String(s).trim()) {
+      const line = Array.isArray(s) ? s.join(", ") : String(s);
+      return line.split("\n")[0].trim().slice(0, 120);
+    }
+    try {
+      return JSON.stringify(ai).slice(0, 120);
+    } catch {
+      return "—";
+    }
+  }
+  return String(ai).split("\n")[0].trim().slice(0, 120);
+}
+
+// ═══════════════════════════════════════════
+// ADMIN DATA PANEL (password-gated from parent)
+// ═══════════════════════════════════════════
+function AdminDataPanel({ authUser }) {
+  const [sessions, setSessions] = useState([]);
+  const [summaries, setSummaries] = useState([]);
+  const [loadingSess, setLoadingSess] = useState(false);
+  const [loadingSum, setLoadingSum] = useState(false);
+  const [bulkWorking, setBulkWorking] = useState(false);
+
+  const loadAdminSessions = useCallback(async () => {
+    setLoadingSess(true);
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "100",
+        startDate: monthStartStr(),
+        endDate: todayStr(),
+      });
+      const url = urlWithOrg(`/api/hospital/dashboard/sessions?${params}`, authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
+      const data = await r.json().catch(() => ({}));
+      if (data.success) setSessions(data.sessions || []);
+    } catch (e) {
+      console.error("admin load sessions", e);
+    } finally {
+      setLoadingSess(false);
+    }
+  }, [authUser?.org_code]);
+
+  const loadAdminAiSummaries = useCallback(async () => {
+    setLoadingSum(true);
+    try {
+      const url = urlWithOrg("/api/hospital/ai-summaries", authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
+      const data = await r.json().catch(() => ({}));
+      if (data.success) setSummaries(data.summaries || []);
+    } catch (e) {
+      console.error("admin load ai-summaries", e);
+    } finally {
+      setLoadingSum(false);
+    }
+  }, [authUser?.org_code]);
+
+  useEffect(() => {
+    loadAdminSessions();
+    loadAdminAiSummaries();
+  }, [loadAdminSessions, loadAdminAiSummaries]);
+
+  const deleteOneSession = async (sessionId) => {
+    const url = urlWithOrg(`/api/hospital/sessions/${encodeURIComponent(sessionId)}`, authUser?.org_code);
+    const r = await fetch(url, { method: "DELETE", credentials: "include" });
+    const data = await r.json().catch(() => ({}));
+    return !!data.success;
+  };
+
+  const handleDeleteSessionRow = async (session) => {
+    if (!session?.id) return;
+    if (!window.confirm("이 기록을 삭제하시겠습니까?")) return;
+    await deleteOneSession(session.id);
+    await loadAdminSessions();
+    await loadAdminAiSummaries();
+  };
+
+  const handleDeleteAllSessions = async () => {
+    if (!window.confirm("정말 전체 삭제하시겠습니까?")) return;
+    if (!window.confirm("되돌릴 수 없습니다. 정말 삭제합니까?")) return;
+    if (sessions.length === 0) return;
+    setBulkWorking(true);
+    try {
+      for (const s of sessions) {
+        if (s?.id) await deleteOneSession(s.id);
+      }
+      await loadAdminSessions();
+      await loadAdminAiSummaries();
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const handleDeleteSummaryRow = async (item) => {
+    const sid = item?.session_id;
+    if (!sid) return;
+    if (!window.confirm("이 AI 요약을 삭제하시겠습니까?")) return;
+    setBulkWorking(true);
+    try {
+      await deleteOneSession(sid);
+      await loadAdminSessions();
+      await loadAdminAiSummaries();
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const handleDeleteAllSummaries = async () => {
+    if (!window.confirm("정말 전체 삭제하시겠습니까?")) return;
+    if (!window.confirm("되돌릴 수 없습니다. 정말 삭제합니까?")) return;
+    setBulkWorking(true);
+    try {
+      let guard = 0;
+      while (guard++ < 500) {
+        const url = urlWithOrg("/api/hospital/ai-summaries", authUser?.org_code);
+        const r = await fetch(url, { credentials: "include" });
+        const data = await r.json().catch(() => ({}));
+        const list = data.summaries || [];
+        if (list.length === 0) break;
+        for (const item of list) {
+          if (item?.session_id) await deleteOneSession(item.session_id);
+        }
+      }
+      await loadAdminSessions();
+      await loadAdminAiSummaries();
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 max-w-[960px]">
+      <h2 className="text-[18px] font-bold text-[var(--color-text)] border-b border-[var(--color-border)] pb-2">
+        관리자 — 데이터 관리
+      </h2>
+
+      {/* Section 1: 통역 이력 */}
+      <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">통역 이력 삭제</h3>
+          <button
+            type="button"
+            disabled={bulkWorking || loadingSess || sessions.length === 0}
+            onClick={handleDeleteAllSessions}
+            className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-500 text-red-600 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            전체 삭제
+          </button>
+        </div>
+        {loadingSess ? (
+          <LoadingSpinner />
+        ) : sessions.length === 0 ? (
+          <p className="text-[13px] text-[var(--color-text-secondary)]">표시할 통역 이력이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-[12px] border border-[var(--color-border)]">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">PT번호</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">환자이름</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">날짜</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">언어</th>
+                  <th className="w-[52px] px-2 py-2" aria-label="삭제" />
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr key={s.id || s.room_id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-3 py-2 font-mono text-[var(--color-text)]">{formatChartNumber(s.chart_number || s.room_id)}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)]">{s.name || "—"}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)]">{formatDate(s.last_started_at)}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)]">{getLangDisplay(s.language) || "—"}</td>
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => handleDeleteSessionRow(s)}
+                        className="inline-flex items-center justify-center min-w-[36px] h-8 rounded-[8px] bg-red-600 text-white text-[16px] hover:bg-red-700 disabled:opacity-40"
+                        title="삭제"
+                        aria-label="삭제"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Section 2: AI 요약 */}
+      <div className="rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)] p-5 relative">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">AI 요약 삭제</h3>
+          <button
+            type="button"
+            disabled={bulkWorking || loadingSum || summaries.length === 0}
+            onClick={handleDeleteAllSummaries}
+            className="shrink-0 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-2 border-red-500 text-red-600 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            전체 삭제
+          </button>
+        </div>
+        {loadingSum ? (
+          <LoadingSpinner />
+        ) : summaries.length === 0 ? (
+          <p className="text-[13px] text-[var(--color-text-secondary)]">삭제할 AI 요약이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-[12px] border border-[var(--color-border)]">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">PT번호</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">날짜</th>
+                  <th className="text-left px-3 py-2 font-semibold text-[var(--color-text-secondary)]">요약 미리보기</th>
+                  <th className="w-[52px] px-2 py-2" aria-label="삭제" />
+                </tr>
+              </thead>
+              <tbody>
+                {summaries.map((item) => (
+                  <tr key={item.session_id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-3 py-2 font-mono text-[var(--color-text)]">{item.pt_number || item.room_id || "—"}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)]">{formatDate(item.created_at)}</td>
+                    <td className="px-3 py-2 text-[var(--color-text)] max-w-[420px] truncate" title={aiSummaryFirstLinePreview(item.ai_summary)}>
+                      {aiSummaryFirstLinePreview(item.ai_summary)}
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => handleDeleteSummaryRow(item)}
+                        className="inline-flex items-center justify-center min-w-[36px] h-8 rounded-[8px] bg-red-600 text-white text-[16px] hover:bg-red-700 disabled:opacity-40"
+                        title="삭제"
+                        aria-label="삭제"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
@@ -190,6 +449,9 @@ export default function HospitalDashboard() {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummarySearch, setAiSummarySearch] = useState("");
   const [aiSummarySearchInput, setAiSummarySearchInput] = useState("");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -274,7 +536,17 @@ export default function HospitalDashboard() {
               <button
                 key={`sidebar-${index}-${item.id}`}
                 type="button"
-                onClick={() => setActiveMenu(item.id)}
+                onClick={() => {
+                  if (item.id === "admin") {
+                    if (adminUnlocked) setActiveMenu("admin");
+                    else {
+                      setAdminPasswordInput("");
+                      setShowAdminPasswordModal(true);
+                    }
+                  } else {
+                    setActiveMenu(item.id);
+                  }
+                }}
                 className={`w-full flex items-center gap-3 px-5 py-2 text-left text-[13px] font-semibold transition-colors ${
                   isActive
                     ? "bg-[#EFF6FF] dark:bg-[#1E3A5F] text-[#2563EB] border-r-2 border-[#2563EB]"
@@ -320,6 +592,7 @@ export default function HospitalDashboard() {
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
           {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
           {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
+          {activeMenu === "admin" && adminUnlocked && <AdminDataPanel authUser={authUser} />}
           {activeMenu === "ai-summary" && (
             <div style={{ padding: "24px" }}>
               <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
@@ -448,6 +721,70 @@ export default function HospitalDashboard() {
           )}
         </div>
       </main>
+
+      {showAdminPasswordModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-pw-title"
+        >
+          <div className="w-full max-w-[380px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl">
+            <h2 id="admin-pw-title" className="text-[16px] font-bold text-[var(--color-text)] mb-4">
+              관리자 인증
+            </h2>
+            <p className="text-[13px] text-[var(--color-text-secondary)] mb-3">비밀번호를 입력하세요.</p>
+            <input
+              type="password"
+              autoComplete="off"
+              value={adminPasswordInput}
+              onChange={(e) => setAdminPasswordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
+                    setAdminUnlocked(true);
+                    setShowAdminPasswordModal(false);
+                    setAdminPasswordInput("");
+                    setActiveMenu("admin");
+                  } else {
+                    alert("비밀번호가 틀렸습니다");
+                  }
+                }
+              }}
+              className="w-full h-11 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text)] text-[14px] mb-4 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdminPasswordModal(false);
+                  setAdminPasswordInput("");
+                }}
+                className="px-4 py-2 rounded-[10px] text-[13px] font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (adminPasswordInput === ADMIN_PANEL_PASSWORD) {
+                    setAdminUnlocked(true);
+                    setShowAdminPasswordModal(false);
+                    setAdminPasswordInput("");
+                    setActiveMenu("admin");
+                  } else {
+                    alert("비밀번호가 틀렸습니다");
+                  }
+                }}
+                className="px-4 py-2 rounded-[10px] text-[13px] font-semibold bg-[#2563EB] text-white hover:bg-[#1d4ed8]"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
