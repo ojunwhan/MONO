@@ -339,7 +339,10 @@ export default function MicButton({
     processorRef.current = null;
   };
 
+  const toggleRef = useRef(null);
+
   const toggle = async () => {
+    toggleRef.current = toggle;
     if (pending) return;
     if (!listening) {
       setPending(true);
@@ -436,12 +439,12 @@ export default function MicButton({
     const handleKeyDown = (e) => {
       if (e.code === "AudioVolumeUp" || e.key === "AudioVolumeUp") {
         e.preventDefault();
-        toggle();
+        toggleRef.current?.();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [listening, pending]);
+  }, []);
 
   return (
     <button
