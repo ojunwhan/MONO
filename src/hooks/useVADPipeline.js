@@ -260,15 +260,57 @@ export function useVADPipeline({
   const vad = useMicVAD(micVadOptions);
 
   const start = useCallback(() => {
+    console.log("[VAD][diag] start() called", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
     onVadListenStartRef.current?.();
-    return vad.start();
+    const ret = vad.start();
+    if (ret?.then) {
+      ret
+        .then(() => {
+          console.log("[VAD][diag] start() resolved", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+        })
+        .catch((err) => {
+          console.warn("[VAD][diag] start() rejected", { err: err?.message || err, listening: vad.listening, loading: vad.loading, errored: vad.errored });
+        });
+    } else {
+      console.log("[VAD][diag] start() returned (non-promise)", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+    }
+    return ret;
   }, [vad.start]);
 
   useEffect(() => {
     if (prevDeviceIdRef.current !== deviceId && vad.listening) {
+      console.log("[VAD][diag] device change restart: pause() before", {
+        prevDeviceId: prevDeviceIdRef.current,
+        nextDeviceId: deviceId,
+        listening: vad.listening,
+        loading: vad.loading,
+        errored: vad.errored,
+      });
       vad.pause();
+      console.log("[VAD][diag] device change restart: pause() after", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
       onVadListenStartRef.current?.();
-      vad.start();
+      console.log("[VAD][diag] device change restart: start() before", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+      const restartRet = vad.start();
+      if (restartRet?.then) {
+        restartRet
+          .then(() => {
+            console.log("[VAD][diag] device change restart: start() resolved", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+          })
+          .catch((err) => {
+            console.warn("[VAD][diag] device change restart: start() rejected", {
+              err: err?.message || err,
+              listening: vad.listening,
+              loading: vad.loading,
+              errored: vad.errored,
+            });
+          });
+      } else {
+        console.log("[VAD][diag] device change restart: start() returned (non-promise)", {
+          listening: vad.listening,
+          loading: vad.loading,
+          errored: vad.errored,
+        });
+      }
     }
     prevDeviceIdRef.current = deviceId;
   }, [deviceId]);
