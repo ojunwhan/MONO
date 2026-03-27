@@ -244,17 +244,11 @@ export function useVADPipeline({
     () => ({
       startOnLoad: false,
       getStream: async () => {
-        const currentDeviceId = deviceIdRef.current;
-        console.log('[VAD][diag] getStream called, deviceId:', currentDeviceId);
-        if (prewarmedStreamRef.current) {
-          return prewarmedStreamRef.current;
-        }
-        return navigator.mediaDevices.getUserMedia({
-          audio: {
-            ...ADDITIONAL_AUDIO_CONSTRAINTS,
-            ...(currentDeviceId ? { deviceId: { exact: currentDeviceId } } : {}),
-          },
-        });
+        console.log('[VAD][diag] getStream called, deviceId:', deviceId);
+        const constraints = {
+          audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+        };
+        return await navigator.mediaDevices.getUserMedia(constraints);
       },
 
       processorType: "ScriptProcessor",
@@ -274,7 +268,7 @@ export function useVADPipeline({
 
       ...MIC_VAD_SILERO_OPTIONS,
     }),
-    [onSpeechStartStable, onSpeechEndStable]
+    [onSpeechStartStable, onSpeechEndStable, deviceId]
   );
 
   useEffect(() => {
@@ -332,9 +326,6 @@ export function useVADPipeline({
     console.log("[VAD][diag] start() called", { listening, loading, errored });
     onVadListenStartRef.current?.();
     const ret = (async () => {
-      if (!hasStartedOnceRef.current) {
-        await preparePrewarmedStream();
-      }
       if (vadInitPromiseRef.current) {
         await vadInitPromiseRef.current;
       }
@@ -357,7 +348,7 @@ export function useVADPipeline({
       console.log("[VAD][diag] start() returned (non-promise)", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
     }
     return ret;
-  }, [preparePrewarmedStream, listening, loading, errored]);
+  }, [listening, loading, errored]);
 
   const pause = useCallback(async () => {
     if (!vadRef.current) return;
