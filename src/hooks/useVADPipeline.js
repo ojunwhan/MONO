@@ -332,8 +332,14 @@ export function useVADPipeline({
     onVadListenStartRef.current?.();
     const ret = (async () => {
       await preparePrewarmedStream();
-      if (vadInitPromiseRef.current) await vadInitPromiseRef.current;
-      if (!vadRef.current) throw new Error("MicVAD not initialized");
+      if (vadRef.current) {
+        await vadRef.current.destroy();
+        vadRef.current = null;
+      } else if (vadInitPromiseRef.current) {
+        await vadInitPromiseRef.current;
+      }
+      const fresh = await MicVAD.new(micVadOptions);
+      vadRef.current = fresh;
       const startRet = await vadRef.current.start();
       setListening(Boolean(vadRef.current.listening));
       setErrored(vadRef.current.errored || false);
@@ -351,7 +357,7 @@ export function useVADPipeline({
       console.log("[VAD][diag] start() returned (non-promise)", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
     }
     return ret;
-  }, [preparePrewarmedStream, listening, loading, errored]);
+  }, [preparePrewarmedStream, listening, loading, errored, micVadOptions]);
 
   const pause = useCallback(async () => {
     if (!vadRef.current) return;
