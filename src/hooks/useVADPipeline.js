@@ -11,8 +11,7 @@
  *   - vadThreshold: RMS 저음량 필터 임계값
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
-import { MicVAD } from "@ricky0123/vad-web";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import socket from "../socket";
 
 // ─── Float32Array → Int16 PCM 변환 (정밀도 최대) ───
@@ -43,23 +42,10 @@ const DEFAULT_GAIN = 1.0;
 const DEFAULT_VAD_THRESHOLD = 0.01;
 const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
 
-/** Stable reference for useMicVAD — avoid new object each render */
-const ADDITIONAL_AUDIO_CONSTRAINTS = {
-  echoCancellation: true,
-  noiseSuppression: true,
-  autoGainControl: true,
-  sampleRate: 16000,
-};
-
-/** Silero VAD params — stable reference */
-const MIC_VAD_SILERO_OPTIONS = {
-  positiveSpeechThreshold: 0.5,
-  negativeSpeechThreshold: 0.35,
-  redemptionMs: 350,
-  minSpeechMs: 250,
-  preSpeechPadMs: 300,
-  submitUserSpeechOnPause: true,
-};
+const TARGET_SAMPLE_RATE = 16000;
+const SPEECH_THRESHOLD = 0.01;
+const SILENCE_THRESHOLD = 0.01;
+const SILENCE_FRAMES = 15;
 
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string, onVadListenStart?: () => void, disableServerStt?: boolean }} opts
@@ -83,11 +69,13 @@ export function useVADPipeline({
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
   const prevDeviceIdRef = useRef(deviceId);
-  const prewarmedStreamRef = useRef(null);
-  const deviceIdRef = useRef(deviceId);
-  const vadRef = useRef(null);
-  const vadInitPromiseRef = useRef(null);
-  const hasStartedOnceRef = useRef(false);
+  const streamRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const processorNodeRef = useRef(null);
+  const speechChunksRef = useRef([]);
+  const isSpeakingRef = useRef(false);
+  const silenceFramesRef = useRef(0);
 
   const roomIdRef = useRef(roomId);
   const participantIdRef = useRef(participantId);
@@ -116,10 +104,6 @@ export function useVADPipeline({
   useEffect(() => {
     disableServerSttRef.current = disableServerStt;
   }, [disableServerStt]);
-  useEffect(() => {
-    deviceIdRef.current = deviceId;
-  }, [deviceId]);
-
   // ── 원격 조절 가능한 refs ──
   const gainRef = useRef(DEFAULT_GAIN);
   const vadThresholdRef = useRef(DEFAULT_VAD_THRESHOLD);
@@ -240,131 +224,145 @@ export function useVADPipeline({
     [sendAudioToServer]
   );
 
-  const micVadOptions = useMemo(
-    () => ({
-      startOnLoad: false,
-      getStream: async () => {
-        console.log('[VAD][diag] getStream called, deviceId:', deviceId);
-        const constraints = {
-          audio: deviceId ? { deviceId: { exact: deviceId } } : true,
-        };
-        return await navigator.mediaDevices.getUserMedia(constraints);
-      },
-
-      processorType: "ScriptProcessor",
-      ortConfig: (ort) => {
-        ort.env.logLevel = "error";
-        ort.env.wasm.numThreads = 1;
-        ort.env.wasm.proxy = false;
-      },
-
-      // ─── ONNX/WASM/모델 파일 경로 (dist 루트에서 서빙) ───
-      baseAssetPath: "/",
-      onnxWASMBasePath: "/",
-
-      onSpeechStart: onSpeechStartStable,
-
-      onSpeechEnd: onSpeechEndStable,
-
-      ...MIC_VAD_SILERO_OPTIONS,
-    }),
-    [onSpeechStartStable, onSpeechEndStable, deviceId]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setErrored(false);
-    const initPromise = MicVAD.new(micVadOptions)
-      .then((instance) => {
-        if (cancelled) {
-          instance.destroy?.().catch(() => {});
-          return;
-        }
-        vadRef.current = instance;
-        setListening(Boolean(instance.listening));
-        setErrored(instance.errored || false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setErrored(err?.message || String(err) || "MicVAD initialization failed");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    vadInitPromiseRef.current = initPromise;
-
-    return () => {
-      cancelled = true;
-      const current = vadRef.current;
-      vadRef.current = null;
-      if (current) {
-        current.destroy?.().catch(() => {});
-      }
-    };
-  }, [micVadOptions]);
-
-  const stopPrewarmedStream = useCallback(() => {
-    const stream = prewarmedStreamRef.current;
-    if (!stream) return;
-    stream.getTracks?.().forEach((track) => track.stop());
-    prewarmedStreamRef.current = null;
+  const resampleTo16kHz = useCallback((input, fromSampleRate) => {
+    if (!input?.length) return new Float32Array(0);
+    if (fromSampleRate === TARGET_SAMPLE_RATE) return new Float32Array(input);
+    const ratio = TARGET_SAMPLE_RATE / fromSampleRate;
+    const newLength = Math.max(1, Math.round(input.length * ratio));
+    const output = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      const srcIndex = i / ratio;
+      const i0 = Math.floor(srcIndex);
+      const i1 = Math.min(i0 + 1, input.length - 1);
+      const frac = srcIndex - i0;
+      output[i] = input[i0] + (input[i1] - input[i0]) * frac;
+    }
+    return output;
   }, []);
 
-  const preparePrewarmedStream = useCallback(async () => {
-    stopPrewarmedStream();
-    prewarmedStreamRef.current = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        ...ADDITIONAL_AUDIO_CONSTRAINTS,
-        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-      },
-    });
-  }, [deviceId, stopPrewarmedStream]);
+  const calcRms = useCallback((samples) => {
+    if (!samples?.length) return 0;
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+    return Math.sqrt(sum / samples.length);
+  }, []);
+
+  const teardownAudio = useCallback(async () => {
+    try {
+      if (processorNodeRef.current) processorNodeRef.current.disconnect();
+    } catch {}
+    try {
+      if (sourceNodeRef.current) sourceNodeRef.current.disconnect();
+    } catch {}
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks?.().forEach((t) => t.stop());
+      }
+    } catch {}
+    try {
+      if (audioContextRef.current) await audioContextRef.current.close();
+    } catch {}
+
+    processorNodeRef.current = null;
+    sourceNodeRef.current = null;
+    streamRef.current = null;
+    audioContextRef.current = null;
+    speechChunksRef.current = [];
+    isSpeakingRef.current = false;
+    silenceFramesRef.current = 0;
+    setUserSpeaking(false);
+    setListening(false);
+  }, []);
 
   const start = useCallback(() => {
     console.log("[VAD][diag] start() called", { listening, loading, errored });
     onVadListenStartRef.current?.();
     const ret = (async () => {
-      if (vadInitPromiseRef.current) {
-        await vadInitPromiseRef.current;
-      }
-      if (!vadRef.current) throw new Error("MicVAD not initialized");
-      if (vadRef.current?.audioContext && vadRef.current.audioContext.state === "suspended") {
-        await vadRef.current.audioContext.resume();
-      }
-      const startRet = await vadRef.current.start();
-      hasStartedOnceRef.current = true;
-      setListening(Boolean(vadRef.current.listening));
-      setErrored(vadRef.current.errored || false);
-      return startRet;
+      await teardownAudio();
+      setLoading(true);
+      setErrored(false);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      });
+      const audioContext = new AudioContext();
+      const sourceNode = audioContext.createMediaStreamSource(stream);
+      const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+
+      streamRef.current = stream;
+      audioContextRef.current = audioContext;
+      sourceNodeRef.current = sourceNode;
+      processorNodeRef.current = processorNode;
+
+      processorNode.onaudioprocess = (event) => {
+        const input = event.inputBuffer.getChannelData(0);
+        const resampled = resampleTo16kHz(input, audioContext.sampleRate);
+        const rms = calcRms(resampled);
+
+        if (!isSpeakingRef.current) {
+          if (rms >= SPEECH_THRESHOLD) {
+            isSpeakingRef.current = true;
+            silenceFramesRef.current = 0;
+            speechChunksRef.current = [resampled];
+            onSpeechStartStable();
+          }
+          return;
+        }
+
+        speechChunksRef.current.push(resampled);
+        if (rms < SILENCE_THRESHOLD) {
+          silenceFramesRef.current += 1;
+        } else {
+          silenceFramesRef.current = 0;
+        }
+
+        if (silenceFramesRef.current >= SILENCE_FRAMES) {
+          const chunks = speechChunksRef.current;
+          let totalLength = 0;
+          for (let i = 0; i < chunks.length; i++) totalLength += chunks[i].length;
+          const merged = new Float32Array(totalLength);
+          let offset = 0;
+          for (let i = 0; i < chunks.length; i++) {
+            merged.set(chunks[i], offset);
+            offset += chunks[i].length;
+          }
+          speechChunksRef.current = [];
+          isSpeakingRef.current = false;
+          silenceFramesRef.current = 0;
+          onSpeechEndStable(merged);
+        }
+      };
+
+      sourceNode.connect(processorNode);
+      processorNode.connect(audioContext.destination);
+      setListening(true);
+      setLoading(false);
+      return true;
     })();
     if (ret?.then) {
       ret
         .then(() => {
-          console.log("[VAD][diag] start() resolved", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
+          console.log("[VAD][diag] start() resolved", { listening: true, loading: false, errored: false });
         })
         .catch((err) => {
-          console.warn("[VAD][diag] start() rejected", { err: err?.message || err, listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
+          setLoading(false);
+          setErrored(err?.message || String(err) || "VAD start failed");
+          console.warn("[VAD][diag] start() rejected", { err: err?.message || err, listening: false });
         });
     } else {
-      console.log("[VAD][diag] start() returned (non-promise)", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
+      console.log("[VAD][diag] start() returned (non-promise)", { listening, loading, errored });
     }
     return ret;
-  }, [listening, loading, errored]);
+  }, [listening, loading, errored, deviceId, teardownAudio, resampleTo16kHz, calcRms, onSpeechStartStable, onSpeechEndStable]);
 
   const pause = useCallback(async () => {
-    if (!vadRef.current) return;
-    await vadRef.current.pause();
-    setListening(Boolean(vadRef.current.listening));
-    setErrored(vadRef.current.errored || false);
-    setUserSpeaking(false);
-  }, []);
+    await teardownAudio();
+  }, [teardownAudio]);
 
   const toggle = useCallback(() => {
-    if (vadRef.current?.listening) return pause();
+    if (listening) return pause();
     return start();
-  }, [pause, start]);
+  }, [listening, pause, start]);
 
   useEffect(() => {
     if (prevDeviceIdRef.current !== deviceId && listening) {
@@ -376,48 +374,39 @@ export function useVADPipeline({
         errored,
       });
       pause();
-      stopPrewarmedStream();
       console.log("[VAD][diag] device change restart: pause() after", { listening, loading, errored });
       onVadListenStartRef.current?.();
       console.log("[VAD][diag] device change restart: start() before", { listening, loading, errored });
-      const restartRet = (async () => {
-        await preparePrewarmedStream();
-        if (vadInitPromiseRef.current) await vadInitPromiseRef.current;
-        if (!vadRef.current) throw new Error("MicVAD not initialized");
-        const startRet = await vadRef.current.start();
-        setListening(Boolean(vadRef.current.listening));
-        setErrored(vadRef.current.errored || false);
-        return startRet;
-      })();
+      const restartRet = start();
       if (restartRet?.then) {
         restartRet
           .then(() => {
-            console.log("[VAD][diag] device change restart: start() resolved", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
+            console.log("[VAD][diag] device change restart: start() resolved", { listening: true, loading: false, errored: false });
           })
           .catch((err) => {
             console.warn("[VAD][diag] device change restart: start() rejected", {
               err: err?.message || err,
-              listening: vadRef.current?.listening,
+              listening: false,
               loading,
-              errored: vadRef.current?.errored,
+              errored: err?.message || err,
             });
           });
       } else {
         console.log("[VAD][diag] device change restart: start() returned (non-promise)", {
-          listening: vadRef.current?.listening,
+          listening: false,
           loading,
-          errored: vadRef.current?.errored,
+          errored,
         });
       }
     }
     prevDeviceIdRef.current = deviceId;
-  }, [deviceId, preparePrewarmedStream, stopPrewarmedStream, listening, loading, errored, pause]);
+  }, [deviceId, listening, loading, errored, pause, start]);
 
   useEffect(() => {
     return () => {
-      stopPrewarmedStream();
+      teardownAudio();
     };
-  }, [stopPrewarmedStream]);
+  }, [teardownAudio]);
 
   return {
     listening,
