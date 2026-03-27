@@ -216,6 +216,13 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   const micVadOptions = useMemo(
     () => ({
       startOnLoad: false,
+      getStream: async () =>
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...ADDITIONAL_AUDIO_CONSTRAINTS,
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          },
+        }),
 
       processorType: "ScriptProcessor",
       ortConfig: (ort) => {
@@ -236,7 +243,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
 
       ...MIC_VAD_SILERO_OPTIONS,
     }),
-    [onSpeechStartStable, onSpeechEndStable]
+    [onSpeechStartStable, onSpeechEndStable, deviceId]
   );
 
   const vad = useMicVAD(micVadOptions);
