@@ -62,9 +62,19 @@ const MIC_VAD_SILERO_OPTIONS = {
 };
 
 /**
- * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string }} opts
+ * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string, onVadListenStart?: () => void, disableServerStt?: boolean }} opts
  */
-export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId, vadStaffLang, vadPatientLang, disableServerStt = false }) {
+export function useVADPipeline({
+  roomId,
+  participantId,
+  lang,
+  roleHint,
+  deviceId,
+  vadStaffLang,
+  vadPatientLang,
+  onVadListenStart,
+  disableServerStt = false,
+}) {
   const [speechEndTimestamp, setSpeechEndTimestamp] = useState(0);
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
@@ -76,6 +86,8 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   const vadStaffLangRef = useRef(vadStaffLang);
   const vadPatientLangRef = useRef(vadPatientLang);
   const disableServerSttRef = useRef(disableServerStt);
+  const onVadListenStartRef = useRef(onVadListenStart);
+  onVadListenStartRef.current = onVadListenStart;
 
   useEffect(() => {
     roomIdRef.current = roomId;
@@ -249,9 +261,15 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
 
   const vad = useMicVAD(micVadOptions);
 
+  const start = useCallback(() => {
+    onVadListenStartRef.current?.();
+    return vad.start();
+  }, [vad.start]);
+
   useEffect(() => {
     if (prevDeviceIdRef.current !== deviceId && vad.listening) {
       vad.pause();
+      onVadListenStartRef.current?.();
       vad.start();
     }
     prevDeviceIdRef.current = deviceId;
@@ -262,7 +280,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
     loading: vad.loading,
     userSpeaking: vad.userSpeaking,
     errored: vad.errored,
-    start: vad.start,
+    start,
     pause: vad.pause,
     toggle: vad.toggle,
     speechEndTimestamp,

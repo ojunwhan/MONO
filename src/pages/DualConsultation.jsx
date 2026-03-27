@@ -161,6 +161,22 @@ export default function DualConsultation() {
     patientLangRef.current = patientLang;
   }, [patientLang]);
 
+  /** Re-bind participantId ↔ socket on every VAD start/restart (mic device change, pause/resume, tab visibility). */
+  const emitJoinForVadListen = useCallback(() => {
+    const rid = roomIdRef.current;
+    const pid = participantIdRef.current;
+    if (!rid || !pid || !connectedRef.current) return;
+    socket.emit("join", {
+      roomId: rid,
+      participantId: pid,
+      fromLang: staffLangRef.current,
+      roleHint: "host",
+      localName: "Staff",
+      siteContext: "hospital_plastic_surgery",
+      orgCode: getRegistrationOrgCode(),
+    });
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(MONO_CONSULTATION_PATIENT_LANG_KEY, patientLang);
@@ -191,6 +207,7 @@ export default function DualConsultation() {
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
     disableServerStt: inputMode === "webspeech",
+    onVadListenStart: emitJoinForVadListen,
   });
 
   const langToBcp47 = (lang) => {
