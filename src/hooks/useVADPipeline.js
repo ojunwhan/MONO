@@ -330,6 +330,9 @@ export function useVADPipeline({
         await vadInitPromiseRef.current;
       }
       if (!vadRef.current) throw new Error("MicVAD not initialized");
+      if (vadRef.current?.audioContext && vadRef.current.audioContext.state === "suspended") {
+        await vadRef.current.audioContext.resume();
+      }
       const startRet = await vadRef.current.start();
       hasStartedOnceRef.current = true;
       setListening(Boolean(vadRef.current.listening));
