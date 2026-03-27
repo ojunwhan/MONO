@@ -229,13 +229,15 @@ export function useVADPipeline({
   const micVadOptions = useMemo(
     () => ({
       startOnLoad: false,
-      getStream: async () =>
-        navigator.mediaDevices.getUserMedia({
+      getStream: async () => {
+        console.log('[VAD][diag] getStream called, deviceId:', deviceId);
+        return navigator.mediaDevices.getUserMedia({
           audio: {
             ...ADDITIONAL_AUDIO_CONSTRAINTS,
             ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
           },
-        }),
+        });
+      },
 
       processorType: "ScriptProcessor",
       ortConfig: (ort) => {
