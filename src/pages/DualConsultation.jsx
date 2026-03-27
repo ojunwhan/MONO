@@ -409,15 +409,18 @@ export default function DualConsultation() {
       .enumerateDevices()
       .then((list) => {
         const audio = list.filter((d) => d.kind === "audioinput");
-        setDevices(audio);
+        const hardwareAudio = audio.filter(
+          (d) => d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications"
+        );
+        setDevices(hardwareAudio);
         setStaffDeviceId((prev) => {
-          if (prev && audio.some((d) => d.deviceId === prev)) return prev;
-          return audio.find(d => d.deviceId !== "default" && d.deviceId !== "communications")?.deviceId ?? audio[0]?.deviceId ?? "";
+          if (prev && hardwareAudio.some((d) => d.deviceId === prev)) return prev;
+          return hardwareAudio[0]?.deviceId ?? "";
         });
         setPatientDeviceId((prev) => {
-          if (prev && audio.some((d) => d.deviceId === prev)) return prev;
-          if (audio.length > 1) return audio[1].deviceId;
-          return audio[0]?.deviceId ?? "";
+          if (prev && hardwareAudio.some((d) => d.deviceId === prev)) return prev;
+          if (hardwareAudio.length > 1) return hardwareAudio[1].deviceId;
+          return hardwareAudio[0]?.deviceId ?? "";
         });
       })
       .catch(() => {});

@@ -79,6 +79,7 @@ export function useVADPipeline({
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
   const prevDeviceIdRef = useRef(deviceId);
+  const prewarmedStreamRef = useRef(null);
 
   const roomIdRef = useRef(roomId);
   const participantIdRef = useRef(participantId);
@@ -231,6 +232,9 @@ export function useVADPipeline({
       startOnLoad: false,
       getStream: async () => {
         console.log('[VAD][diag] getStream called, deviceId:', deviceId);
+        if (prewarmedStreamRef.current) {
+          return prewarmedStreamRef.current;
+        }
         return navigator.mediaDevices.getUserMedia({
           audio: {
             ...ADDITIONAL_AUDIO_CONSTRAINTS,
@@ -261,10 +265,30 @@ export function useVADPipeline({
 
   const vad = useMicVAD(micVadOptions);
 
+  const stopPrewarmedStream = useCallback(() => {
+    const stream = prewarmedStreamRef.current;
+    if (!stream) return;
+    stream.getTracks?.().forEach((track) => track.stop());
+    prewarmedStreamRef.current = null;
+  }, []);
+
+  const preparePrewarmedStream = useCallback(async () => {
+    stopPrewarmedStream();
+    prewarmedStreamRef.current = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...ADDITIONAL_AUDIO_CONSTRAINTS,
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      },
+    });
+  }, [deviceId, stopPrewarmedStream]);
+
   const start = useCallback(() => {
     console.log("[VAD][diag] start() called", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
     onVadListenStartRef.current?.();
-    const ret = vad.start();
+    const ret = (async () => {
+      await preparePrewarmedStream();
+      return vad.start();
+    })();
     if (ret?.then) {
       ret
         .then(() => {
@@ -277,7 +301,7 @@ export function useVADPipeline({
       console.log("[VAD][diag] start() returned (non-promise)", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
     }
     return ret;
-  }, [vad.start]);
+  }, [vad.start, preparePrewarmedStream]);
 
   useEffect(() => {
     if (prevDeviceIdRef.current !== deviceId && vad.listening) {
@@ -289,10 +313,14 @@ export function useVADPipeline({
         errored: vad.errored,
       });
       vad.pause();
+      stopPrewarmedStream();
       console.log("[VAD][diag] device change restart: pause() after", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
       onVadListenStartRef.current?.();
       console.log("[VAD][diag] device change restart: start() before", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
-      const restartRet = vad.start();
+      const restartRet = (async () => {
+        await preparePrewarmedStream();
+        return vad.start();
+      })();
       if (restartRet?.then) {
         restartRet
           .then(() => {
@@ -315,7 +343,13 @@ export function useVADPipeline({
       }
     }
     prevDeviceIdRef.current = deviceId;
-  }, [deviceId]);
+  }, [deviceId, preparePrewarmedStream, stopPrewarmedStream]);
+
+  useEffect(() => {
+    return () => {
+      stopPrewarmedStream();
+    };
+  }, [stopPrewarmedStream]);
 
   return {
     listening: vad.listening,
