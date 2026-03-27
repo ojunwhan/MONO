@@ -412,7 +412,7 @@ export default function DualConsultation() {
         setDevices(audio);
         setStaffDeviceId((prev) => {
           if (prev && audio.some((d) => d.deviceId === prev)) return prev;
-          return audio[0]?.deviceId ?? "";
+          return audio.find(d => d.deviceId !== "default" && d.deviceId !== "communications")?.deviceId ?? audio[0]?.deviceId ?? "";
         });
         setPatientDeviceId((prev) => {
           if (prev && audio.some((d) => d.deviceId === prev)) return prev;
