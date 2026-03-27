@@ -68,6 +68,7 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   const [speechEndTimestamp, setSpeechEndTimestamp] = useState(0);
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
+  const prevDeviceIdRef = useRef(deviceId);
 
   const roomIdRef = useRef(roomId);
   const participantIdRef = useRef(participantId);
@@ -247,6 +248,14 @@ export function useVADPipeline({ roomId, participantId, lang, roleHint, deviceId
   );
 
   const vad = useMicVAD(micVadOptions);
+
+  useEffect(() => {
+    if (prevDeviceIdRef.current !== deviceId && vad.listening) {
+      vad.pause();
+      vad.start();
+    }
+    prevDeviceIdRef.current = deviceId;
+  }, [deviceId]);
 
   return {
     listening: vad.listening,
