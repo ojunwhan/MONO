@@ -252,8 +252,6 @@ export function useVADPipeline({
 
       onSpeechEnd: onSpeechEndStable,
 
-      additionalAudioConstraints: ADDITIONAL_AUDIO_CONSTRAINTS,
-
       ...MIC_VAD_SILERO_OPTIONS,
     }),
     [onSpeechStartStable, onSpeechEndStable, deviceId]
