@@ -193,6 +193,7 @@ export default function DualConsultation() {
 
   // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
   // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
+  console.log('[Dual][diag] staffDeviceId passed to VAD:', staffDeviceId);
   const {
     userSpeaking: vadSpeaking,
     listening: vadListening,
@@ -1429,7 +1430,10 @@ export default function DualConsultation() {
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
                   <select
                     value={staffDeviceId}
-                    onChange={(e) => setStaffDeviceId(e.target.value)}
+                    onChange={(e) => {
+                      console.log('[Dual][diag] mic selected:', e.target.value);
+                      setStaffDeviceId(e.target.value);
+                    }}
                     style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
                   >
                     {devices.map((d) => (
