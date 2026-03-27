@@ -45,7 +45,7 @@ const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
 const TARGET_SAMPLE_RATE = 16000;
 const SPEECH_THRESHOLD = 0.01;
 const SILENCE_THRESHOLD = 0.01;
-const SILENCE_FRAMES = 15;
+const SILENCE_FRAMES = 8;
 
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string, onVadListenStart?: () => void, disableServerStt?: boolean }} opts
