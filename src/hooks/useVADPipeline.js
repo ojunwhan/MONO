@@ -11,7 +11,7 @@
  *   - vadThreshold: RMS 저음량 필터 임계값
  *   - minSpeechMs: 최소 발화 길이 (ms)
  */
-import { useMicVAD } from "@ricky0123/vad-react";
+import { MicVAD } from "@ricky0123/vad-web";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import socket from "../socket";
 
@@ -76,10 +76,17 @@ export function useVADPipeline({
   disableServerStt = false,
 }) {
   const [speechEndTimestamp, setSpeechEndTimestamp] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userSpeaking, setUserSpeaking] = useState(false);
+  const [errored, setErrored] = useState(false);
   const sessionActiveRef = useRef(false);
   const perfT1Ref = useRef(0); // [PERF] T1 시점 (onSpeechEnd 진입)
   const prevDeviceIdRef = useRef(deviceId);
   const prewarmedStreamRef = useRef(null);
+  const deviceIdRef = useRef(deviceId);
+  const vadRef = useRef(null);
+  const vadInitPromiseRef = useRef(null);
 
   const roomIdRef = useRef(roomId);
   const participantIdRef = useRef(participantId);
@@ -108,6 +115,9 @@ export function useVADPipeline({
   useEffect(() => {
     disableServerSttRef.current = disableServerStt;
   }, [disableServerStt]);
+  useEffect(() => {
+    deviceIdRef.current = deviceId;
+  }, [deviceId]);
 
   // ── 원격 조절 가능한 refs ──
   const gainRef = useRef(DEFAULT_GAIN);
@@ -197,6 +207,7 @@ export function useVADPipeline({
 
   const onSpeechStartStable = useCallback(() => {
     sessionActiveRef.current = true;
+    setUserSpeaking(true);
   }, []);
 
   const onSpeechEndStable = useCallback(
@@ -205,6 +216,7 @@ export function useVADPipeline({
       console.log("[PERF] T1 VAD speech end detected");
       if (!sessionActiveRef.current) return;
       sessionActiveRef.current = false;
+      setUserSpeaking(false);
       perfT1Ref.current = t1;
 
       // RMS 저음량 필터 (환각 방지) — 원격 조절 가능
@@ -231,14 +243,15 @@ export function useVADPipeline({
     () => ({
       startOnLoad: false,
       getStream: async () => {
-        console.log('[VAD][diag] getStream called, deviceId:', deviceId);
+        const currentDeviceId = deviceIdRef.current;
+        console.log('[VAD][diag] getStream called, deviceId:', currentDeviceId);
         if (prewarmedStreamRef.current) {
           return prewarmedStreamRef.current;
         }
         return navigator.mediaDevices.getUserMedia({
           audio: {
             ...ADDITIONAL_AUDIO_CONSTRAINTS,
-            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            ...(currentDeviceId ? { deviceId: { exact: currentDeviceId } } : {}),
           },
         });
       },
@@ -260,10 +273,42 @@ export function useVADPipeline({
 
       ...MIC_VAD_SILERO_OPTIONS,
     }),
-    [onSpeechStartStable, onSpeechEndStable, deviceId]
+    [onSpeechStartStable, onSpeechEndStable]
   );
 
-  const vad = useMicVAD(micVadOptions);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErrored(false);
+    const initPromise = MicVAD.new(micVadOptions)
+      .then((instance) => {
+        if (cancelled) {
+          instance.destroy?.().catch(() => {});
+          return;
+        }
+        vadRef.current = instance;
+        setListening(Boolean(instance.listening));
+        setErrored(instance.errored || false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setErrored(err?.message || String(err) || "MicVAD initialization failed");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    vadInitPromiseRef.current = initPromise;
+
+    return () => {
+      cancelled = true;
+      const current = vadRef.current;
+      vadRef.current = null;
+      if (current) {
+        current.destroy?.().catch(() => {});
+      }
+    };
+  }, [micVadOptions]);
 
   const stopPrewarmedStream = useCallback(() => {
     const stream = prewarmedStreamRef.current;
@@ -283,67 +328,90 @@ export function useVADPipeline({
   }, [deviceId, stopPrewarmedStream]);
 
   const start = useCallback(() => {
-    console.log("[VAD][diag] start() called", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+    console.log("[VAD][diag] start() called", { listening, loading, errored });
     onVadListenStartRef.current?.();
     const ret = (async () => {
       await preparePrewarmedStream();
-      return vad.start();
+      if (vadInitPromiseRef.current) await vadInitPromiseRef.current;
+      if (!vadRef.current) throw new Error("MicVAD not initialized");
+      const startRet = await vadRef.current.start();
+      setListening(Boolean(vadRef.current.listening));
+      setErrored(vadRef.current.errored || false);
+      return startRet;
     })();
     if (ret?.then) {
       ret
         .then(() => {
-          console.log("[VAD][diag] start() resolved", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+          console.log("[VAD][diag] start() resolved", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
         })
         .catch((err) => {
-          console.warn("[VAD][diag] start() rejected", { err: err?.message || err, listening: vad.listening, loading: vad.loading, errored: vad.errored });
+          console.warn("[VAD][diag] start() rejected", { err: err?.message || err, listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
         });
     } else {
-      console.log("[VAD][diag] start() returned (non-promise)", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+      console.log("[VAD][diag] start() returned (non-promise)", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
     }
     return ret;
-  }, [vad.start, preparePrewarmedStream]);
+  }, [preparePrewarmedStream, listening, loading, errored]);
+
+  const pause = useCallback(async () => {
+    if (!vadRef.current) return;
+    await vadRef.current.pause();
+    setListening(Boolean(vadRef.current.listening));
+    setErrored(vadRef.current.errored || false);
+    setUserSpeaking(false);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (vadRef.current?.listening) return pause();
+    return start();
+  }, [pause, start]);
 
   useEffect(() => {
-    if (prevDeviceIdRef.current !== deviceId && vad.listening) {
+    if (prevDeviceIdRef.current !== deviceId && listening) {
       console.log("[VAD][diag] device change restart: pause() before", {
         prevDeviceId: prevDeviceIdRef.current,
         nextDeviceId: deviceId,
-        listening: vad.listening,
-        loading: vad.loading,
-        errored: vad.errored,
+        listening,
+        loading,
+        errored,
       });
-      vad.pause();
+      pause();
       stopPrewarmedStream();
-      console.log("[VAD][diag] device change restart: pause() after", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+      console.log("[VAD][diag] device change restart: pause() after", { listening, loading, errored });
       onVadListenStartRef.current?.();
-      console.log("[VAD][diag] device change restart: start() before", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+      console.log("[VAD][diag] device change restart: start() before", { listening, loading, errored });
       const restartRet = (async () => {
         await preparePrewarmedStream();
-        return vad.start();
+        if (vadInitPromiseRef.current) await vadInitPromiseRef.current;
+        if (!vadRef.current) throw new Error("MicVAD not initialized");
+        const startRet = await vadRef.current.start();
+        setListening(Boolean(vadRef.current.listening));
+        setErrored(vadRef.current.errored || false);
+        return startRet;
       })();
       if (restartRet?.then) {
         restartRet
           .then(() => {
-            console.log("[VAD][diag] device change restart: start() resolved", { listening: vad.listening, loading: vad.loading, errored: vad.errored });
+            console.log("[VAD][diag] device change restart: start() resolved", { listening: vadRef.current?.listening, loading, errored: vadRef.current?.errored });
           })
           .catch((err) => {
             console.warn("[VAD][diag] device change restart: start() rejected", {
               err: err?.message || err,
-              listening: vad.listening,
-              loading: vad.loading,
-              errored: vad.errored,
+              listening: vadRef.current?.listening,
+              loading,
+              errored: vadRef.current?.errored,
             });
           });
       } else {
         console.log("[VAD][diag] device change restart: start() returned (non-promise)", {
-          listening: vad.listening,
-          loading: vad.loading,
-          errored: vad.errored,
+          listening: vadRef.current?.listening,
+          loading,
+          errored: vadRef.current?.errored,
         });
       }
     }
     prevDeviceIdRef.current = deviceId;
-  }, [deviceId, preparePrewarmedStream, stopPrewarmedStream]);
+  }, [deviceId, preparePrewarmedStream, stopPrewarmedStream, listening, loading, errored, pause]);
 
   useEffect(() => {
     return () => {
@@ -352,13 +420,13 @@ export function useVADPipeline({
   }, [stopPrewarmedStream]);
 
   return {
-    listening: vad.listening,
-    loading: vad.loading,
-    userSpeaking: vad.userSpeaking,
-    errored: vad.errored,
+    listening,
+    loading,
+    userSpeaking,
+    errored,
     start,
-    pause: vad.pause,
-    toggle: vad.toggle,
+    pause,
+    toggle,
     speechEndTimestamp,
     // 현재 감도 설정값 읽기 (UI 표시용)
     gainRef,
