@@ -221,7 +221,7 @@ export default function DualConsultation() {
     };
     return map[key] || (key.length ? `${key}-KR` : "ko-KR");
   };
-  const webSpeechLang = webSpeechSpeaker === "staff" ? langToBcp47(staffLang) : langToBcp47(patientLang);
+  const webSpeechLang = isConsultationSingle ? "ko-KR" : (webSpeechSpeaker === "staff" ? langToBcp47(staffLang) : langToBcp47(patientLang));
 
   const onWebSpeechFinal = useCallback(
     (text, confidence) => {
