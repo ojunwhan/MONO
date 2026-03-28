@@ -227,29 +227,21 @@ export default function DualConsultation() {
   const onWebSpeechFinal = useCallback(
     (text, confidence) => {
       if (!roomIdRef.current || !participantIdRef.current || !String(text || "").trim()) return;
-      const fromLang = webSpeechSpeaker === "staff" ? staffLang : patientLang;
-      const role = webSpeechSpeaker === "staff" ? "staff" : "patient";
 
-      // === LANGUAGE MATCH FILTER ===
-      // When listening as staff (ko), reject text that is mostly non-Korean
-      // When listening as patient (en/ja/zh etc), reject text that is mostly Korean
       const koreanRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
       const koreanChars = (text.match(koreanRegex) || []).length;
       const totalChars = text.replace(/[\s\d.,!?'"()-]/g, "").length || 1;
       const koreanRatio = koreanChars / totalChars;
 
-      if (fromLang === "ko" && koreanRatio < 0.3) {
-        console.log(`[WebSpeech] Filtered (lang mismatch: expected ko, koreanRatio=${koreanRatio.toFixed(2)}): "${text}"`);
-        return;
-      }
-      if (fromLang !== "ko" && koreanRatio > 0.7) {
-        console.log(`[WebSpeech] Filtered (lang mismatch: expected ${fromLang}, koreanRatio=${koreanRatio.toFixed(2)}): "${text}"`);
-        return;
-      }
+      // Auto-detect: if Korean ratio > 0.3 → staff, else → patient
+      const autoSpeaker = koreanRatio > 0.3 ? "staff" : "patient";
+      const fromLang = autoSpeaker === "staff" ? staffLang : patientLang;
+      const role = autoSpeaker;
+      const isStaffSide = autoSpeaker === "staff";
 
-      console.log(`[WebSpeech] Final (${role}, conf=${confidence?.toFixed(2)}): "${text}"`);
-
-      const isStaffSide = webSpeechSpeaker === "staff";
+      console.log(
+        `[WebSpeech] Final (${role}, from=${fromLang}, conf=${confidence?.toFixed(2)}): "${text}"`
+      );
       const msgId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       pendingSenderRef.current = isStaffSide ? "staff" : "patient";
       seenIdsRef.current.add(msgId);
@@ -274,7 +266,7 @@ export default function DualConsultation() {
       });
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     },
-    [webSpeechSpeaker, staffLang, patientLang]
+    [staffLang, patientLang]
   );
 
   const {
