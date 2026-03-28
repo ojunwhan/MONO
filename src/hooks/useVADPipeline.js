@@ -46,7 +46,7 @@ const TARGET_SAMPLE_RATE = 16000;
 const SPEECH_THRESHOLD = 0.03;
 const SILENCE_THRESHOLD = 0.01;
 const SILENCE_FRAMES = 60;
-const MIN_SPEECH_FRAMES = 8;
+const MIN_SPEECH_FRAMES = 3;
 
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string, onVadListenStart?: () => void, disableServerStt?: boolean }} opts
