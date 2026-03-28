@@ -221,23 +221,14 @@ export default function DualConsultation() {
     };
     return map[key] || (key.length ? `${key}-KR` : "ko-KR");
   };
-  const webSpeechLang =
-    isConsultationSingle && inputMode === "vad"
-      ? "ko-KR"
-      : isConsultationSingle
-        ? "ko-KR"
-        : webSpeechSpeaker === "staff"
-          ? langToBcp47(staffLang)
-          : langToBcp47(patientLang);
+  const webSpeechLang = isConsultationSingle
+    ? "ko-KR"
+    : webSpeechSpeaker === "staff"
+      ? langToBcp47(staffLang)
+      : langToBcp47(patientLang);
 
   const onWebSpeechFinal = useCallback(
     (text, confidence) => {
-      if (isConsultationSingle && inputModeRef.current === "vad") {
-        const s = String(text || "");
-        const koreanRatio =
-          s.length > 0 ? (s.match(/[\uAC00-\uD7A3]/g) || []).length / s.length : 0;
-        if (koreanRatio < 0.3) return; // not Korean → Whisper handles it
-      }
       if (!roomIdRef.current || !participantIdRef.current || !String(text || "").trim()) return;
 
       const koreanRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
@@ -287,9 +278,7 @@ export default function DualConsultation() {
     error: webSpeechError,
   } = useWebSpeechSTT({
     lang: webSpeechLang,
-    active:
-      (inputMode === "webspeech" && webSpeechActive) ||
-      (isConsultationSingle && inputMode === "vad" && vadActive),
+    active: inputMode === "webspeech" && webSpeechActive,
     confidenceThreshold: 0.5,
     minTextLength: 2,
     onFinal: onWebSpeechFinal,
@@ -612,10 +601,6 @@ export default function DualConsultation() {
         }
       } else {
         isStaff = pendingSenderRef.current === "staff";
-      }
-      if (isConsultationSingle && inputModeRef.current === "vad") {
-        const detectedLang = (fromLang || "").toLowerCase();
-        if (detectedLang === "ko") return;
       }
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
