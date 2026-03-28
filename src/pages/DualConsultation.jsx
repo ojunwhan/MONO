@@ -232,6 +232,12 @@ export default function DualConsultation() {
 
   const onWebSpeechFinal = useCallback(
     (text, confidence) => {
+      if (isConsultationSingle && inputModeRef.current === "vad") {
+        const s = String(text || "");
+        const koreanRatio =
+          s.length > 0 ? (s.match(/[\uAC00-\uD7A3]/g) || []).length / s.length : 0;
+        if (koreanRatio < 0.3) return; // not Korean → Whisper handles it
+      }
       if (!roomIdRef.current || !participantIdRef.current || !String(text || "").trim()) return;
 
       const koreanRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
