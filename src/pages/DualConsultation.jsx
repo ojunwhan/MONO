@@ -221,7 +221,14 @@ export default function DualConsultation() {
     };
     return map[key] || (key.length ? `${key}-KR` : "ko-KR");
   };
-  const webSpeechLang = isConsultationSingle ? "ko-KR" : (webSpeechSpeaker === "staff" ? langToBcp47(staffLang) : langToBcp47(patientLang));
+  const webSpeechLang =
+    isConsultationSingle && inputMode === "vad"
+      ? "ko-KR"
+      : isConsultationSingle
+        ? "ko-KR"
+        : webSpeechSpeaker === "staff"
+          ? langToBcp47(staffLang)
+          : langToBcp47(patientLang);
 
   const onWebSpeechFinal = useCallback(
     (text, confidence) => {
@@ -274,7 +281,9 @@ export default function DualConsultation() {
     error: webSpeechError,
   } = useWebSpeechSTT({
     lang: webSpeechLang,
-    active: inputMode === "webspeech" && webSpeechActive,
+    active:
+      (inputMode === "webspeech" && webSpeechActive) ||
+      (isConsultationSingle && inputMode === "vad" && vadActive),
     confidenceThreshold: 0.5,
     minTextLength: 2,
     onFinal: onWebSpeechFinal,
@@ -597,6 +606,10 @@ export default function DualConsultation() {
         }
       } else {
         isStaff = pendingSenderRef.current === "staff";
+      }
+      if (isConsultationSingle && inputModeRef.current === "vad") {
+        const detectedLang = (fromLang || "").toLowerCase();
+        if (detectedLang === "ko") return;
       }
       if (pendingSenderRef.current) pendingSenderRef.current = null;
       const msgId = `stt-result-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
