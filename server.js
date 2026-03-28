@@ -3446,6 +3446,14 @@ io.on('connection', (socket) => {
     }
     if (text.trim().length <= 2 && durationSec < 0.8) { console.log("[stt:segment] ⏭ too short text"); return; }
 
+    console.log("[stt:lang-filter-debug]", {
+      vadStaffLang: session?.vadStaffLang,
+      vadPatientLang: session?.vadPatientLang,
+      whisperDetectedLang,
+      roleHint: data?.roleHint,
+      filterWouldApply: !!(session?.vadStaffLang && session?.vadPatientLang && whisperDetectedLang && (data?.roleHint === "host" || data?.roleHint === "guest")),
+    });
+
     // Dual-mic crosstalk: drop segment if Whisper-detected language doesn't match this mic's expected lang (before dual VAD / main translate paths)
     if (
       session.vadStaffLang &&
