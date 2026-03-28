@@ -608,7 +608,14 @@ export default function DualConsultation() {
       if (!text || !final) return;
       let isStaff;
       if (inputModeRef.current === "vad") {
-        isStaff = serverIsStaff != null ? Boolean(serverIsStaff) : false;
+        if (serverIsStaff != null) {
+          isStaff = Boolean(serverIsStaff);
+        } else if (!isConsultationSingle) {
+          const detectedLang = (fromLang || "").toLowerCase();
+          isStaff = detectedLang === "ko" || detectedLang === "korean";
+        } else {
+          isStaff = false;
+        }
       } else {
         isStaff = pendingSenderRef.current === "staff";
       }
