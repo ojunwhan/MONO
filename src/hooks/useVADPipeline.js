@@ -287,7 +287,25 @@ export function useVADPipeline({
       });
       const audioContext = new AudioContext();
       const sourceNode = audioContext.createMediaStreamSource(stream);
-      await audioContext.audioWorklet.addModule("/vad-processor.js");
+      const workletCode = `
+class VadProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const samples = input[0];
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+    const rms = Math.sqrt(sum / samples.length);
+    this.port.postMessage({ rms, samples: Array.from(samples) });
+    return true;
+  }
+}
+registerProcessor('vad-processor', VadProcessor);
+`;
+      const blob = new Blob([workletCode], { type: "application/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+      await audioContext.audioWorklet.addModule(blobUrl);
+      URL.revokeObjectURL(blobUrl);
       const workletNode = new AudioWorkletNode(audioContext, "vad-processor");
 
       streamRef.current = stream;
