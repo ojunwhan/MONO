@@ -45,7 +45,8 @@ const DEFAULT_MIN_SPEECH_MS = 250; // ms → 16kHz 기준 4000 samples
 const TARGET_SAMPLE_RATE = 16000;
 const SPEECH_THRESHOLD = 0.03;
 const SILENCE_THRESHOLD = 0.01;
-const SILENCE_FRAMES = 20;
+const SILENCE_FRAMES = 60;
+const MIN_SPEECH_FRAMES = 8;
 
 /**
  * @param {{ roomId: string, participantId: string, lang: string, roleHint?: string, deviceId?: string, vadStaffLang?: string, vadPatientLang?: string, onVadListenStart?: () => void, disableServerStt?: boolean }} opts
@@ -76,6 +77,7 @@ export function useVADPipeline({
   const speechChunksRef = useRef([]);
   const isSpeakingRef = useRef(false);
   const silenceFramesRef = useRef(0);
+  const speechFramesRef = useRef(0);
 
   const roomIdRef = useRef(roomId);
   const participantIdRef = useRef(participantId);
@@ -270,6 +272,7 @@ export function useVADPipeline({
     speechChunksRef.current = [];
     isSpeakingRef.current = false;
     silenceFramesRef.current = 0;
+    speechFramesRef.current = 0;
     setUserSpeaking(false);
     setListening(false);
   }, []);
@@ -323,12 +326,14 @@ registerProcessor('vad-processor', VadProcessor);
           if (rms >= SPEECH_THRESHOLD) {
             isSpeakingRef.current = true;
             silenceFramesRef.current = 0;
+            speechFramesRef.current = 1;
             speechChunksRef.current = [resampled];
             onSpeechStartStable();
           }
           return;
         }
 
+        speechFramesRef.current += 1;
         speechChunksRef.current.push(resampled);
         if (rms < SILENCE_THRESHOLD) {
           silenceFramesRef.current += 1;
@@ -346,9 +351,17 @@ registerProcessor('vad-processor', VadProcessor);
             merged.set(chunks[i], offset);
             offset += chunks[i].length;
           }
+          if (speechFramesRef.current < MIN_SPEECH_FRAMES) {
+            speechFramesRef.current = 0;
+            silenceFramesRef.current = 0;
+            speechChunksRef.current = [];
+            isSpeakingRef.current = false;
+            return;
+          }
           speechChunksRef.current = [];
           isSpeakingRef.current = false;
           silenceFramesRef.current = 0;
+          speechFramesRef.current = 0;
           onSpeechEndStable(merged);
         }
       };
