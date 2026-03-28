@@ -72,7 +72,7 @@ export function useVADPipeline({
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
   const sourceNodeRef = useRef(null);
-  const processorNodeRef = useRef(null);
+  const workletNodeRef = useRef(null);
   const speechChunksRef = useRef([]);
   const isSpeakingRef = useRef(false);
   const silenceFramesRef = useRef(0);
@@ -249,7 +249,7 @@ export function useVADPipeline({
 
   const teardownAudio = useCallback(async () => {
     try {
-      if (processorNodeRef.current) processorNodeRef.current.disconnect();
+      if (workletNodeRef.current) workletNodeRef.current.disconnect();
     } catch {}
     try {
       if (sourceNodeRef.current) sourceNodeRef.current.disconnect();
@@ -263,7 +263,7 @@ export function useVADPipeline({
       if (audioContextRef.current) await audioContextRef.current.close();
     } catch {}
 
-    processorNodeRef.current = null;
+    workletNodeRef.current = null;
     sourceNodeRef.current = null;
     streamRef.current = null;
     audioContextRef.current = null;
@@ -287,15 +287,17 @@ export function useVADPipeline({
       });
       const audioContext = new AudioContext();
       const sourceNode = audioContext.createMediaStreamSource(stream);
-      const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+      await audioContext.audioWorklet.addModule("/vad-processor.js");
+      const workletNode = new AudioWorkletNode(audioContext, "vad-processor");
 
       streamRef.current = stream;
       audioContextRef.current = audioContext;
       sourceNodeRef.current = sourceNode;
-      processorNodeRef.current = processorNode;
+      workletNodeRef.current = workletNode;
 
-      processorNode.onaudioprocess = (event) => {
-        const input = event.inputBuffer.getChannelData(0);
+      workletNode.port.onmessage = (event) => {
+        const { samples } = event.data;
+        const input = Float32Array.from(samples);
         const resampled = resampleTo16kHz(input, audioContext.sampleRate);
         const rms = calcRms(resampled);
 
@@ -333,8 +335,8 @@ export function useVADPipeline({
         }
       };
 
-      sourceNode.connect(processorNode);
-      processorNode.connect(audioContext.destination);
+      sourceNode.connect(workletNode);
+      workletNode.connect(audioContext.destination);
       setListening(true);
       setLoading(false);
       return true;
