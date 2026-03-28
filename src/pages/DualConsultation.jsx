@@ -206,6 +206,22 @@ export default function DualConsultation() {
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
+    roleHint: "staff",
+    disableServerStt: inputMode === "webspeech",
+    onVadListenStart: emitJoinForVadListen,
+  });
+
+  const {
+    start: startPatientVad,
+    pause: stopPatientVad,
+  } = useVADPipeline({
+    roomId: roomId || undefined,
+    participantId: participantIdRef.current || undefined,
+    lang: "auto",
+    vadStaffLang: staffLang,
+    vadPatientLang: patientLang,
+    deviceId: patientDeviceId || undefined,
+    roleHint: "patient",
     disableServerStt: inputMode === "webspeech",
     onVadListenStart: emitJoinForVadListen,
   });
@@ -592,13 +608,7 @@ export default function DualConsultation() {
       if (!text || !final) return;
       let isStaff;
       if (inputModeRef.current === "vad") {
-        if (serverIsStaff !== undefined && serverIsStaff !== null) {
-          isStaff = Boolean(serverIsStaff);
-        } else {
-          const detected = (fromLang || "").toLowerCase();
-          const pLang = (patientLangRef.current || "en").toLowerCase();
-          isStaff = detected !== pLang;
-        }
+        isStaff = serverIsStaff != null ? Boolean(serverIsStaff) : false;
       } else {
         isStaff = pendingSenderRef.current === "staff";
       }
@@ -813,23 +823,32 @@ export default function DualConsultation() {
   const handleVADToggle = useCallback(() => {
     if (vadActive) {
       vadPause();
+      if (!isConsultationSingle) {
+        stopPatientVad();
+      }
       vadActiveRef.current = false;
       setVadActive(false);
     } else {
       vadStart();
+      if (!isConsultationSingle) {
+        startPatientVad();
+      }
       vadActiveRef.current = true;
       setVadActive(true);
     }
-  }, [vadActive, vadStart, vadPause]);
+  }, [vadActive, vadStart, vadPause, isConsultationSingle, startPatientVad, stopPatientVad]);
 
   // Pause Silero VAD when switching back to PTT / Web Speech (hook always mounted).
   useEffect(() => {
     if (inputMode !== "vad") {
       vadPause();
+      if (!isConsultationSingle) {
+        stopPatientVad();
+      }
       vadActiveRef.current = false;
       setVadActive(false);
     }
-  }, [inputMode, vadPause]);
+  }, [inputMode, vadPause, isConsultationSingle, stopPatientVad]);
 
   useEffect(() => {
     if (inputMode !== "vad") {
@@ -840,16 +859,22 @@ export default function DualConsultation() {
       if (document.hidden) {
         if (vadListening) {
           vadPause();
+          if (!isConsultationSingle) {
+            stopPatientVad();
+          }
           wasVadActiveRef.current = true;
         }
       } else if (wasVadActiveRef.current) {
         vadStart();
+        if (!isConsultationSingle) {
+          startPatientVad();
+        }
         wasVadActiveRef.current = false;
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [inputMode, vadListening, vadStart, vadPause]);
+  }, [inputMode, vadListening, vadStart, vadPause, isConsultationSingle, startPatientVad, stopPatientVad]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
