@@ -1304,27 +1304,6 @@ export default function DualConsultation() {
                 >
                   VAD
                 </button>
-                {isConsultationSingle && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInputMode("webspeech");
-                      setWebSpeechActive(true);
-                    }}
-                    style={{
-                      flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
-                      padding: "10px 6px",
-                      borderRadius: 8,
-                      border: inputMode === "webspeech" ? "2px solid #4A90D9" : "1px solid #ddd",
-                      background: inputMode === "webspeech" ? "#EBF3FC" : "#fff",
-                      fontWeight: inputMode === "webspeech" ? 700 : 400,
-                      fontSize: 13,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Web Speech
-                  </button>
-                )}
               </div>
               {inputMode === "vad" && (
                 <div style={{ marginBottom: 12 }}>
