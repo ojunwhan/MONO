@@ -183,6 +183,7 @@ export function useVADPipeline({
         lang: lng,
         audio: base64,
         sampleRateHz: 16000,
+        roleHint: roleHintRef.current,
       });
     }
 

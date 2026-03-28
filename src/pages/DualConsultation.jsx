@@ -11,7 +11,6 @@ import LanguageFlagPicker from "../components/LanguageFlagPicker";
 import { getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode, LANGUAGES } from "../constants/languages";
 import { useVADPipeline } from "../hooks/useVADPipeline";
-import { useWebSpeechSTT } from "../hooks/useWebSpeechSTT";
 import useTabNotification from "../hooks/useTabNotification";
 import QRCode from "react-qr-code";
 
@@ -77,11 +76,12 @@ export default function DualConsultation() {
   const urlRoomName = routerSearchParams.get("roomName") || "";
   const modeParam = routerSearchParams.get("mode");
   const isConsultationSingle = modeParam === "vad" || modeParam === "webspeech";
-  const initialInputMode =
-    modeParam === "vad" ? "vad" : modeParam === "webspeech" ? "webspeech" : "ptt";
+  const initialInputMode = modeParam === "vad" || modeParam === "webspeech" ? "vad" : "ptt";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
+  /** Socket participant id — synced to hooks via state so useVADPipeline always gets a defined participantId after Connect (ref alone does not update hook props). */
+  const [sessionParticipantId, setSessionParticipantId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [staffLang, setStaffLang] = useState("ko");
   const [patientLang, setPatientLang] = useState("en");
@@ -112,13 +112,11 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
-  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad" | "webspeech"
+  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad"
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
   const wasVadActiveRef = useRef(false);
-  const [sttProvider, setSttProvider] = useState("webspeech");
-  const [webSpeechSpeaker, setWebSpeechSpeaker] = useState("staff"); // "staff" | "patient"
-  const [webSpeechActive, setWebSpeechActive] = useState(false);
+  const isConsultationSingleRef = useRef(isConsultationSingle);
   const [showDisplayPanel, setShowDisplayPanel] = useState(false);
   const [copiedMonitor, setCopiedMonitor] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
@@ -148,11 +146,10 @@ export default function DualConsultation() {
     inputModeRef.current = inputMode;
   }, [inputMode]);
 
-  // ?????(consultation_single) URL? Web Speech ??? ?? ?? ? ??? ?? ??
   useEffect(() => {
-    if (!isConsultationSingle) return;
-    setWebSpeechActive(false);
+    isConsultationSingleRef.current = isConsultationSingle;
   }, [isConsultationSingle]);
+
   useEffect(() => {
     staffLangRef.current = staffLang;
   }, [staffLang]);
@@ -160,20 +157,33 @@ export default function DualConsultation() {
     patientLangRef.current = patientLang;
   }, [patientLang]);
 
-  /** Re-bind participantId ↔ socket on every VAD start/restart (mic device change, pause/resume, tab visibility). */
+  /** Re-bind participantId ↔ socket on every VAD start/restart (mic device change, pause/resume, tab visibility). Dual mode registers staff + patient PIDs. */
   const emitJoinForVadListen = useCallback(() => {
     const rid = roomIdRef.current;
     const pid = participantIdRef.current;
     if (!rid || !pid || !connectedRef.current) return;
+    const siteContext = "hospital_plastic_surgery";
+    const orgCode = getRegistrationOrgCode();
     socket.emit("join", {
       roomId: rid,
       participantId: pid,
       fromLang: staffLangRef.current,
       roleHint: "host",
       localName: "Staff",
-      siteContext: "hospital_plastic_surgery",
-      orgCode: getRegistrationOrgCode(),
+      siteContext,
+      orgCode,
     });
+    if (!isConsultationSingleRef.current) {
+      socket.emit("join", {
+        roomId: rid,
+        participantId: `${pid}-pt`,
+        fromLang: patientLangRef.current,
+        roleHint: "guest",
+        localName: "Patient",
+        siteContext,
+        orgCode,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -190,134 +200,54 @@ export default function DualConsultation() {
     }
   }, [isConsultationSingle, staffDeviceId]);
 
-  // Silero VAD + stt:open / stt:audio / stt:segment_end (useVADPipeline uses startOnLoad: false ? waits for vadStart).
-  // vadStaffLang/vadPatientLang are sent on each stt:open; if user changes langs mid-session, stop and restart VAD.
-  console.log('[Dual][diag] staffDeviceId passed to VAD:', staffDeviceId);
   const {
-    userSpeaking: vadSpeaking,
-    listening: vadListening,
-    start: vadStart,
-    pause: vadPause,
-    speechEndTimestamp,
+    userSpeaking: vadSpeakingStaff,
+    listening: vadListeningStaff,
+    loading: vadLoadingStaff,
+    start: vadStartStaff,
+    pause: vadPauseStaff,
   } = useVADPipeline({
     roomId: roomId || undefined,
-    participantId: participantIdRef.current || undefined,
-    lang: isConsultationSingle ? "auto" : "ko",
+    participantId: sessionParticipantId || undefined,
+    lang: isConsultationSingle ? "auto" : staffLang,
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
-    roleHint: "staff",
-    disableServerStt: inputMode === "webspeech",
+    roleHint: "host",
+    disableServerStt: false,
     onVadListenStart: emitJoinForVadListen,
   });
 
-  const langToBcp47 = (lang) => {
-    const key = String(lang || "").toLowerCase().split("-")[0];
-    const map = {
-      ko: "ko-KR", en: "en-US", ja: "ja-JP", zh: "zh-CN",
-      vi: "vi-VN", th: "th-TH", ru: "ru-RU", de: "de-DE",
-      fr: "fr-FR", es: "es-ES", pt: "pt-BR", hi: "hi-IN",
-      ar: "ar-SA", id: "id-ID", ms: "ms-MY", tl: "tl-PH",
-      mn: "mn-MN", my: "my-MM", ne: "ne-NP", uz: "uz-UZ",
-    };
-    return map[key] || (key.length ? `${key}-KR` : "ko-KR");
-  };
-  const webSpeechLang = isConsultationSingle
-    ? "ko-KR"
-    : webSpeechSpeaker === "staff"
-      ? langToBcp47(staffLang)
-      : langToBcp47(patientLang);
-
-  const onWebSpeechFinal = useCallback(
-    (text, confidence) => {
-      if (!roomIdRef.current || !participantIdRef.current || !String(text || "").trim()) return;
-
-      const koreanRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
-      const koreanChars = (text.match(koreanRegex) || []).length;
-      const totalChars = text.replace(/[\s\d.,!?'"()-]/g, "").length || 1;
-      const koreanRatio = koreanChars / totalChars;
-
-      // Auto-detect: if Korean ratio > 0.3 → staff, else → patient
-      const autoSpeaker = koreanRatio > 0.3 ? "staff" : "patient";
-      const fromLang = autoSpeaker === "staff" ? staffLang : patientLang;
-      const role = autoSpeaker;
-      const isStaffSide = autoSpeaker === "staff";
-
-      console.log(
-        `[WebSpeech] Final (${role}, from=${fromLang}, conf=${confidence?.toFixed(2)}): "${text}"`
-      );
-      const msgId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      pendingSenderRef.current = isStaffSide ? "staff" : "patient";
-      seenIdsRef.current.add(msgId);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: msgId,
-          originalText: text.trim(),
-          translatedText: "",
-          isStaff: isStaffSide,
-          senderPid: participantIdRef.current,
-          timestamp: Date.now(),
-          streaming: false,
-        },
-      ]);
-      socket.emit("send-message", {
-        roomId: roomIdRef.current,
-        participantId: participantIdRef.current,
-        message: { id: msgId, text: text.trim() },
-        toLang: isStaffSide ? (patientLangRef.current || "en") : (staffLangRef.current || "ko"),
-        senderRole: isStaffSide ? "host" : "guest",
-      });
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-    },
-    [staffLang, patientLang]
-  );
-
   const {
-    isListening: webSpeechListening,
-    interimText: webSpeechInterim,
-    error: webSpeechError,
-  } = useWebSpeechSTT({
-    lang: webSpeechLang,
-    active: inputMode === "webspeech" && webSpeechActive,
-    confidenceThreshold: 0.5,
-    minTextLength: 2,
-    onFinal: onWebSpeechFinal,
-    onInterim: () => {},
+    userSpeaking: vadSpeakingPatient,
+    listening: vadListeningPatient,
+    loading: vadLoadingPatient,
+    start: vadStartPatient,
+    pause: vadPausePatient,
+  } = useVADPipeline({
+    roomId: roomId || undefined,
+    participantId:
+      sessionParticipantId && !isConsultationSingle ? `${sessionParticipantId}-pt` : undefined,
+    lang: isConsultationSingle ? "auto" : patientLang,
+    vadStaffLang: staffLang,
+    vadPatientLang: patientLang,
+    deviceId: patientDeviceId || undefined,
+    roleHint: "guest",
+    disableServerStt: isConsultationSingle,
+    onVadListenStart: emitJoinForVadListen,
   });
 
-  const { notifyNewMessage } = useTabNotification();
+  const vadListening = isConsultationSingle
+    ? vadListeningStaff
+    : vadListeningStaff && vadListeningPatient;
+  const vadSpeaking = vadSpeakingStaff || (!isConsultationSingle && vadSpeakingPatient);
+  const vadInitializing =
+    vadActive &&
+    (vadLoadingStaff ||
+      !vadListeningStaff ||
+      (!isConsultationSingle && (vadLoadingPatient || !vadListeningPatient)));
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const q = ptNumber.trim();
-        const url = q
-          ? `/api/hospital/stt-provider?orgCode=${encodeURIComponent(q)}`
-          : "/api/hospital/stt-provider";
-        const res = await fetch(url);
-        const data = await res.json();
-        if (cancelled) return;
-        let prov = data?.sttProvider || "webspeech";
-        if (typeof window !== "undefined" && !window.SpeechRecognition && !window.webkitSpeechRecognition) {
-          prov = "groq";
-        }
-        setSttProvider(prov);
-      } catch {
-        if (!cancelled) {
-          setSttProvider(
-            typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition)
-              ? "webspeech"
-              : "groq"
-          );
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ptNumber]);
+  const { notifyNewMessage } = useTabNotification();
 
   useEffect(() => {
     setPatientEditOpen(false);
@@ -446,10 +376,11 @@ export default function DualConsultation() {
     const pt = String(ptNumber).trim();
     const pid = "dc-" + crypto.randomUUID();
     participantIdRef.current = pid;
-    console.log("[Dual] handleConnect pid set:", participantIdRef.current);
+    setSessionParticipantId(pid);
     connectedRef.current = true;
     setRoomId(pt);
     const siteContext = "hospital_plastic_surgery";
+    const orgCode = getRegistrationOrgCode();
     socket.emit("join", {
       roomId: pt,
       participantId: pid,
@@ -457,10 +388,21 @@ export default function DualConsultation() {
       roleHint: "host",
       localName: "Staff",
       siteContext,
-      orgCode: getRegistrationOrgCode(),
+      orgCode,
     });
+    if (!isConsultationSingle) {
+      socket.emit("join", {
+        roomId: pt,
+        participantId: `${pid}-pt`,
+        fromLang: patientLang,
+        roleHint: "guest",
+        localName: "Patient",
+        siteContext,
+        orgCode,
+      });
+    }
     setConnected(true);
-  }, [ptNumber, staffLang]);
+  }, [ptNumber, staffLang, patientLang, isConsultationSingle]);
 
   // Unmount: leave room if we had connected
   useEffect(() => {
@@ -482,9 +424,26 @@ export default function DualConsultation() {
       const { id, roomId: incomingRoomId, originalText, translatedText, senderPid, participantId: payloadParticipantId } = data || {};
       const senderPidResolved = senderPid ?? payloadParticipantId;
       if (!id || (incomingRoomId && incomingRoomId !== rid)) return;
-      const isStaff = pendingSenderRef.current === "staff";
+      const base = participantIdRef.current;
+      const pendingStaff = pendingSenderRef.current === "staff";
       if (pendingSenderRef.current) pendingSenderRef.current = null;
-      if (senderPidResolved !== participantIdRef.current) notifyNewMessage();
+      let msgIsStaff;
+      if (!isConsultationSingle && base) {
+        if (senderPidResolved === `${base}-pt`) msgIsStaff = false;
+        else if (senderPidResolved === base) msgIsStaff = true;
+        else msgIsStaff = pendingStaff;
+      } else {
+        msgIsStaff = senderPidResolved === base ? pendingStaff : false;
+      }
+      if (base) {
+        if (isConsultationSingle) {
+          if (senderPidResolved !== base) notifyNewMessage();
+        } else if (senderPidResolved !== base && senderPidResolved !== `${base}-pt`) {
+          notifyNewMessage();
+        }
+      } else if (senderPidResolved) {
+        notifyNewMessage();
+      }
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === id);
         if (idx >= 0) {
@@ -506,7 +465,7 @@ export default function DualConsultation() {
               id,
               originalText: originalText || "",
               translatedText: tText,
-              isStaff: senderPidResolved === participantIdRef.current ? isStaff : false,
+              isStaff: msgIsStaff,
               senderPid: senderPidResolved,
               timestamp: data.timestamp ?? Date.now(),
               streaming: false,
@@ -520,7 +479,7 @@ export default function DualConsultation() {
             id,
             originalText: originalText || "",
             translatedText: tText,
-            isStaff: senderPidResolved === participantIdRef.current ? isStaff : false,
+            isStaff: msgIsStaff,
             senderPid: senderPidResolved,
             timestamp: Date.now(),
             streaming: false,
@@ -534,7 +493,16 @@ export default function DualConsultation() {
       console.log("[Stream] receive-message-stream:", JSON.stringify(data).slice(0, 300));
       const { roomId: incomingRoomId, messageId, chunk, senderPid, originalText } = data || {};
       if (!messageId || !chunk || (incomingRoomId && incomingRoomId !== rid)) return;
-      const isStaff = pendingSenderRef.current === "staff";
+      const base = participantIdRef.current;
+      const pendingStaff = pendingSenderRef.current === "staff";
+      let streamIsStaff;
+      if (!isConsultationSingle && base) {
+        if (senderPid === `${base}-pt`) streamIsStaff = false;
+        else if (senderPid === base) streamIsStaff = true;
+        else streamIsStaff = pendingStaff;
+      } else {
+        streamIsStaff = senderPid === base ? pendingStaff : false;
+      }
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
         if (idx >= 0) {
@@ -548,7 +516,7 @@ export default function DualConsultation() {
             id: messageId,
             originalText: originalText || "",
             translatedText: chunk,
-            isStaff: senderPid === participantIdRef.current ? isStaff : false,
+            isStaff: streamIsStaff,
             senderPid,
             timestamp: Date.now(),
             streaming: true,
@@ -586,18 +554,19 @@ export default function DualConsultation() {
         text,
         translatedText: payloadTranslated,
         final,
-        fromLang,
         isStaff: serverIsStaff,
       } = payload || {};
       if (incomingRoomId && incomingRoomId !== rid) return;
       if (!text || !final) return;
+      const base = participantIdRef.current;
       let isStaff;
       if (inputModeRef.current === "vad") {
-        if (serverIsStaff != null) {
+        if (base && incomingPid === `${base}-pt`) {
+          isStaff = false;
+        } else if (base && incomingPid === base) {
+          isStaff = true;
+        } else if (serverIsStaff != null) {
           isStaff = Boolean(serverIsStaff);
-        } else if (!isConsultationSingle) {
-          const detectedLang = (fromLang || "").toLowerCase();
-          isStaff = detectedLang === "ko" || detectedLang === "korean";
         } else {
           isStaff = false;
         }
@@ -646,7 +615,7 @@ export default function DualConsultation() {
       socket.off("dual-consultation:ended", onDualConsultationEnded);
       socket.off("display:viewer-joined", onViewerJoined);
     };
-  }, [roomId, scrollToBottom]);
+  }, [roomId, scrollToBottom, isConsultationSingle]);
 
   const stopStaffRecording = useCallback(() => {
     staffRecordingRef.current = false;
@@ -814,24 +783,26 @@ export default function DualConsultation() {
 
   const handleVADToggle = useCallback(() => {
     if (vadActive) {
-      vadPause();
+      vadPauseStaff();
+      if (!isConsultationSingle) vadPausePatient();
       vadActiveRef.current = false;
       setVadActive(false);
     } else {
-      vadStart();
+      vadStartStaff();
+      if (!isConsultationSingle) vadStartPatient();
       vadActiveRef.current = true;
       setVadActive(true);
     }
-  }, [vadActive, vadStart, vadPause]);
+  }, [vadActive, vadStartStaff, vadPauseStaff, vadStartPatient, vadPausePatient, isConsultationSingle]);
 
-  // Pause Silero VAD when switching back to PTT / Web Speech (hook always mounted).
   useEffect(() => {
     if (inputMode !== "vad") {
-      vadPause();
+      vadPauseStaff();
+      if (!isConsultationSingleRef.current) vadPausePatient();
       vadActiveRef.current = false;
       setVadActive(false);
     }
-  }, [inputMode, vadPause]);
+  }, [inputMode, vadPauseStaff, vadPausePatient]);
 
   useEffect(() => {
     if (inputMode !== "vad") {
@@ -840,18 +811,20 @@ export default function DualConsultation() {
     }
     const onVisibility = () => {
       if (document.hidden) {
-        if (vadListening) {
-          vadPause();
+        if (vadActiveRef.current) {
+          vadPauseStaff();
+          if (!isConsultationSingleRef.current) vadPausePatient();
           wasVadActiveRef.current = true;
         }
       } else if (wasVadActiveRef.current) {
-        vadStart();
+        vadStartStaff();
+        if (!isConsultationSingleRef.current) vadStartPatient();
         wasVadActiveRef.current = false;
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [inputMode, vadListening, vadStart, vadPause]);
+  }, [inputMode, vadStartStaff, vadPauseStaff, vadStartPatient, vadPausePatient]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
@@ -1263,7 +1236,6 @@ export default function DualConsultation() {
                   type="button"
                   onClick={() => {
                     setInputMode("ptt");
-                    setWebSpeechActive(false);
                   }}
                   style={{
                     flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
@@ -1282,7 +1254,6 @@ export default function DualConsultation() {
                   type="button"
                   onClick={() => {
                     setInputMode("vad");
-                    setWebSpeechActive(false);
                   }}
                   style={{
                     flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
@@ -1303,14 +1274,14 @@ export default function DualConsultation() {
                   <button
                     type="button"
                     onClick={handleVADToggle}
-                    disabled={!connected || (vadActive && !vadListening)}
+                    disabled={!connected || (vadActive && vadInitializing)}
                     style={{
                       width: "100%",
                       padding: "12px 0",
                       borderRadius: 8,
                       border: "none",
                       background:
-                        !connected || (vadActive && !vadListening)
+                        !connected || (vadActive && vadInitializing)
                           ? "#9ca3af"
                           : vadActive
                             ? "#EF4444"
@@ -1318,7 +1289,7 @@ export default function DualConsultation() {
                       color: "#fff",
                       fontWeight: 700,
                       fontSize: 16,
-                      cursor: !connected || (vadActive && !vadListening) ? "not-allowed" : "pointer",
+                      cursor: !connected || (vadActive && vadInitializing) ? "not-allowed" : "pointer",
                       marginBottom: 8,
                     }}
                   >
@@ -1326,7 +1297,7 @@ export default function DualConsultation() {
                       ? "\u23F9 \uC74C\uC131\uC778\uC2DD \uC911\uC9C0"
                       : "\u25B6 \uC74C\uC131\uC778\uC2DD \uC2DC\uC791"}
                   </button>
-                  {vadActive && !vadListening ? (
+                  {vadActive && vadInitializing ? (
                     <div
                       style={{
                         fontSize: 12,
@@ -1352,70 +1323,6 @@ export default function DualConsultation() {
                       Initializing microphone\u2026
                     </div>
                   ) : null}
-                </div>
-              )}
-              {inputMode === "webspeech" && (
-                <div style={{ marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    onClick={() => setWebSpeechActive((prev) => !prev)}
-                    style={{
-                      width: "100%",
-                      padding: "12px 0",
-                      borderRadius: 8,
-                      border: "none",
-                      background: webSpeechActive ? "#EF4444" : "#22C55E",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 16,
-                      cursor: "pointer",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {webSpeechActive
-                      ? "\u23F9 \uC74C\uC131\uC778\uC2DD \uC911\uC9C0"
-                      : "\u25B6 \uC74C\uC131\uC778\uC2DD \uC2DC\uC791"}
-                  </button>
-                  {webSpeechActive && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => setWebSpeechSpeaker("staff")}
-                        style={{
-                          flex: 1,
-                          padding: "10px 0",
-                          borderRadius: 8,
-                          border: webSpeechSpeaker === "staff" ? "2px solid #3B82F6" : "1px solid #ddd",
-                          background: webSpeechSpeaker === "staff" ? "#DBEAFE" : "#fff",
-                          fontWeight: webSpeechSpeaker === "staff" ? 700 : 400,
-                          fontSize: 14,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {"\uD83E\uDE7A \uC9C1\uC6D0 ("}
-                        {staffLang}
-                        {")"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWebSpeechSpeaker("patient")}
-                        style={{
-                          flex: 1,
-                          padding: "10px 0",
-                          borderRadius: 8,
-                          border: webSpeechSpeaker === "patient" ? "2px solid #F59E0B" : "1px solid #ddd",
-                          background: webSpeechSpeaker === "patient" ? "#FEF3C7" : "#fff",
-                          fontWeight: webSpeechSpeaker === "patient" ? 700 : 400,
-                          fontSize: 14,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {"\uD83E\uDDD1\u200D\uD83E\uDD1D\u200D\uD83E\uDDD1 \uD658\uC790 ("}
-                        {patientLang}
-                        {")"}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
               <div
@@ -1532,44 +1439,6 @@ export default function DualConsultation() {
           </div>
         ))}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
-        {inputMode === "webspeech" && webSpeechActive && (
-          <div
-            style={{
-              marginTop: "auto",
-              padding: "8px 16px",
-              background: webSpeechSpeaker === "staff" ? "#EFF6FF" : "#FFFBEB",
-              borderTop: "1px solid #e5e7eb",
-              minHeight: 40,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            {webSpeechListening && (
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#EF4444",
-                  animation: "pulse 1.5s infinite",
-                }}
-              />
-            )}
-            <span style={{ color: "#6B7280", fontSize: 14, fontStyle: "italic" }}>
-              {webSpeechInterim ||
-                (webSpeechListening
-                  ? "\uC74C\uC131 \uB300\uAE30 \uC911..."
-                  : "\uC2DC\uC791 \uBC84\uD2BC\uC744 \uB20C\uB7EC\uC8FC\uC138\uC694")}
-            </span>
-            {webSpeechError && (
-              <span style={{ color: "#EF4444", fontSize: 12, marginLeft: "auto" }}>
-                {"\u26A0 "} {webSpeechError}
-              </span>
-            )}
-          </div>
-        )}
         {inputMode === "vad" && vadActive && vadListening && (
           <div
             style={{
