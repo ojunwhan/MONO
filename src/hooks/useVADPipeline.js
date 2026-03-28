@@ -103,6 +103,10 @@ export function useVADPipeline({
   useEffect(() => {
     vadPatientLangRef.current = vadPatientLang;
   }, [vadPatientLang]);
+  const roleHintRef = useRef(roleHint);
+  useEffect(() => {
+    roleHintRef.current = roleHint;
+  }, [roleHint]);
   useEffect(() => {
     disableServerSttRef.current = disableServerStt;
   }, [disableServerStt]);
@@ -150,6 +154,7 @@ export function useVADPipeline({
       roomId: rid,
       participantId: pid,
       lang: lng,
+      roleHint: roleHintRef.current,
       sampleRateHz: 16000,
       ...(staffL && { vadStaffLang: staffL }),
       ...(patientL && { vadPatientLang: patientL }),
@@ -189,6 +194,7 @@ export function useVADPipeline({
     socket.emit("stt:segment_end", {
       roomId: rid,
       participantId: pid,
+      roleHint: roleHintRef.current,
     });
   }, []);
 

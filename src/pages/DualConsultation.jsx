@@ -202,7 +202,7 @@ export default function DualConsultation() {
   } = useVADPipeline({
     roomId: roomId || undefined,
     participantId: participantIdRef.current || undefined,
-    lang: "auto",
+    lang: isConsultationSingle ? "auto" : "ko",
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
     deviceId: staffDeviceId || undefined,
@@ -217,7 +217,7 @@ export default function DualConsultation() {
   } = useVADPipeline({
     roomId: roomId || undefined,
     participantId: participantIdRef.current || undefined,
-    lang: "auto",
+    lang: patientLang || "en",
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
     deviceId: patientDeviceId || undefined,
