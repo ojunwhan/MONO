@@ -957,9 +957,17 @@ async function consumeTranslationUsage(userId) {
   }
 }
 
+function looseSttLangMatch(expected, detected) {
+  const a = String(expected || "").toLowerCase().trim().slice(0, 2);
+  const b = String(detected || "").toLowerCase().trim().slice(0, 2);
+  if (!a || !b) return true;
+  return a === b;
+}
+
 async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {}) {
+  const returnDetected = Boolean(opts.returnDetectedLanguage);
   const forceGroq = opts.hospitalMode && groq; // Hospital mode: force Groq, no fallback
-  if (!groq && (!openai || isOpenAIBlocked())) return "";
+  if (!groq && (!openai || isOpenAIBlocked())) return returnDetected ? { text: "", detectedLanguage: null } : "";
   resetDailyStats();
   usageStats.sttRequests += 1;
   const wavBuffer = pcm16ToWavBuffer(pcmBuffer, sampleRateHz, 1);
@@ -972,21 +980,26 @@ async function transcribePcm16(pcmBuffer, lang, sampleRateHz = 16000, opts = {})
       const result = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tmpFile),
         model: "whisper-large-v3",
-        response_format: "json",
+        response_format: returnDetected ? "verbose_json" : "json",
         temperature: 0.0,
         ...(lang ? { language: lang } : {}),
         ...(forceGroq ? { prompt: "Medical consultation: headache, backache, stomachache, rhinoplasty, blepharoplasty, botox, filler, liposuction, facelift, swelling, bruising, anesthesia, recovery, appointment, prescription, diagnosis, surgery, consultation, injection, laser treatment" } : {}),
       });
-      return (result.text || "").trim();
+      const text = (result.text || "").trim();
+      if (returnDetected) return { text, detectedLanguage: result.language || null };
+      return text;
     }
     // Fallback: OpenAI whisper-1 (NOT used in hospital mode)
     usageStats.openaiSttRequests += 1;
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
       model: "whisper-1",
+      response_format: returnDetected ? "verbose_json" : "json",
       ...(lang ? { language: lang } : {}),
     });
-    return (result.text || "").trim();
+    const text = (result.text || "").trim();
+    if (returnDetected) return { text, detectedLanguage: result.language || null };
+    return text;
   } catch (e) {
     if (forceGroq) {
       // Hospital mode: no fallback, log and rethrow
@@ -3406,9 +3419,19 @@ io.on('connection', (socket) => {
     const sttHospitalMode = isHospitalContext(sttMeta.siteContext);
 
     let text = "";
+    let whisperDetectedLang = null;
     try {
       const _perfSttStart = Date.now();
-      text = await transcribePcm16(pcm, session.lang, session.sampleRateHz, { hospitalMode: sttHospitalMode });
+      const sttOut = await transcribePcm16(pcm, session.lang, session.sampleRateHz, {
+        hospitalMode: sttHospitalMode,
+        returnDetectedLanguage: true,
+      });
+      if (sttOut && typeof sttOut === "object" && "text" in sttOut) {
+        text = sttOut.text || "";
+        whisperDetectedLang = sttOut.detectedLanguage || null;
+      } else {
+        text = typeof sttOut === "string" ? sttOut : "";
+      }
       console.log(`[PERF] STT done in ${Date.now() - _perfSttStart}ms`);
       text = normalizeRepeats(text);
       console.log(`[stt:segment] 🎙 STT result: "${text}"${sttHospitalMode ? ' [hospital]' : ''}`);
@@ -3422,6 +3445,22 @@ io.on('connection', (socket) => {
       return;
     }
     if (text.trim().length <= 2 && durationSec < 0.8) { console.log("[stt:segment] ⏭ too short text"); return; }
+
+    // Dual-mic crosstalk: drop segment if Whisper-detected language doesn't match this mic's expected lang (before dual VAD / main translate paths)
+    if (
+      session.vadStaffLang &&
+      session.vadPatientLang &&
+      whisperDetectedLang &&
+      (data?.roleHint === "host" || data?.roleHint === "guest")
+    ) {
+      const expectedLang = data.roleHint === "host" ? session.vadStaffLang : session.vadPatientLang;
+      if (!looseSttLangMatch(expectedLang, whisperDetectedLang)) {
+        console.log(
+          `[stt:lang-filter] Filtered: role=${data.roleHint} expected=${expectedLang} detected=${whisperDetectedLang} text="${text.substring(0, 30)}"`
+        );
+        return;
+      }
+    }
 
     // --- DualConsultation VAD: speaker detection + translation (same heuristics as stt:whisper hospital block) ---
     if (session.vadStaffLang && session.vadPatientLang) {
