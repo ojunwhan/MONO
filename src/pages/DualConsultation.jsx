@@ -216,7 +216,7 @@ export default function DualConsultation() {
     pause: stopPatientVad,
   } = useVADPipeline({
     roomId: roomId || undefined,
-    participantId: participantIdRef.current || undefined,
+    participantId: participantIdRef.current ? participantIdRef.current + "-pt" : undefined,
     lang: patientLang || "en",
     vadStaffLang: staffLang,
     vadPatientLang: patientLang,
