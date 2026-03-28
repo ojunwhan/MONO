@@ -3446,14 +3446,6 @@ io.on('connection', (socket) => {
     }
     if (text.trim().length <= 2 && durationSec < 0.8) { console.log("[stt:segment] ⏭ too short text"); return; }
 
-    console.log("[stt:lang-filter-debug]", {
-      vadStaffLang: session?.vadStaffLang,
-      vadPatientLang: session?.vadPatientLang,
-      whisperDetectedLang,
-      roleHint: data?.roleHint,
-      filterWouldApply: !!(session?.vadStaffLang && session?.vadPatientLang && whisperDetectedLang && (data?.roleHint === "host" || data?.roleHint === "guest")),
-    });
-
     // Dual-mic crosstalk: drop segment if Whisper-detected language doesn't match this mic's expected lang (before dual VAD / main translate paths)
     if (
       session.vadStaffLang &&
@@ -3467,6 +3459,27 @@ io.on('connection', (socket) => {
           `[stt:lang-filter] Filtered: role=${data.roleHint} expected=${expectedLang} detected=${whisperDetectedLang} text="${text.substring(0, 30)}"`
         );
         return;
+      }
+    }
+
+    // Text-based crosstalk filter (backup for unreliable Whisper language detection)
+    if (data?.roleHint === "host" || data?.roleHint === "guest") {
+      const koreanRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
+      const koreanChars = (text.match(koreanRegex) || []).length;
+      const totalChars = text.replace(/[\s\d.,!?'"()\-]/g, "").length || 1;
+      const koreanRatio = koreanChars / totalChars;
+
+      const expectedLang2 = data.roleHint === "host" ? session.vadStaffLang : session.vadPatientLang;
+      if (expectedLang2) {
+        const expectKorean = expectedLang2.toLowerCase().startsWith("ko");
+        if (expectKorean && koreanRatio < 0.3) {
+          console.log(`[stt:text-lang-filter] Filtered: role=${data.roleHint} expected=${expectedLang2} koreanRatio=${koreanRatio.toFixed(2)} text="${text.substring(0, 30)}"`);
+          return;
+        }
+        if (!expectKorean && koreanRatio > 0.7) {
+          console.log(`[stt:text-lang-filter] Filtered: role=${data.roleHint} expected=${expectedLang2} koreanRatio=${koreanRatio.toFixed(2)} text="${text.substring(0, 30)}"`);
+          return;
+        }
       }
     }
 
