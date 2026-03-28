@@ -76,7 +76,7 @@ export default function DualConsultation() {
   const [routerSearchParams] = useSearchParams();
   const urlRoomName = routerSearchParams.get("roomName") || "";
   const modeParam = routerSearchParams.get("mode");
-  const isConsultationSingle = modeParam === "vad";
+  const isConsultationSingle = modeParam === "vad" || modeParam === "webspeech";
   const initialInputMode =
     modeParam === "vad" ? "vad" : modeParam === "webspeech" ? "webspeech" : "ptt";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
@@ -152,7 +152,6 @@ export default function DualConsultation() {
   useEffect(() => {
     if (!isConsultationSingle) return;
     setWebSpeechActive(false);
-    setInputMode((m) => (m === "webspeech" ? "vad" : m));
   }, [isConsultationSingle]);
   useEffect(() => {
     staffLangRef.current = staffLang;
