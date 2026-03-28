@@ -211,21 +211,6 @@ export default function DualConsultation() {
     onVadListenStart: emitJoinForVadListen,
   });
 
-  const {
-    start: startPatientVad,
-    pause: stopPatientVad,
-  } = useVADPipeline({
-    roomId: roomId || undefined,
-    participantId: participantIdRef.current ? participantIdRef.current + "-pt" : undefined,
-    lang: patientLang || "en",
-    vadStaffLang: staffLang,
-    vadPatientLang: patientLang,
-    deviceId: patientDeviceId || undefined,
-    roleHint: "patient",
-    disableServerStt: inputMode === "webspeech",
-    onVadListenStart: emitJoinForVadListen,
-  });
-
   const langToBcp47 = (lang) => {
     const key = String(lang || "").toLowerCase().split("-")[0];
     const map = {
@@ -830,32 +815,23 @@ export default function DualConsultation() {
   const handleVADToggle = useCallback(() => {
     if (vadActive) {
       vadPause();
-      if (!isConsultationSingle) {
-        stopPatientVad();
-      }
       vadActiveRef.current = false;
       setVadActive(false);
     } else {
       vadStart();
-      if (!isConsultationSingle) {
-        startPatientVad();
-      }
       vadActiveRef.current = true;
       setVadActive(true);
     }
-  }, [vadActive, vadStart, vadPause, isConsultationSingle, startPatientVad, stopPatientVad]);
+  }, [vadActive, vadStart, vadPause]);
 
   // Pause Silero VAD when switching back to PTT / Web Speech (hook always mounted).
   useEffect(() => {
     if (inputMode !== "vad") {
       vadPause();
-      if (!isConsultationSingle) {
-        stopPatientVad();
-      }
       vadActiveRef.current = false;
       setVadActive(false);
     }
-  }, [inputMode, vadPause, isConsultationSingle, stopPatientVad]);
+  }, [inputMode, vadPause]);
 
   useEffect(() => {
     if (inputMode !== "vad") {
@@ -866,22 +842,16 @@ export default function DualConsultation() {
       if (document.hidden) {
         if (vadListening) {
           vadPause();
-          if (!isConsultationSingle) {
-            stopPatientVad();
-          }
           wasVadActiveRef.current = true;
         }
       } else if (wasVadActiveRef.current) {
         vadStart();
-        if (!isConsultationSingle) {
-          startPatientVad();
-        }
         wasVadActiveRef.current = false;
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [inputMode, vadListening, vadStart, vadPause, isConsultationSingle, startPatientVad, stopPatientVad]);
+  }, [inputMode, vadListening, vadStart, vadPause]);
 
   const handleSendText = useCallback(() => {
     const trimmed = textInputValue.trim();
