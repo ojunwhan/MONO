@@ -1185,12 +1185,69 @@ function RoomsPanel({ authUser }) {
   const [addTemplate, setAddTemplate] = useState(TEMPLATE_UI.RECEPTION);
   const [submitting, setSubmitting] = useState(false);
   const [templateToast, setTemplateToast] = useState(null);
+  const [pttDevices, setPttDevices] = useState({ staffKey: null, patientKey: null });
+  const [registeringKey, setRegisteringKey] = useState(null);
 
   useEffect(() => {
     if (!templateToast) return undefined;
     const t = setTimeout(() => setTemplateToast(null), 2800);
     return () => clearTimeout(t);
   }, [templateToast]);
+
+  useEffect(() => {
+    const orgCode = authUser?.org_code;
+    if (!orgCode) {
+      setPttDevices({ staffKey: null, patientKey: null });
+      return;
+    }
+    const saved = localStorage.getItem(`mono_ptt_devices_${orgCode}`);
+    if (saved) {
+      try {
+        setPttDevices(JSON.parse(saved));
+      } catch {
+        setPttDevices({ staffKey: null, patientKey: null });
+      }
+    } else {
+      setPttDevices({ staffKey: null, patientKey: null });
+    }
+  }, [authUser?.org_code]);
+
+  useEffect(() => {
+    if (!registeringKey) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const orgCode = authUser?.org_code;
+      if (!orgCode) {
+        setRegisteringKey(null);
+        return;
+      }
+      const keyInfo = { code: e.code, label: e.code || e.key };
+      const field = registeringKey === "staff" ? "staffKey" : "patientKey";
+      setPttDevices((prev) => {
+        const updated = { ...prev, [field]: keyInfo };
+        localStorage.setItem(`mono_ptt_devices_${orgCode}`, JSON.stringify(updated));
+        return updated;
+      });
+      setRegisteringKey(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [registeringKey, authUser?.org_code]);
+
+  const resetPttKey = useCallback(
+    (role) => {
+      const orgCode = authUser?.org_code;
+      if (!orgCode) return;
+      const field = role === "staff" ? "staffKey" : "patientKey";
+      setPttDevices((prev) => {
+        const updated = { ...prev, [field]: null };
+        localStorage.setItem(`mono_ptt_devices_${orgCode}`, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [authUser?.org_code]
+  );
 
   const fetchRooms = useCallback(async () => {
     setLoading(true);
@@ -1405,6 +1462,166 @@ function RoomsPanel({ authUser }) {
             방 추가
           </button>
         </form>
+      </div>
+
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "12px",
+          padding: "20px",
+          marginBottom: "20px",
+          border: "1px solid #e5e7eb",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        }}
+      >
+        <style>{`
+          @keyframes mono-dashboard-ptt-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+          }
+        `}</style>
+        <h3
+          style={{
+            fontSize: "16px",
+            fontWeight: "600",
+            margin: "0 0 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          🎮 PTT 기기 설정
+        </h3>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
+          <span style={{ width: "80px", fontSize: "14px", fontWeight: "500" }}>직원 버튼</span>
+          {pttDevices.staffKey ? (
+            <span
+              style={{
+                background: "#dbeafe",
+                color: "#1e40af",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                fontSize: "13px",
+                fontWeight: "600",
+                fontFamily: "monospace",
+              }}
+            >
+              {pttDevices.staffKey.label}
+            </span>
+          ) : (
+            <span style={{ color: "#9ca3af", fontSize: "13px" }}>미등록</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setRegisteringKey(registeringKey === "staff" ? null : "staff")}
+            disabled={registeringKey === "patient"}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "1px solid #d1d5db",
+              background: registeringKey === "staff" ? "#fef3c7" : "#f9fafb",
+              fontSize: "13px",
+              cursor: registeringKey === "patient" ? "not-allowed" : "pointer",
+              animation:
+                registeringKey === "staff" ? "mono-dashboard-ptt-pulse 1.5s ease-in-out infinite" : "none",
+            }}
+          >
+            {registeringKey === "staff" ? "버튼을 누르세요..." : "등록"}
+          </button>
+          {pttDevices.staffKey ? (
+            <button
+              type="button"
+              onClick={() => resetPttKey("staff")}
+              style={{
+                padding: "4px 12px",
+                borderRadius: "6px",
+                border: "1px solid #fecaca",
+                background: "#fef2f2",
+                color: "#dc2626",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              초기화
+            </button>
+          ) : null}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
+          <span style={{ width: "80px", fontSize: "14px", fontWeight: "500" }}>환자 버튼</span>
+          {pttDevices.patientKey ? (
+            <span
+              style={{
+                background: "#dcfce7",
+                color: "#166534",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                fontSize: "13px",
+                fontWeight: "600",
+                fontFamily: "monospace",
+              }}
+            >
+              {pttDevices.patientKey.label}
+            </span>
+          ) : (
+            <span style={{ color: "#9ca3af", fontSize: "13px" }}>미등록</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setRegisteringKey(registeringKey === "patient" ? null : "patient")}
+            disabled={registeringKey === "staff"}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "1px solid #d1d5db",
+              background: registeringKey === "patient" ? "#fef3c7" : "#f9fafb",
+              fontSize: "13px",
+              cursor: registeringKey === "staff" ? "not-allowed" : "pointer",
+              animation:
+                registeringKey === "patient" ? "mono-dashboard-ptt-pulse 1.5s ease-in-out infinite" : "none",
+            }}
+          >
+            {registeringKey === "patient" ? "버튼을 누르세요..." : "등록"}
+          </button>
+          {pttDevices.patientKey ? (
+            <button
+              type="button"
+              onClick={() => resetPttKey("patient")}
+              style={{
+                padding: "4px 12px",
+                borderRadius: "6px",
+                border: "1px solid #fecaca",
+                background: "#fef2f2",
+                color: "#dc2626",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              초기화
+            </button>
+          ) : null}
+        </div>
+
+        {registeringKey ? (
+          <div
+            style={{
+              padding: "12px",
+              background: "#fef3c7",
+              borderRadius: "8px",
+              textAlign: "center",
+              fontSize: "14px",
+              fontWeight: "500",
+              marginBottom: "8px",
+            }}
+          >
+            ⌨️ 등록할 {registeringKey === "staff" ? "직원" : "환자"}용 키패드 버튼을 지금 누르세요...
+          </div>
+        ) : null}
+
+        <p style={{ fontSize: "12px", color: "#9ca3af", margin: "8px 0 0" }}>
+          ℹ️ 블루투스 키패드를 PC에 페어링한 후 각 버튼을 등록하세요. 상담 화면에서 등록된 버튼으로 PTT 통역이 작동합니다.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
