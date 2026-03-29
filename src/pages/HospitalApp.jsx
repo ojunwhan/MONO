@@ -699,9 +699,13 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
       </div>
       <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh",maxWidth: isMobile ? "100%" : "480px",padding: isMobile ? "12px" : isTablet ? "24px" : "32px"}}>
         <div className="text-center mb-6">
+          {!isReception && (
           <div style={{display:"flex",justifyContent:"center",marginBottom:"12px",fontSize:"clamp(40px, 8vw, 56px)",lineHeight:1}}>{"\uD83C\uDFE5"}</div>
+          )}
           <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px"}}>{headerHospitalName}</h2>
+          {!isReception && (
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
+          )}
         </div>
         <div className="w-full mb-2" style={{maxWidth:"400px"}}>
           <LanguageFlagPicker selectedLang={selectedLang} showGrid={showLangGrid} onToggleGrid={() => setShowLangGrid((p) => !p)}
