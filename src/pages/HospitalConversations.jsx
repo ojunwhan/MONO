@@ -55,7 +55,7 @@ export default function HospitalConversations() {
         <div>
           {sessions.map((s, i) => (
             <div key={s.id || i}
-              onClick={() => navigate(`/fixed-room/${s.room_id}`, { state: { isCreator: true, roleHint: 'owner', siteContext: 'hospital_reception', fromHistory: true } })}
+              onClick={() => navigate(`/fixed-room/${s.room_id}`, { state: { isCreator: true, roleHint: 'owner', siteContext: 'hospital_reception', fromHistory: true, orgCode: orgCode || s.org_code || '' } })}
               style={{ display:'flex', alignItems:'center', padding:'14px 16px', borderBottom:'1px solid #f9fafb', cursor:'pointer', gap:12 }}
             >
               <div style={{ width:44, height:44, borderRadius:'50%', background:'linear-gradient(135deg,#7C6FEB,#F472B6)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:14, flexShrink:0 }}>
