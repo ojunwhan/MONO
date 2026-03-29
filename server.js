@@ -1089,14 +1089,22 @@ function normalizeHospitalDeptCode(dept) {
 
 /** @returns {Promise<'off'|'elevenlabs'|'openai'|null>} null = default chain (ElevenLabs → OpenAI) */
 async function getTtsProviderForRoom(roomId, meta) {
+  console.log(`[tts:provider] roomId=${roomId} metaHospital=${!!meta?.hospitalMode} siteCtx=${meta?.siteContext || ""}`);
   const isHospital =
     meta?.hospitalMode ||
     (roomId && String(roomId).startsWith("PT-")) ||
     String(meta?.siteContext || "").startsWith("hospital_");
-  if (!isHospital || !roomId) return null;
+  console.log(`[tts:provider] isHospital=${isHospital} roomId=${roomId}`);
+  if (!isHospital || !roomId) {
+    console.log(`[tts:provider] → null (not hospital or no roomId)`);
+    return null;
+  }
 
   const cached = TTS_PROVIDER_CACHE.get(roomId);
-  if (cached && Date.now() - cached.at < TTS_PROVIDER_CACHE_MS) return cached.provider;
+  if (cached && Date.now() - cached.at < TTS_PROVIDER_CACHE_MS) {
+    console.log(`[tts:provider] → cached provider=${cached.provider} room=${roomId}`);
+    return cached.provider;
+  }
 
   let provider = null;
   try {
@@ -1107,11 +1115,13 @@ async function getTtsProviderForRoom(roomId, meta) {
     const orgCode = row?.org_code && String(row.org_code).trim() && row.org_code !== "UNKNOWN" ? String(row.org_code).trim() : null;
     const deptCode = normalizeHospitalDeptCode(meta?.department || row?.d);
     if (orgCode) {
+      // Canonical table name: organizations (see server/db/migrations/004_admin_console.sql). Equivalent join without alias o:
       const pRow = await dbGet(
-        `SELECT opc.config_json FROM organizations o
-         JOIN org_departments od ON od.org_id = o.id AND od.dept_code = ?
-         JOIN org_pipeline_config opc ON opc.dept_id = od.id
-         WHERE o.org_code = ? LIMIT 1`,
+        `SELECT opc.config_json
+         FROM org_pipeline_config opc
+         INNER JOIN org_departments od ON od.id = opc.dept_id AND od.dept_code = ?
+         INNER JOIN organizations org ON org.id = od.org_id AND org.org_code = ?
+         LIMIT 1`,
         [deptCode, orgCode]
       );
       if (pRow?.config_json) {
@@ -1121,8 +1131,9 @@ async function getTtsProviderForRoom(roomId, meta) {
       }
     }
   } catch (e) {
-    /* ignore */
+    console.warn("[tts:provider] lookup error:", e?.message);
   }
+  console.log(`[tts:provider] → provider=${provider} room=${roomId}`);
   TTS_PROVIDER_CACHE.set(roomId, { provider, at: Date.now() });
   return provider;
 }
@@ -1199,10 +1210,17 @@ async function synthesizeSpeechOpenAI(processedText) {
 async function synthesizeSpeech(text, targetLang = "en", opts = {}) {
   resetDailyStats();
   const processedText = preprocessForTTS(text);
-  if (!processedText) return null;
+  if (!processedText) {
+    console.log(`[tts:synth] skip empty processedText raw="${String(text ?? "").slice(0, 60)}..."`);
+    return null;
+  }
 
   const ttsProvider = opts.ttsProvider;
-  if (ttsProvider === "off") return null;
+  console.log(`[tts:synth] provider=${ttsProvider} ELEVENLABS_KEY=${!!process.env.ELEVENLABS_API_KEY} openai=${!!openai} openaiBlocked=${!openai ? "n/a" : isOpenAIBlocked()} text="${processedText.substring(0, 40)}..."`);
+  if (ttsProvider === "off") {
+    console.log(`[tts:synth] skip provider=off`);
+    return null;
+  }
 
   usageStats.ttsRequests += 1;
 
@@ -3958,7 +3976,9 @@ io.on('connection', (socket) => {
         } catch (e) { console.warn("[hq]:", e?.message); }
         try {
           const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${toLang}`);
           const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
+          console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
           if (ttsBuffer && otherP?.socketId) {
             io.to(otherP.socketId).emit("tts_audio", {
               senderPid: participantId, format: "mp3",
@@ -4090,7 +4110,9 @@ io.on('connection', (socket) => {
         } catch (e) {}
         try {
           const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${toLang}`);
           const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
+          console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
           if (ttsBuffer && targetP.socketId) {
             io.to(targetP.socketId).emit("tts_audio", { senderPid: participantId, format: "mp3", audio: ttsBuffer.toString("base64") });
           }
@@ -4175,7 +4197,9 @@ io.on('connection', (socket) => {
         // TTS per language group (uses finalized text shown in UI)
         try {
           const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${lang}`);
           const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang, { ttsProvider });
+          console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
           if (ttsBuffer) {
             for (const listener of listeners) {
               if (listener.socketId) {
@@ -4625,7 +4649,9 @@ io.on('connection', (socket) => {
       // TTS → other (typed messages also get spoken)
       try {
         const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${toLang}`);
         const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
+        console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
         if (ttsBuffer) {
           if (targetSocketId) {
             io.to(targetSocketId).emit("tts_audio", {
@@ -4745,7 +4771,9 @@ io.on('connection', (socket) => {
       } catch (e) {}
       try {
         const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${toLang}`);
         const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
+        console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
         if (ttsBuffer && targetP.socketId) {
           io.to(targetP.socketId).emit("tts_audio", {
             senderPid: participantId, format: "mp3",
@@ -4831,7 +4859,9 @@ io.on('connection', (socket) => {
       // TTS per language group (broadcast typed messages)
       try {
         const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        console.log(`[tts:call] provider=${ttsProvider} text="${finalizedForTts?.substring(0, 50)}..." lang=${lang}`);
         const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang, { ttsProvider });
+        console.log(`[tts:call] result=${ttsBuffer ? `buffer ${ttsBuffer.length} bytes` : "null"}`);
         if (ttsBuffer) {
           for (const listener of listeners) {
             if (listener.socketId) {
