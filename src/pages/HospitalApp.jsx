@@ -2,7 +2,7 @@
 // /hospital?template=&room= ? ?? PC ?? ??
 // /hospital?template=&room=&kiosk=true ? ???? QR ??
 // ? ? /hospital ? /hospital-dashboard ?????
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate as useNav, useSearchParams, Navigate } from "react-router-dom";
 import { detectUserLanguage } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
@@ -671,49 +671,6 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
     });
   };
 
-  const handleDirectStart = useCallback(async (patient, patientLanguage) => {
-    if (!patient?.chart_number || !orgCode) return;
-    try {
-      const res = await fetch("/api/hospital/start-direct-session", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          org_code: orgCode,
-          chart_number: patient.chart_number,
-          patient_language: patientLanguage || "en",
-        }),
-      });
-      const data = await res.json();
-      if (!data.success || !data.roomId) {
-        console.error("[handleDirectStart] Failed:", data);
-        return;
-      }
-      localStorage.setItem("myLang", selectedLang);
-      navTo(`/fixed-room/${data.roomId}`, {
-        state: {
-          fromLang: selectedLang,
-          localName: "",
-          role: "Doctor",
-          isCreator: true,
-          siteContext: `hospital_${selectedDept.id}`,
-          roomType: "oneToOne",
-          hospitalDept: selectedDept,
-          hospitalTemplate: template,
-          saveMode,
-          patientToken: patient.chart_number,
-          inputMode: "ptt",
-          orgCode: orgCode || "",
-          deptCode: selectedDept?.id || "reception",
-          sessionId: data.sessionId,
-          ...(returnToReceptionUrl ? { returnToReceptionUrl } : {}),
-        },
-      });
-    } catch (err) {
-      console.error("[handleDirectStart] Error:", err);
-    }
-  }, [orgCode, selectedLang, selectedDept, template, saveMode, navTo, returnToReceptionUrl]);
-
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {}); }, []);
 
   const displayTitle = roomName || selectedDept.labelKo;
@@ -762,7 +719,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
             </div>
             {isReception && !kiosk && (
               <div className="w-full max-w-[440px] mb-2">
-                <PatientIdentifierLookup orgCode={orgCode} onPatientFound={(data) => setIdentifiedPatient(data)} onStartSession={handleDirectStart} />
+                <PatientIdentifierLookup orgCode={orgCode} onPatientFound={(data) => setIdentifiedPatient(data)} />
               </div>
             )}
             {waitingPatients.length > 0 && (
