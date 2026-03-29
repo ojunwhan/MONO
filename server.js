@@ -4445,8 +4445,8 @@ io.on('connection', (socket) => {
     if (otherSocketIdStt && otherSocketIdStt !== socket.id) {
       io.to(otherSocketIdStt).emit("stt:result", sttResultPayload);
     }
-    socket.emit("stt:result", sttResultPayload);
     ackReply({ ok: true, text: normalized });
+    socket.emit("stt:result", sttResultPayload);
   });
 
   // --- send-message 핸들러 (room-type aware) ---

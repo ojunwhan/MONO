@@ -269,6 +269,8 @@ export default function ChatScreen() {
   const typingStopTimerRef = useRef(null);
   const readSentRef = useRef(new Set());
   const messagesRef = useRef([]);
+  /** stt:whisper ACK vs stt:result ordering — queue translations when row not yet in list */
+  const pendingSttTranslations = useRef([]);
   const joinStateRef = useRef({});
   const joinPayloadRef = useRef(null);
   const hadJoinedRef = useRef(false);
@@ -1142,6 +1144,34 @@ export default function ChatScreen() {
       socket.off("stt:result", onSttResult);
     };
   }, [showToast, roomId]);
+
+  useEffect(() => {
+    if (pendingSttTranslations.current.length === 0) return;
+    const now = Date.now();
+    pendingSttTranslations.current = pendingSttTranslations.current.filter((p) => now - p.at < 10000);
+    if (pendingSttTranslations.current.length === 0) return;
+
+    setMessages((prev) => {
+      const pending = [...pendingSttTranslations.current];
+      let changed = false;
+      const updated = prev.map((m) => {
+        if (!m.mine) return m;
+        if (m.translatedText && String(m.translatedText).trim() !== "") return m;
+        const pi = pending.findIndex((p) => String(p.text).trim() === String(m.text || "").trim());
+        if (pi === -1) return m;
+        const [consumed] = pending.splice(pi, 1);
+        changed = true;
+        return {
+          ...m,
+          originalText: consumed.translatedText,
+          translatedText: m.text,
+          text: m.text,
+        };
+      });
+      pendingSttTranslations.current = pending;
+      return changed ? updated : prev;
+    });
+  }, [messages]);
 
   useEffect(() => {
     initBrowserTts();
