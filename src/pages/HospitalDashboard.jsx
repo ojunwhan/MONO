@@ -34,6 +34,7 @@ import {
   MicOff,
   Sparkles,
   Lock,
+  Volume2,
 } from "lucide-react";
 const QRCode = lazy(() => import("react-qr-code").then((m) => ({ default: m.default })));
 import {
@@ -59,6 +60,7 @@ const MENU_ITEMS = [
   { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
   { id: "ai-summary", label: "AI 요약", icon: Sparkles },
+  { id: "tts-settings", label: "TTS 음성", icon: Volume2 },
   { id: "admin", label: "관리자", icon: Lock },
 ];
 
@@ -916,6 +918,7 @@ export default function HospitalDashboard() {
           {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
           {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
           {activeMenu === "admin" && <AdminDataPanel authUser={authUser} />}
+          {activeMenu === "tts-settings" && <TtsSettingsPanel authUser={authUser} />}
           {activeMenu === "ai-summary" && (
             <div style={{ padding: "24px" }}>
               <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
@@ -3302,6 +3305,99 @@ function printReport(stats, sessions, startDate, endDate) {
 
 function escapeHtml(str) {
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ═══════════════════════════════════════════
+// TTS SETTINGS (org_pipeline_config)
+// ═══════════════════════════════════════════
+function TtsSettingsPanel({ authUser }) {
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = urlWithOrg("/api/hospital/pipeline-tts", authUser?.org_code);
+      const r = await fetch(url, { credentials: "include" });
+      const data = await r.json();
+      if (data.success) setDepartments(data.departments || []);
+    } catch (e) {
+      console.error("[tts-settings]", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser?.org_code]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async (deptId, ttsProvider) => {
+    setSavingId(deptId);
+    try {
+      const url = urlWithOrg("/api/hospital/pipeline-tts", authUser?.org_code);
+      const r = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deptId, ttsProvider }),
+      });
+      if (r.ok) await load();
+    } catch (e) {
+      console.error("[tts-settings save]", e);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div className="max-w-[640px] space-y-4">
+      <p className="text-[13px] text-[var(--color-text-secondary)] leading-relaxed">
+        통역 화면에서 상대에게 들려주는 음성(TTS) 제공자입니다. 기본값은 ElevenLabs Flash v2.5 우선, 실패 시 OpenAI입니다.
+        서버에 <code className="text-[12px] bg-[var(--color-bg-secondary)] px-1 rounded">ELEVENLABS_API_KEY</code>가 없으면 OpenAI만 사용됩니다.
+      </p>
+      {departments.length === 0 ? (
+        <EmptyState text="등록된 진료 부서가 없습니다. 관리자 콘솔에서 기관·부서를 먼저 설정하거나, 서버 재시작 후 ORG-0001 시드 부서가 생성되었는지 확인하세요." />
+      ) : (
+        <div className="rounded-[12px] border border-[var(--color-border)] overflow-hidden bg-[var(--color-bg)]">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[var(--color-bg-secondary)] text-left border-b border-[var(--color-border)]">
+                <th className="px-4 py-3 font-semibold text-[var(--color-text)]">부서</th>
+                <th className="px-4 py-3 font-semibold text-[var(--color-text)]">TTS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departments.map((d) => (
+                <tr key={d.deptId} className="border-b border-[var(--color-border)] last:border-0">
+                  <td className="px-4 py-3 text-[var(--color-text)]">
+                    <span className="font-medium">{d.deptName}</span>
+                    <span className="ml-2 text-[11px] text-[var(--color-text-secondary)]">({d.deptCode})</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="w-full max-w-[220px] px-2 py-1.5 rounded-[8px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]"
+                      value={d.ttsProvider == null ? "default" : d.ttsProvider}
+                      disabled={savingId === d.deptId}
+                      onChange={(e) => save(d.deptId, e.target.value)}
+                    >
+                      <option value="default">기본 (ElevenLabs → OpenAI)</option>
+                      <option value="elevenlabs">ElevenLabs만 (폴백 OpenAI)</option>
+                      <option value="openai">OpenAI만</option>
+                      <option value="off">끄기</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════

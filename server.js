@@ -2,6 +2,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') }); // .env 파일 경로 지정하여 로드
 console.log('[env] JWT_SECRET set:', !!process.env.JWT_SECRET); // JWT_SECRET 설정 여부 로그
 console.log('[env] PORT raw value:', process.env.PORT);
+console.log('[env] ELEVENLABS_API_KEY set:', !!process.env.ELEVENLABS_API_KEY);
 
 // 보장: process.env가 없다면 기본 3174 (MRO4 전용)
 const START_PORT = Number(process.env.PORT) || 3174;
@@ -21,6 +22,7 @@ const OpenAI = require('openai');
 const Groq = require('groq-sdk');
 const fs = require('fs');
 const multer = require('multer');
+const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 // Google 및 Kakao 인증 라우트 모듈 불러오기
@@ -120,6 +122,7 @@ const usageStats = {
   openaiSttRequests: 0,    // OpenAI Whisper STT 호출 수
   openaiTranslations: 0,   // OpenAI GPT 번역 호출 수
   openaiTtsRequests: 0,    // OpenAI TTS 호출 수
+  elevenlabsTtsRequests: 0, // ElevenLabs TTS 성공 호출 수
 
   // 에러
   errorCount: 0,           // 에러 발생 수
@@ -156,6 +159,7 @@ function resetDailyStats() {
     usageStats.openaiSttRequests = 0;
     usageStats.openaiTranslations = 0;
     usageStats.openaiTtsRequests = 0;
+    usageStats.elevenlabsTtsRequests = 0;
     usageStats.errorCount = 0;
     usageStats.errors = [];
   }
@@ -1070,14 +1074,96 @@ async function transcribeEncodedAudioBuffer(audioBuffer, mimeType, lang, opts = 
 // ───────────────── TTS VOICE + INSTRUCTION ─────────────────
 const TTS_INSTRUCTION = `Speak clearly and calmly, like a human supervisor on a work site. Do not sound cheerful or robotic. Use a neutral command tone. Pause slightly between sentences.`;
 const TTS_DEFAULT_VOICE = "echo"; // neutral, steady, mid-range
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 
-async function synthesizeSpeech(text, targetLang = "en") {
-  if (!openai || !text || isOpenAIBlocked()) return null;
-  resetDailyStats();
-  usageStats.ttsRequests += 1;
+const TTS_PROVIDER_CACHE = new Map(); // roomId -> { provider, at }
+const TTS_PROVIDER_CACHE_MS = 60_000;
+
+function normalizeHospitalDeptCode(dept) {
+  const s = String(dept || "reception").toLowerCase();
+  if (s.includes("consult")) return "consultation";
+  if (s.includes("reception")) return "reception";
+  return s.replace(/[^a-z0-9_-]/g, "") || "reception";
+}
+
+/** @returns {Promise<'off'|'elevenlabs'|'openai'|null>} null = default chain (ElevenLabs → OpenAI) */
+async function getTtsProviderForRoom(roomId, meta) {
+  const isHospital =
+    meta?.hospitalMode ||
+    (roomId && String(roomId).startsWith("PT-")) ||
+    String(meta?.siteContext || "").startsWith("hospital_");
+  if (!isHospital || !roomId) return null;
+
+  const cached = TTS_PROVIDER_CACHE.get(roomId);
+  if (cached && Date.now() - cached.at < TTS_PROVIDER_CACHE_MS) return cached.provider;
+
+  let provider = null;
+  try {
+    const row = await dbGet(
+      `SELECT org_code, COALESCE(dept, department) AS d FROM hospital_sessions WHERE room_id = ? ORDER BY started_at DESC LIMIT 1`,
+      [roomId]
+    );
+    const orgCode = row?.org_code && String(row.org_code).trim() && row.org_code !== "UNKNOWN" ? String(row.org_code).trim() : null;
+    const deptCode = normalizeHospitalDeptCode(meta?.department || row?.d);
+    if (orgCode) {
+      const pRow = await dbGet(
+        `SELECT opc.config_json FROM organizations o
+         JOIN org_departments od ON od.org_id = o.id AND od.dept_code = ?
+         JOIN org_pipeline_config opc ON opc.dept_id = od.id
+         WHERE o.org_code = ? LIMIT 1`,
+        [deptCode, orgCode]
+      );
+      if (pRow?.config_json) {
+        const cfg = JSON.parse(pRow.config_json);
+        const v = cfg.ttsProvider;
+        if (v === "off" || v === "elevenlabs" || v === "openai") provider = v;
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  TTS_PROVIDER_CACHE.set(roomId, { provider, at: Date.now() });
+  return provider;
+}
+
+async function synthesizeSpeechElevenLabs(processedText) {
+  if (!ELEVENLABS_API_KEY || !processedText) return null;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
+  try {
+    const res = await axios.post(
+      url,
+      {
+        text: processedText,
+        model_id: "eleven_flash_v2_5",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      },
+      {
+        responseType: "arraybuffer",
+        timeout: 60000,
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        maxContentLength: 10 * 1024 * 1024,
+        maxBodyLength: 10 * 1024 * 1024,
+      }
+    );
+    const buf = Buffer.from(res.data);
+    return buf.length ? buf : null;
+  } catch (err) {
+    const msg = err?.response?.data && typeof err.response.data !== "string"
+      ? JSON.stringify(err.response.data).slice(0, 200)
+      : (err?.message || String(err));
+    console.warn("[tts:elevenlabs]", err?.response?.status, msg);
+    return null;
+  }
+}
+
+async function synthesizeSpeechOpenAI(processedText) {
+  if (!openai || isOpenAIBlocked()) return null;
   usageStats.openaiTtsRequests += 1;
-  const processedText = preprocessForTTS(text);
-  if (!processedText) return null;
   try {
     const speech = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
@@ -1089,7 +1175,6 @@ async function synthesizeSpeech(text, targetLang = "en") {
     return Buffer.from(await speech.arrayBuffer());
   } catch (err) {
     markOpenAIQuotaBlocked(err);
-    // Fallback to tts-1 (no instructions support)
     try {
       const speech = await openai.audio.speech.create({
         model: "tts-1",
@@ -1100,10 +1185,49 @@ async function synthesizeSpeech(text, targetLang = "en") {
       return Buffer.from(await speech.arrayBuffer());
     } catch (err2) {
       markOpenAIQuotaBlocked(err2);
-      console.warn("[tts] all models failed:", err2?.message);
+      console.warn("[tts] OpenAI TTS failed:", err2?.message);
       return null;
     }
   }
+}
+
+/**
+ * @param {string} text
+ * @param {string} targetLang — reserved for future voice/locale mapping
+ * @param {{ ttsProvider?: 'off'|'elevenlabs'|'openai'|null }} [opts]
+ */
+async function synthesizeSpeech(text, targetLang = "en", opts = {}) {
+  resetDailyStats();
+  const processedText = preprocessForTTS(text);
+  if (!processedText) return null;
+
+  const ttsProvider = opts.ttsProvider;
+  if (ttsProvider === "off") return null;
+
+  usageStats.ttsRequests += 1;
+
+  if (ttsProvider === "openai") {
+    return await synthesizeSpeechOpenAI(processedText);
+  }
+
+  if (ttsProvider === "elevenlabs") {
+    const el = await synthesizeSpeechElevenLabs(processedText);
+    if (el) {
+      usageStats.elevenlabsTtsRequests += 1;
+      return el;
+    }
+    return await synthesizeSpeechOpenAI(processedText);
+  }
+
+  // Default / null: ElevenLabs first, then OpenAI
+  if (ELEVENLABS_API_KEY) {
+    const el = await synthesizeSpeechElevenLabs(processedText);
+    if (el) {
+      usageStats.elevenlabsTtsRequests += 1;
+      return el;
+    }
+  }
+  return await synthesizeSpeechOpenAI(processedText);
 }
 
 const TMP_DIR = path.join(__dirname, 'tmp');
@@ -3833,7 +3957,8 @@ io.on('connection', (socket) => {
           }
         } catch (e) { console.warn("[hq]:", e?.message); }
         try {
-          const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
+          const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
           if (ttsBuffer && otherP?.socketId) {
             io.to(otherP.socketId).emit("tts_audio", {
               senderPid: participantId, format: "mp3",
@@ -3964,7 +4089,8 @@ io.on('connection', (socket) => {
           }
         } catch (e) {}
         try {
-          const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
+          const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
           if (ttsBuffer && targetP.socketId) {
             io.to(targetP.socketId).emit("tts_audio", { senderPid: participantId, format: "mp3", audio: ttsBuffer.toString("base64") });
           }
@@ -4048,7 +4174,8 @@ io.on('connection', (socket) => {
         } catch (e) {}
         // TTS per language group (uses finalized text shown in UI)
         try {
-          const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang);
+          const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+          const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang, { ttsProvider });
           if (ttsBuffer) {
             for (const listener of listeners) {
               if (listener.socketId) {
@@ -4497,7 +4624,8 @@ io.on('connection', (socket) => {
       } catch (e) {}
       // TTS → other (typed messages also get spoken)
       try {
-        const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
+        const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
         if (ttsBuffer) {
           if (targetSocketId) {
             io.to(targetSocketId).emit("tts_audio", {
@@ -4616,7 +4744,8 @@ io.on('connection', (socket) => {
         }
       } catch (e) {}
       try {
-        const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang);
+        const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        const ttsBuffer = await synthesizeSpeech(finalizedForTts, toLang, { ttsProvider });
         if (ttsBuffer && targetP.socketId) {
           io.to(targetP.socketId).emit("tts_audio", {
             senderPid: participantId, format: "mp3",
@@ -4701,7 +4830,8 @@ io.on('connection', (socket) => {
       } catch (e) {}
       // TTS per language group (broadcast typed messages)
       try {
-        const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang);
+        const ttsProvider = await getTtsProviderForRoom(roomId, meta);
+        const ttsBuffer = await synthesizeSpeech(finalizedForTts, lang, { ttsProvider });
         if (ttsBuffer) {
           for (const listener of listeners) {
             if (listener.socketId) {
@@ -5444,6 +5574,30 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         }
       }
     } catch (_) {}
+    // 기관별 접수/상담 부서 + 빈 파이프라인 행 (부서 없을 때만 — TTS 등 org_pipeline_config용)
+    try {
+      const allOrgs = await dbAll('SELECT id, org_code FROM organizations');
+      for (const o of allOrgs || []) {
+        const cntRow = await dbGet('SELECT COUNT(*) AS c FROM org_departments WHERE org_id = ?', [o.id]);
+        if ((cntRow?.c || 0) > 0) continue;
+        for (const row of [
+          ['reception', '접수', 0],
+          ['consultation', '상담실', 1],
+        ]) {
+          await dbRun(
+            'INSERT OR IGNORE INTO org_departments (org_id, dept_code, dept_name, sort_order) VALUES (?, ?, ?, ?)',
+            [o.id, row[0], row[1], row[2]]
+          );
+        }
+        const odList = await dbAll('SELECT id FROM org_departments WHERE org_id = ?', [o.id]);
+        for (const r of odList || []) {
+          await dbRun(
+            "INSERT OR IGNORE INTO org_pipeline_config (dept_id, config_json, updated_at) VALUES (?, '{}', datetime('now'))",
+            [r.id]
+          );
+        }
+      }
+    } catch (e) { console.warn('[admin] org dept seed:', e?.message); }
     // 인덱스 생성
     await dbExec(`
       CREATE INDEX IF NOT EXISTS idx_org_dept_org_id     ON org_departments(org_id);
@@ -5574,6 +5728,73 @@ app.get('/api/hospital/trial-status', requireHospitalAdminJwt, async (req, res) 
     res.json({ ok: true, ...status, plan: org?.plan, trial_ends_at: org?.trial_ends_at });
   } catch (err) {
     res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// GET /api/hospital/pipeline-tts — 부서별 TTS 제공자 (org_pipeline_config.ttsProvider)
+app.get('/api/hospital/pipeline-tts', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode;
+    const org = await dbGet('SELECT id FROM organizations WHERE org_code = ?', [orgCode]);
+    if (!org) return res.status(404).json({ error: 'org_not_found' });
+    const rows = await dbAll(
+      `SELECT od.id, od.dept_code, od.dept_name, opc.config_json
+       FROM org_departments od
+       LEFT JOIN org_pipeline_config opc ON opc.dept_id = od.id
+       WHERE od.org_id = ?
+       ORDER BY od.sort_order ASC, od.id ASC`,
+      [org.id]
+    );
+    const departments = (rows || []).map((r) => {
+      let ttsProvider = null;
+      try {
+        const c = r.config_json ? JSON.parse(r.config_json) : {};
+        ttsProvider = c.ttsProvider === 'off' || c.ttsProvider === 'elevenlabs' || c.ttsProvider === 'openai' ? c.ttsProvider : null;
+      } catch (_) {}
+      return { deptId: r.id, deptCode: r.dept_code, deptName: r.dept_name, ttsProvider };
+    });
+    res.json({ success: true, departments });
+  } catch (e) {
+    console.error('[hospital:pipeline-tts:get]', e?.message);
+    res.status(500).json({ error: 'query_failed' });
+  }
+});
+
+// PATCH /api/hospital/pipeline-tts — 부서별 ttsProvider 저장
+app.patch('/api/hospital/pipeline-tts', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const orgCode = req.hospitalOrgCode;
+    const { deptId, ttsProvider: rawTp } = req.body || {};
+    const id = Number(deptId);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'dept_id_required' });
+    const tp = String(rawTp || '').trim();
+    if (!['off', 'elevenlabs', 'openai', 'default'].includes(tp)) {
+      return res.status(400).json({ error: 'invalid_tts_provider' });
+    }
+    const org = await dbGet('SELECT id FROM organizations WHERE org_code = ?', [orgCode]);
+    if (!org) return res.status(404).json({ error: 'org_not_found' });
+    const dept = await dbGet('SELECT id, org_id FROM org_departments WHERE id = ?', [id]);
+    if (!dept || dept.org_id !== org.id) return res.status(403).json({ error: 'forbidden' });
+    const row = await dbGet('SELECT config_json FROM org_pipeline_config WHERE dept_id = ?', [id]);
+    let cfg = {};
+    try { cfg = row?.config_json ? JSON.parse(row.config_json) : {}; } catch (_) {}
+    if (tp === 'default') {
+      delete cfg.ttsProvider;
+    } else {
+      cfg.ttsProvider = tp;
+    }
+    const jsonStr = JSON.stringify(cfg);
+    await dbRun(
+      `INSERT INTO org_pipeline_config (dept_id, config_json, updated_at)
+       VALUES (?, ?, datetime('now'))
+       ON CONFLICT(dept_id) DO UPDATE SET config_json = excluded.config_json, updated_at = datetime('now')`,
+      [id, jsonStr]
+    );
+    TTS_PROVIDER_CACHE.clear();
+    res.json({ success: true, ttsProvider: cfg.ttsProvider ?? null });
+  } catch (e) {
+    console.error('[hospital:pipeline-tts:patch]', e?.message);
+    res.status(500).json({ error: 'update_failed' });
   }
 });
 
