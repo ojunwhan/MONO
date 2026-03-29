@@ -6113,6 +6113,67 @@ app.post('/api/hospital/patient/lookup-or-create', async (req, res) => {
   }
 });
 
+// POST /api/hospital/start-direct-session — Staff-initiated session (identifier lookup → direct start, no QR)
+app.post('/api/hospital/start-direct-session', async (req, res) => {
+  try {
+    const { org_code, chart_number, patient_language } = req.body;
+    if (!org_code || !chart_number) {
+      return res.status(400).json({ error: 'org_code and chart_number are required' });
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let roomId;
+    let exists;
+    let guard = 0;
+    do {
+      roomId = 'PT-';
+      for (let i = 0; i < 6; i++) roomId += chars[Math.floor(Math.random() * chars.length)];
+      exists = await dbGet('SELECT 1 FROM hospital_sessions WHERE room_id = ? LIMIT 1', [roomId]);
+      guard++;
+      if (guard > 100) return res.status(500).json({ error: 'Failed to generate unique room ID' });
+    } while (exists);
+
+    const sessionId = uuidv4();
+    const now = new Date().toISOString();
+    const lang = patient_language || 'en';
+    const dept = 'reception';
+
+    let orgIdResolved = null;
+    try {
+      const orgRow = await dbGet('SELECT id FROM organizations WHERE org_code = ? LIMIT 1', [String(org_code).trim()]);
+      if (orgRow?.id != null) orgIdResolved = String(orgRow.id);
+    } catch (_) {}
+
+    await dbRun(
+      `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      [sessionId, chart_number, roomId, dept, now, chart_number, 'direct', orgIdResolved, org_code]
+    );
+
+    ROOMS.set(roomId, {
+      roomType: 'oneToOne',
+      ownerLang: 'auto',
+      guestLang: lang ? mapLang(lang) : 'auto',
+      siteContext: `hospital_${dept}`,
+      locked: true,
+      ownerPid: null,
+      participants: {},
+      callSignCounters: {},
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      hospitalMode: true,
+      department: dept,
+      patientToken: chart_number,
+      hospitalSessionId: sessionId,
+    });
+
+    console.log(`[start-direct-session] Room=${roomId} Session=${sessionId} Chart=${chart_number} Org=${org_code}`);
+    res.json({ success: true, roomId, sessionId });
+  } catch (err) {
+    console.error('[start-direct-session] Error:', err);
+    res.status(500).json({ error: 'Failed to create session' });
+  }
+});
+
 // ===== Get patient by identifier (read-only lookup) =====
 app.get('/api/hospital/patient-by-identifier/:identifier', async (req, res) => {
   try {

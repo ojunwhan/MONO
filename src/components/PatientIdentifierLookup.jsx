@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 
-export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
+export default function PatientIdentifierLookup({ orgCode, onPatientFound, onStartSession }) {
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
@@ -213,11 +213,37 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
           border: `1px solid ${sessions.length > 0 ? '#a5d8ff' : '#b2f2bb'}`,
           fontSize: '12px',
           color: sessions.length > 0 ? '#1971c2' : '#2f9e44',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
         }}>
-          {sessions.length > 0 ? '\uD83D\uDD04 \uC7AC\uBC29\uBB38' : '\u2705 \uC2E0\uADDC \uB4F1\uB85D'}
-          {' \u2014 PT: '}{patient.chart_number}
-          {patient.name && <span>{' \u00B7 '}{patient.name}</span>}
-          {sessions.length > 0 && <span>{' \u00B7 \uC774\uC804 '}{sessions.length}{'\uAC74'}</span>}
+          <span>
+            {sessions.length > 0 ? '\uD83D\uDD04 \uC7AC\uBC29\uBB38' : '\u2705 \uC2E0\uADDC \uB4F1\uB85D'}
+            {' \u2014 PT: '}{patient.chart_number}
+            {patient.name && <span>{' \u00B7 '}{patient.name}</span>}
+            {sessions.length > 0 && <span>{' \u00B7 \uC774\uC804 '}{sessions.length}{'\uAC74'}</span>}
+          </span>
+          {onStartSession && (
+            <button
+              type="button"
+              onClick={() => onStartSession(patient)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: '6px',
+                border: 'none',
+                background: '#3B82F6',
+                color: '#fff',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {'\uD1B5\uC5ED \uC2DC\uC791'}
+            </button>
+          )}
         </div>
       )}
     </div>
