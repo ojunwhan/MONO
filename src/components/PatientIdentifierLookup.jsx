@@ -7,8 +7,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
   const [found, setFound] = useState(false);
   const [patient, setPatient] = useState(null);
   const [sessions, setSessions] = useState([]);
-  const [lastName, setLastName] = useState('');
-  const [firstName, setFirstName] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
 
   const handleSearch = useCallback(async () => {
@@ -24,8 +23,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     setFound(false);
     setPatient(null);
     setSessions([]);
-    setLastName('');
-    setFirstName('');
+    setName('');
 
     try {
       const res = await fetch(
@@ -61,25 +59,17 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
 
   const handleRegister = useCallback(async () => {
     const trimmedId = identifier.trim();
-    const trimmedLast = lastName.trim().toUpperCase();
-    const trimmedFirst = firstName.trim().toUpperCase();
+    const fullName = name.trim().toUpperCase();
     if (!trimmedId || trimmedId.length < 2) {
       setError('\uC2DD\uBCC4\uBC88\uD638\uB97C \uBA3C\uC800 \uC785\uB825\uD558\uC138\uC694');
       return;
     }
-    if (!trimmedLast) {
-      setError('\uC131(Last Name)\uC744 \uC785\uB825\uD558\uC138\uC694');
-      return;
-    }
-    if (!trimmedFirst) {
-      setError('\uC774\uB984(First Name)\uC744 \uC785\uB825\uD558\uC138\uC694');
+    if (!fullName) {
+      setError('\uC5EC\uAD8C \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694');
       return;
     }
     setLoading(true);
     setError('');
-
-    // Combine as "LASTNAME FIRSTNAME" — matches Korean hospital passport registration format
-    const fullName = `${trimmedLast} ${trimmedFirst}`;
 
     try {
       const res = await fetch('/api/hospital/patient/lookup-or-create', {
@@ -107,7 +97,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     } finally {
       setLoading(false);
     }
-  }, [identifier, orgCode, lastName, firstName, onPatientFound]);
+  }, [identifier, orgCode, name, onPatientFound]);
 
   const handleClear = useCallback(() => {
     setIdentifier('');
@@ -115,8 +105,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     setFound(false);
     setPatient(null);
     setSessions([]);
-    setLastName('');
-    setFirstName('');
+    setName('');
     setError('');
   }, []);
 
@@ -186,27 +175,14 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         )}
       </div>
 
-      {/* Row 2: Last Name + First Name + Register */}
+      {/* Row 2: Passport name + Register */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input
           type="text"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          placeholder={'Last Name (\uC131)'}
-          disabled={loading || isRegistered}
-          style={{
-            ...inputStyle,
-            flex: 1,
-            textTransform: 'uppercase',
-            background: isRegistered ? '#f1f3f5' : '#fff',
-          }}
-        />
-        <input
-          type="text"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
-          placeholder={'First Name (\uC774\uB984)'}
+          placeholder="\uC5EC\uAD8C \uC774\uB984 (HONG GILDONG)"
           disabled={loading || isRegistered}
           style={{
             ...inputStyle,
@@ -217,7 +193,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         />
         <button
           onClick={handleRegister}
-          disabled={loading || !identifier.trim() || !lastName.trim() || !firstName.trim() || isRegistered}
+          disabled={loading || !identifier.trim() || !name.trim() || isRegistered}
           style={{
             ...btnGreen,
             background: (loading || isRegistered) ? '#adb5bd' : '#2f9e44',
