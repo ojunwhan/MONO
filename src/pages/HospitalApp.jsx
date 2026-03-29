@@ -679,9 +679,16 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   return (
     <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
       <div className="flex-none border-b border-[var(--color-border)]" style={{padding:isMobile ? "10px 12px" : "12px 16px"}}>
-        <div className="flex items-center justify-between mx-auto w-full" style={{maxWidth: isMobile ? "100%" : "480px"}}>
-          <HospitalLogo />
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between mx-auto w-full gap-2" style={{maxWidth: isMobile ? "100%" : "480px"}}>
+          {isReception ? (
+            <span style={{ fontSize: "16px", fontWeight: "700", color: "#333", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} className="flex-1 min-w-0">
+              {headerHospitalName || ""}
+            </span>
+          ) : (
+            <HospitalLogo />
+          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isReception && <HospitalLogo />}
             {template !== "reception" && (
               <span className="px-3 py-1 rounded-full bg-[#DBEAFE] text-[#1D4ED8] text-[11px] font-semibold">
                 <Monitor size={12} className="inline mr-1" /> {"\uC0C1\uB2F4 \uBAA8\uB4DC"}
@@ -702,12 +709,14 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           {!isReception && (
           <div style={{display:"flex",justifyContent:"center",marginBottom:"12px",fontSize:"clamp(40px, 8vw, 56px)",lineHeight:1}}>{"\uD83C\uDFE5"}</div>
           )}
+          {!isReception && (
           <h2 className="font-bold mb-1" style={{textAlign:"center",display:"block",width:"100%",fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px"}}>{headerHospitalName}</h2>
+          )}
           {!isReception && (
           <p className="text-[13px] text-[var(--color-text-secondary)]">{selectedDept.label}</p>
           )}
         </div>
-        <div className="w-full mb-2" style={{maxWidth:"400px"}}>
+        <div className={`w-full mb-2 ${isReception ? "[&_p:first-of-type]:hidden" : ""}`} style={{maxWidth:"400px"}}>
           <LanguageFlagPicker selectedLang={selectedLang} showGrid={showLangGrid} onToggleGrid={() => setShowLangGrid((p) => !p)}
             onSelect={(code) => { setSelectedLang(code); localStorage.setItem("myLang", code); setShowLangGrid(false); }} />
         </div>
