@@ -3942,13 +3942,13 @@ io.on('connection', (socket) => {
             url: `/room/${roomId}`,
           }).catch(() => {});
         }
-        // → Sender echo
+        // → Sender echo (번역문은 상대에게 보내는 것과 동일하게 — 직원 화면에도 번역 표시)
         socket.emit("receive-message", {
           id: msgId, roomId, roomType,
           senderPid: participantId,
           senderCallSign: senderP?.nativeName || "",
-          originalText: finalText, translatedText: finalText,
-          text: finalText,
+          originalText: finalText, translatedText: translated,
+          text: translated || finalText,
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
 

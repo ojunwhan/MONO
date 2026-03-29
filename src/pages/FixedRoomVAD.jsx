@@ -231,7 +231,7 @@ function InterpretingVAD({
   messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
   isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
   textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
-  setInputMode, STATUS,
+  setInputMode, STATUS, ttsEnabled, setTtsEnabled,
 }) {
   const vad = useVADPipeline({ roomId, participantId, lang: fromLang, roleHint });
 
@@ -290,8 +290,11 @@ function InterpretingVAD({
             </span>
           ); })()}
         </div>
-        {/* RIGHT: mode + end + exit */}
+        {/* RIGHT: TTS + mode + end + exit */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px", justifyContent: "flex-end" }}>
+          <button type="button" title={ttsEnabled ? "TTS 켜짐" : "TTS 꺼짐"} onClick={() => setTtsEnabled((v) => !v)} style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: "20px", padding: "4px 10px", fontSize: "14px", cursor: "pointer", lineHeight: 1 }}>
+            {ttsEnabled ? "🔊" : "🔇"}
+          </button>
           <select value="vad" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 8px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "11px", color: "#374151", cursor: "pointer", outline: "none" }}>
             <option value="ptt">PTT</option>
             <option value="vad">VAD</option>
@@ -364,7 +367,7 @@ function InterpretingPTT({
   messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
   isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
   textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
-  setInputMode, STATUS,
+  setInputMode, STATUS, ttsEnabled, setTtsEnabled,
 }) {
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef(null);
@@ -486,8 +489,11 @@ function InterpretingPTT({
             </span>
           ); })()}
         </div>
-        {/* RIGHT: mode + end + exit */}
+        {/* RIGHT: TTS + mode + end + exit */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "80px", justifyContent: "flex-end" }}>
+          <button type="button" title={ttsEnabled ? "TTS 켜짐" : "TTS 꺼짐"} onClick={() => setTtsEnabled((v) => !v)} style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: "20px", padding: "4px 10px", fontSize: "14px", cursor: "pointer", lineHeight: 1 }}>
+            {ttsEnabled ? "🔊" : "🔇"}
+          </button>
           <select value="ptt" onChange={(e) => setInputMode(e.target.value)} style={{ padding: "4px 8px", borderRadius: "20px", border: "1px solid #e5e7eb", background: "white", fontSize: "11px", color: "#374151", cursor: "pointer", outline: "none" }}>
             <option value="ptt">PTT</option>
             <option value="vad">VAD</option>
@@ -633,6 +639,11 @@ export default function FixedRoomVAD() {
   const messagesEndRef = useRef(null);
   const pendingMergedRef = useRef(false);
   const [textInputValue, setTextInputValue] = useState("");
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const ttsEnabledRef = useRef(true);
+  useEffect(() => {
+    ttsEnabledRef.current = ttsEnabled;
+  }, [ttsEnabled]);
   const messagesRef = useRef([]);
   const historyLoadedRef = useRef(false);
   const initialConnectRef = useRef(true);
@@ -1066,7 +1077,7 @@ export default function FixedRoomVAD() {
         if (existingIdx >= 0) {
           next = prev.map((m, i) =>
             i === existingIdx
-              ? { ...m, translatedText: translatedText ?? m.translatedText, streaming: false }
+              ? { ...m, originalText: originalText ?? m.originalText, translatedText: translatedText ?? m.translatedText, streaming: false }
               : m
           );
         } else {
@@ -1185,6 +1196,7 @@ export default function FixedRoomVAD() {
     };
 
     const onTtsAudio = (data) => {
+      if (!ttsEnabledRef.current) return;
       console.log("[tts:client] received tts_audio", data?.audio?.length, "chars");
       if (!data?.audio) return;
       try {
@@ -1783,6 +1795,8 @@ export default function FixedRoomVAD() {
           handleBack={handleBack}
           setInputMode={setInputMode}
           STATUS={STATUS}
+          ttsEnabled={ttsEnabled}
+          setTtsEnabled={setTtsEnabled}
         />
       )}
       {step === "interpreting" && inputMode === "ptt" && (
@@ -1816,6 +1830,8 @@ export default function FixedRoomVAD() {
           handleBack={handleBack}
           setInputMode={setInputMode}
           STATUS={STATUS}
+          ttsEnabled={ttsEnabled}
+          setTtsEnabled={setTtsEnabled}
         />
       )}
 
