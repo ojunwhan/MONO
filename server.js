@@ -8097,9 +8097,10 @@ app.get("/healthz", async (req, res) => {
 const distPath = path.resolve(__dirname, "dist");
 
 // ✅ COOP/COEP 헤더 — VAD 사용 경로에만 적용 (전체 적용 시 카카오 등 외부 리소스 차단됨)
+// COEP: credentialless — require-corp는 CORP 없는 외부 이미지(예: flagcdn)를 차단함; isolation은 유지
 app.use(["/fixed-room", "/fixed", "/dual-consultation"], (req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
   next();
 });
 
