@@ -789,7 +789,7 @@ export default function ChatScreen() {
             id,
             text: originalText,
             originalText,
-            translatedText: "",
+            translatedText: translatedText || "",
             mine: true,
             senderId: participantIdRef.current,
             status: "sent",
@@ -1057,6 +1057,7 @@ export default function ChatScreen() {
     };
 
     const onTtsAudio = (data) => {
+      if (!voiceEnabledRef.current) return;
       console.log("[tts:client] received tts_audio", data?.audio?.length, "chars");
       if (!data?.audio) return;
       try {
