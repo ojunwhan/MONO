@@ -671,7 +671,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
     });
   };
 
-  const handleDirectStart = useCallback(async (patient) => {
+  const handleDirectStart = useCallback(async (patient, patientLanguage) => {
     if (!patient?.chart_number || !orgCode) return;
     try {
       const res = await fetch("/api/hospital/start-direct-session", {
@@ -681,7 +681,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
         body: JSON.stringify({
           org_code: orgCode,
           chart_number: patient.chart_number,
-          patient_language: "en",
+          patient_language: patientLanguage || "en",
         }),
       });
       const data = await res.json();

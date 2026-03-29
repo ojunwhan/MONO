@@ -1,4 +1,6 @@
 import React, { useState, useCallback } from 'react';
+import { LANGUAGES } from '../constants/languages';
+import { getFlagUrlByLang, getLabelFromCode } from '../constants/languageProfiles';
 
 export default function PatientIdentifierLookup({ orgCode, onPatientFound, onStartSession }) {
   const [identifier, setIdentifier] = useState('');
@@ -9,6 +11,9 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound, onSta
   const [sessions, setSessions] = useState([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [showLangGrid, setShowLangGrid] = useState(false);
+
+  const tier1Langs = LANGUAGES.filter(l => l.tier === 1 && l.code !== 'ko');
 
   const handleSearch = useCallback(async () => {
     const trimmed = identifier.trim();
@@ -227,12 +232,12 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound, onSta
           {onStartSession && (
             <button
               type="button"
-              onClick={() => onStartSession(patient)}
+              onClick={() => setShowLangGrid(prev => !prev)}
               style={{
                 padding: '5px 14px',
                 borderRadius: '6px',
                 border: 'none',
-                background: '#3B82F6',
+                background: showLangGrid ? '#6B7280' : '#3B82F6',
                 color: '#fff',
                 fontSize: '12px',
                 fontWeight: 600,
@@ -241,9 +246,65 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound, onSta
                 flexShrink: 0,
               }}
             >
-              {'\uD1B5\uC5ED \uC2DC\uC791'}
+              {showLangGrid ? '\uC5B8\uC5B4 \uC120\uD0DD \uCDE8\uC18C' : '\uD1B5\uC5ED \uC2DC\uC791'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Language selection grid */}
+      {showLangGrid && isRegistered && patient && (
+        <div style={{
+          marginTop: '8px',
+          padding: '8px',
+          borderRadius: '8px',
+          border: '1px solid #a5d8ff',
+          background: '#fff',
+        }}>
+          <p style={{ fontSize: '11px', color: '#868e96', marginBottom: '6px', textAlign: 'center' }}>
+            {'\uD658\uC790 \uC5B8\uC5B4\uB97C \uC120\uD0DD\uD558\uC138\uC694'}
+          </p>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '6px',
+            maxHeight: '240px',
+            overflowY: 'auto',
+          }}>
+            {tier1Langs.map((lang) => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => {
+                  setShowLangGrid(false);
+                  if (onStartSession) onStartSession(patient, lang.code);
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: '1px solid #dee2e6',
+                  background: '#f8f9fa',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.background = '#e7f5ff'; e.currentTarget.style.borderColor = '#3B82F6'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = '#f8f9fa'; e.currentTarget.style.borderColor = '#dee2e6'; }}
+              >
+                <img
+                  src={getFlagUrlByLang(lang.code)}
+                  alt={lang.name}
+                  style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }}
+                  loading="lazy"
+                />
+                <span style={{ marginTop: '4px', fontSize: '10px', fontWeight: 600, color: '#374151' }}>
+                  {getLabelFromCode(lang.code) || lang.code.toUpperCase()}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
