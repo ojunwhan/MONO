@@ -4445,7 +4445,7 @@ io.on('connection', (socket) => {
     if (otherSocketIdStt && otherSocketIdStt !== socket.id) {
       io.to(otherSocketIdStt).emit("stt:result", sttResultPayload);
     }
-    ackReply({ ok: true, text: normalized });
+    ackReply({ ok: true, text: normalized, translatedText: tt });
     socket.emit("stt:result", sttResultPayload);
   });
 

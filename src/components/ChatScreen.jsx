@@ -269,8 +269,6 @@ export default function ChatScreen() {
   const typingStopTimerRef = useRef(null);
   const readSentRef = useRef(new Set());
   const messagesRef = useRef([]);
-  /** stt:whisper ACK vs stt:result ordering — queue translations when row not yet in list */
-  const pendingSttTranslations = useRef([]);
   const joinStateRef = useRef({});
   const joinPayloadRef = useRef(null);
   const hadJoinedRef = useRef(false);
@@ -1072,30 +1070,6 @@ export default function ChatScreen() {
       }
     };
 
-    /** PTT/stt:whisper: optimistic row has translatedText ""; server later emits stt:result with translation — hydrate bubble (MessageBubble: big = translatedText, small = originalText). */
-    const onSttResult = (data) => {
-      if (data?.final === false) return;
-      if (data?.roomId && data.roomId !== roomIdRef.current) return;
-      if (data?.participantId && data.participantId !== participantIdRef.current) return;
-      const utterance = String(data.text || "").trim();
-      const otherLang = String(data.translatedText || "").trim();
-      if (!utterance || !otherLang) return;
-      if (otherLang === utterance) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex(
-          (m) =>
-            m.mine &&
-            String(m.text || "").trim() === utterance &&
-            (!m.translatedText || String(m.translatedText).trim() === "")
-        );
-        if (idx === -1) return prev;
-        const m = prev[idx];
-        return prev.map((x, i) =>
-          i === idx ? { ...m, text: utterance, translatedText: utterance, originalText: otherLang } : x
-        );
-      });
-    };
-
     socket.on("call-sign-assigned", onCallSignAssigned);
     socket.on("room-context", onRoomContext);
     socket.on("participants", onParticipants);
@@ -1116,7 +1090,6 @@ export default function ChatScreen() {
     socket.on("typing-stop", onTypingStop);
     socket.on("message-status", onMessageStatus);
     socket.on("tts_audio", onTtsAudio);
-    socket.on("stt:result", onSttResult);
 
     return () => {
       document.removeEventListener("touchstart", handleUserGesture);
@@ -1141,37 +1114,8 @@ export default function ChatScreen() {
       socket.off("typing-stop", onTypingStop);
       socket.off("message-status", onMessageStatus);
       socket.off("tts_audio", onTtsAudio);
-      socket.off("stt:result", onSttResult);
     };
   }, [showToast, roomId]);
-
-  useEffect(() => {
-    if (pendingSttTranslations.current.length === 0) return;
-    const now = Date.now();
-    pendingSttTranslations.current = pendingSttTranslations.current.filter((p) => now - p.at < 10000);
-    if (pendingSttTranslations.current.length === 0) return;
-
-    setMessages((prev) => {
-      const pending = [...pendingSttTranslations.current];
-      let changed = false;
-      const updated = prev.map((m) => {
-        if (!m.mine) return m;
-        if (m.translatedText && String(m.translatedText).trim() !== "") return m;
-        const pi = pending.findIndex((p) => String(p.text).trim() === String(m.text || "").trim());
-        if (pi === -1) return m;
-        const [consumed] = pending.splice(pi, 1);
-        changed = true;
-        return {
-          ...m,
-          originalText: consumed.translatedText,
-          translatedText: m.text,
-          text: m.text,
-        };
-      });
-      pendingSttTranslations.current = pending;
-      return changed ? updated : prev;
-    });
-  }, [messages]);
 
   useEffect(() => {
     initBrowserTts();
@@ -1607,17 +1551,18 @@ export default function ChatScreen() {
     setMenuMessage(null);
   }, []);
 
-  const sendTypedMessage = async (rawText) => {
+  const sendTypedMessage = async (rawText, translatedTextFromStt) => {
     const text = (rawText || "").trim();
     if (!text) return;
+    const tr = String(translatedTextFromStt || "").trim();
     const msgId = uuidv4();
     seenIdsRef.current.add(msgId);
     const queued = !(await sendOrQueue({ roomId, msgId, text, participantId }));
     setMessages((prev) => [...prev, {
       id: msgId,
       text,
-      originalText: text,
-      translatedText: "",
+      originalText: tr,
+      translatedText: text,
       mine: true,
       senderId: participantIdRef.current,
       status: queued ? "sending" : "sent",
@@ -2093,11 +2038,11 @@ export default function ChatScreen() {
                     setSttInterimText(text || "");
                     autosize();
                   }}
-                  onSpeechFinal={async (text) => {
+                  onSpeechFinal={async (text, translatedTextFromStt) => {
                     const finalText = String(text || "").trim();
                     setSttInterimText("");
                     if (!finalText) return;
-                    await sendTypedMessage(finalText);
+                    await sendTypedMessage(finalText, translatedTextFromStt);
                     resetHeight();
                   }}
                   compact

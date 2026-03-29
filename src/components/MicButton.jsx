@@ -192,7 +192,9 @@ export default function MicButton({
                   mimeType: mediaMimeTypeRef.current || "audio/webm",
                 },
                 (ack) => {
-                  if (ack?.ok && ack?.text) onSpeechFinal?.(String(ack.text).trim());
+                  if (ack?.ok && ack?.text) {
+                    onSpeechFinal?.(String(ack.text).trim(), ack.translatedText || "");
+                  }
                   resolve();
                 }
               );
