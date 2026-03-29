@@ -4095,7 +4095,7 @@ io.on('connection', (socket) => {
         socket.emit("receive-message", {
           id: msgId, roomId, roomType,
           senderPid: participantId, senderCallSign,
-          originalText: cleanText, translatedText: cleanText,
+          originalText: translated, translatedText: cleanText,
           text: cleanText,
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
@@ -4130,6 +4130,7 @@ io.on('connection', (socket) => {
       }
       console.log(`[broadcast] fan-out to ${Object.keys(langGroups).length} language(s)`);
 
+      let senderEchoTranslated = finalText;
       for (const [lang, listeners] of Object.entries(langGroups)) {
         let translated = finalText;
         if (fromLang !== lang) {
@@ -4149,6 +4150,7 @@ io.on('connection', (socket) => {
           } catch (e) { console.warn("[translate]:", e?.message); }
         }
         if (isGarbageText(translated)) continue;
+        senderEchoTranslated = translated;
 
         for (const listener of listeners) {
           const listenerPid = Object.keys(meta.participants).find(
@@ -4214,7 +4216,7 @@ io.on('connection', (socket) => {
       socket.emit("receive-message", {
         id: msgId, roomId, roomType,
         senderPid: participantId, senderCallSign,
-        originalText: finalText, translatedText: finalText,
+        originalText: senderEchoTranslated, translatedText: finalText,
         text: finalText,
         isDraft: true, at: Date.now(), timestamp: Date.now(),
       });
@@ -4607,9 +4609,9 @@ io.on('connection', (socket) => {
         socket.emit("receive-message", {
           id,
           roomId,
-          text: draft,
-          translatedText: draft,
-          originalText: trimmedText,
+          text: trimmedText,
+          translatedText: trimmedText,
+          originalText: draft,
           fromLang,
           toLang,
           participantId,
