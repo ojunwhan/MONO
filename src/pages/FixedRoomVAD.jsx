@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
+import { enqueueTts, unlockAudio, setActiveRoom } from "../audio/ttsPlayer";
 import { v4 as uuidv4 } from "uuid";
 import { getLanguageProfileByCode, getFlagUrlByLang } from "../constants/languageProfiles";
 import { getLanguageByCode } from "../constants/languages";
@@ -931,6 +932,16 @@ export default function FixedRoomVAD() {
 
   // ── 소켓: 이벤트 수신 ──
   useEffect(() => {
+    // Unlock AudioContext on first user gesture (needed for mobile browsers)
+    const handleUserGesture = () => {
+      unlockAudio();
+      document.removeEventListener("touchstart", handleUserGesture);
+      document.removeEventListener("click", handleUserGesture);
+    };
+    document.addEventListener("touchstart", handleUserGesture, { once: true });
+    document.addEventListener("click", handleUserGesture, { once: true });
+    if (roomId) setActiveRoom(roomId);
+
     // 상대방 입장
     const onPartnerJoined = (payload) => {
       const profile = getLanguageProfileByCode(payload?.peerLang || "");
@@ -1186,8 +1197,11 @@ export default function FixedRoomVAD() {
     socket.on("fixed-room:end", onFixedRoomEnd);
     socket.on("room:ended", onRoomEnded);
     socket.on("hospital:session-ended", onHospitalSessionEnded);
+    socket.on("tts_audio", onTtsAudio);
 
     return () => {
+      document.removeEventListener("touchstart", handleUserGesture);
+      document.removeEventListener("click", handleUserGesture);
       socket.off("partner-joined", onPartnerJoined);
       socket.off("participants", onParticipants);
       socket.off("partner-left", onPartnerLeft);
@@ -1201,6 +1215,7 @@ export default function FixedRoomVAD() {
       socket.off("fixed-room:end", onFixedRoomEnd);
       socket.off("room:ended", onRoomEnded);
       socket.off("hospital:session-ended", onHospitalSessionEnded);
+      socket.off("tts_audio", onTtsAudio);
     };
   }, [roomId, participantId, step, active, isOwner, isGuest, doStartInterpreting, doStopInterpreting, hospitalDept, hospitalTemplate, navigate, roleHint, fromLang, patientToken, partnerInfo, saveMessages, autoReset, orgCode, deptCode, fetchVisitHistory, consultationKioskRoomId, returnToReceptionUrl]);
 

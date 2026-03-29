@@ -24,6 +24,7 @@ import {
   speakText,
   cancelSpeech,
 } from "../audio/browserTts";
+import { enqueueTts, unlockAudio, setActiveRoom } from "../audio/ttsPlayer";
 import { playNotificationSound, unlockNotificationSound } from "../audio/notificationSound";
 import { subscribeToPush } from "../push/index";
 import { getFlagUrlByLang, getLabelFromCode, getLanguageProfileByCode } from "../constants/languageProfiles";
@@ -677,6 +678,16 @@ export default function ChatScreen() {
 
   // ─── Socket event listeners (register once) ───
   useEffect(() => {
+    // Unlock AudioContext on first user gesture (needed for mobile browsers)
+    const handleUserGesture = () => {
+      unlockAudio();
+      document.removeEventListener("touchstart", handleUserGesture);
+      document.removeEventListener("click", handleUserGesture);
+    };
+    document.addEventListener("touchstart", handleUserGesture, { once: true });
+    document.addEventListener("click", handleUserGesture, { once: true });
+    if (roomId) setActiveRoom(roomId);
+
     const onCallSignAssigned = (payload) => {
       const { callSign, siteContext: ctx } = payload || {};
       if (callSign) {
@@ -1045,6 +1056,19 @@ export default function ChatScreen() {
       if (payload.peerLang) setPartnerLang(payload.peerLang);
     };
 
+    const onTtsAudio = (data) => {
+      console.log("[tts:client] received tts_audio", data?.audio?.length, "chars");
+      if (!data?.audio) return;
+      try {
+        const raw = atob(data.audio);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        enqueueTts(bytes.buffer, roomId);
+      } catch (e) {
+        console.warn("[tts:client] playback error:", e);
+      }
+    };
+
     socket.on("call-sign-assigned", onCallSignAssigned);
     socket.on("room-context", onRoomContext);
     socket.on("participants", onParticipants);
@@ -1064,8 +1088,11 @@ export default function ChatScreen() {
     socket.on("typing-start", onTypingStart);
     socket.on("typing-stop", onTypingStop);
     socket.on("message-status", onMessageStatus);
+    socket.on("tts_audio", onTtsAudio);
 
     return () => {
+      document.removeEventListener("touchstart", handleUserGesture);
+      document.removeEventListener("click", handleUserGesture);
       socket.off("call-sign-assigned", onCallSignAssigned);
       socket.off("room-context", onRoomContext);
       socket.off("participants", onParticipants);
@@ -1085,8 +1112,9 @@ export default function ChatScreen() {
       socket.off("typing-start", onTypingStart);
       socket.off("typing-stop", onTypingStop);
       socket.off("message-status", onMessageStatus);
+      socket.off("tts_audio", onTtsAudio);
     };
-  }, [showToast]);
+  }, [showToast, roomId]);
 
   useEffect(() => {
     initBrowserTts();
