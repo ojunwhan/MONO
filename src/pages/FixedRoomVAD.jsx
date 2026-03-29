@@ -358,6 +358,8 @@ function InterpretingVAD({
 // ── PTT 전용: interpreting 단계 (VAD 미사용, MediaRecorder로 녹음 → PCM16 전송) ──
 function InterpretingPTT({
   roomId, participantId, fromLang, roleHint, pauseVadRef,
+  orgCode,
+  patientLangCode,
   messages, messagesEndRef, status, statusColor, hospitalDept, myProfile, partnerLangDisplay, partnerFlagUrl, partnerInfo,
   isOwner, historyPanelOpen, setHistoryPanelOpen, patientHistory, historyShowAll, setHistoryShowAll,
   textInputValue, setTextInputValue, sendTextMessage, handleStopInterpreting, handleBack,
@@ -367,6 +369,21 @@ function InterpretingPTT({
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
+  const pttLangRef = useRef(null);
+  const pttRoleRef = useRef(null);
+  const [pttKeys, setPttKeys] = useState({ staffKey: null, patientKey: null });
+
+  useEffect(() => {
+    if (!orgCode) return;
+    const saved = localStorage.getItem(`mono_ptt_devices_${orgCode}`);
+    if (saved) {
+      try {
+        setPttKeys(JSON.parse(saved));
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [orgCode]);
 
   const handlePTTClick = useCallback(async () => {
     if (recording) {
@@ -394,9 +411,19 @@ function InterpretingPTT({
           const buffer = await ctx.decodeAudioData(arrayBuffer);
           const float32 = buffer.getChannelData(0);
           const sr = buffer.sampleRate;
-          sendPTTAudioToServer({ roomId, participantId, lang: fromLang, audioFloat32: float32, sampleRate: sr, roleHint });
+          sendPTTAudioToServer({
+            roomId,
+            participantId,
+            lang: pttLangRef.current || fromLang,
+            audioFloat32: float32,
+            sampleRate: sr,
+            roleHint: pttRoleRef.current || roleHint,
+          });
         } catch (err) {
           console.warn("[PTT] decode/send failed", err);
+        } finally {
+          pttLangRef.current = null;
+          pttRoleRef.current = null;
         }
         setRecording(false);
       };
@@ -404,8 +431,39 @@ function InterpretingPTT({
       setRecording(true);
     } catch (err) {
       console.warn("[PTT] getUserMedia failed", err);
+      pttLangRef.current = null;
+      pttRoleRef.current = null;
     }
   }, [recording, roomId, participantId, fromLang, roleHint]);
+
+  useEffect(() => {
+    const { staffKey, patientKey } = pttKeys;
+    if (!staffKey && !patientKey) return undefined;
+
+    const handleKeypadPress = (e) => {
+      const code = e.code;
+      const isStaffKey = staffKey && code === staffKey.code;
+      const isPatientKey = patientKey && code === patientKey.code;
+      if (!isStaffKey && !isPatientKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        recorderRef.current.stop();
+        return;
+      }
+      if (isStaffKey) {
+        pttLangRef.current = "ko";
+        pttRoleRef.current = "host";
+      } else if (isPatientKey) {
+        pttLangRef.current = patientLangCode || "en";
+        pttRoleRef.current = "guest";
+      }
+      handlePTTClick();
+    };
+
+    window.addEventListener("keydown", handleKeypadPress);
+    return () => window.removeEventListener("keydown", handleKeypadPress);
+  }, [pttKeys, handlePTTClick, patientLangCode]);
 
   const displayStatus = recording ? "🎤 녹음 중" : status;
 
@@ -1705,6 +1763,8 @@ export default function FixedRoomVAD() {
           participantId={participantId}
           fromLang={fromLang}
           roleHint={roleHint}
+          orgCode={orgCode}
+          patientLangCode={effectivePartnerLang}
           pauseVadRef={pauseVadRef}
           messages={messages}
           messagesEndRef={messagesEndRef}
