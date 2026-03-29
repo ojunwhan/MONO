@@ -141,10 +141,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
       marginBottom: '8px',
       border: '1px solid #dee2e6',
       boxSizing: 'border-box',
-      maxWidth: '400px',
       width: '100%',
-      marginLeft: 'auto',
-      marginRight: 'auto',
     }}>
       {/* Row 1: Identifier search */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
