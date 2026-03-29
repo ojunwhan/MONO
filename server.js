@@ -5083,6 +5083,9 @@ app.post("/api/auth/convert-guest", async (req, res) => {
         await dbRun("ALTER TABLE hospital_patients ADD COLUMN dept TEXT");
       }
     } catch (_) {}
+    // patient_identifier — passport, reservation number, etc.
+    try { await dbExec(`ALTER TABLE hospital_patients ADD COLUMN patient_identifier TEXT`); } catch (e) {}
+    try { await dbExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hp_pid_org ON hospital_patients(patient_identifier, hospital_id) WHERE patient_identifier IS NOT NULL`); } catch (e) {}
     try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_hp_patient_token ON hospital_patients(patient_token);`); } catch (_) {}
 
     // hospital_sessions에 patient_token 컬럼 추가 (기존 테이블 호환)
@@ -6017,6 +6020,122 @@ app.post('/api/hospital/join', async (req, res) => {
     console.error('[hospital:join] error:', e?.message);
     trackUsageError(e, { source: 'hospital:join' });
     res.status(500).json({ error: 'join_failed' });
+  }
+});
+
+// ===== Patient Identifier Lookup or Create =====
+app.post('/api/hospital/patient/lookup-or-create', async (req, res) => {
+  try {
+    const { patient_identifier, org_code, language, name } = req.body;
+
+    if (!patient_identifier || !org_code) {
+      return res.status(400).json({ error: 'patient_identifier and org_code are required' });
+    }
+
+    const trimmedId = patient_identifier.trim();
+    if (trimmedId.length < 2) {
+      return res.status(400).json({ error: 'patient_identifier too short' });
+    }
+
+    // Look up existing patient by identifier + org
+    const existing = await dbGet(
+      `SELECT * FROM hospital_patients WHERE patient_identifier = ? AND hospital_id = ? LIMIT 1`,
+      [trimmedId, org_code]
+    );
+
+    if (existing) {
+      const patient = existing;
+
+      // Update last_visit_at
+      const now = new Date().toISOString();
+      await dbRun(
+        `UPDATE hospital_patients SET last_visit_at = ?, updated_at = ? WHERE id = ?`,
+        [now, now, patient.id]
+      );
+
+      // Load previous sessions for this patient
+      const sessions = await dbAll(
+        `SELECT id, room_id, status, created_at, ended_at, host_lang, guest_lang, department, ai_summary
+         FROM hospital_sessions
+         WHERE chart_number = ? AND org_code = ?
+         ORDER BY created_at DESC LIMIT 20`,
+        [patient.chart_number, org_code]
+      );
+
+      const updatedPatient = await dbGet('SELECT * FROM hospital_patients WHERE id = ?', [patient.id]);
+      return res.json({
+        status: 'existing',
+        patient: { ...updatedPatient, last_visit_at: now },
+        sessions,
+        message: `Returning patient found: ${patient.chart_number}`
+      });
+    }
+
+    // New patient — generate PT number
+    let chartNumber;
+    let attempts = 0;
+    while (attempts < 10) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = 'PT-';
+      for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+      const dup = await dbGet(`SELECT 1 AS x FROM hospital_sessions WHERE chart_number = ? LIMIT 1`, [code]);
+      if (!dup) { chartNumber = code; break; }
+      attempts++;
+    }
+    if (!chartNumber) {
+      return res.status(500).json({ error: 'Failed to generate unique PT number' });
+    }
+
+    const now = new Date().toISOString();
+    const patientId = `patient_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    await dbRun(
+      `INSERT INTO hospital_patients (id, chart_number, language, hospital_id, name, patient_identifier, created_at, updated_at, first_visit_at, last_visit_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [patientId, chartNumber, language || 'en', org_code, name || '', trimmedId, now, now, now, now]
+    );
+
+    const newPatient = await dbGet(
+      `SELECT * FROM hospital_patients WHERE id = ? LIMIT 1`,
+      [patientId]
+    );
+
+    return res.json({
+      status: 'new',
+      patient: newPatient,
+      sessions: [],
+      message: `New patient created: ${chartNumber}`
+    });
+
+  } catch (err) {
+    console.error('[lookup-or-create] Error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== Get patient by identifier (read-only lookup) =====
+app.get('/api/hospital/patient-by-identifier/:identifier', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const org_code = req.query.org_code;
+
+    if (!identifier || !org_code) {
+      return res.status(400).json({ error: 'identifier and org_code query param required' });
+    }
+
+    const row = await dbGet(
+      `SELECT * FROM hospital_patients WHERE patient_identifier = ? AND hospital_id = ? LIMIT 1`,
+      [identifier.trim(), org_code]
+    );
+
+    if (!row) {
+      return res.json({ found: false, patient: null });
+    }
+
+    return res.json({ found: true, patient: row });
+  } catch (err) {
+    console.error('[patient-by-identifier] Error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
