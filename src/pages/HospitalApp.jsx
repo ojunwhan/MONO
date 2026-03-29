@@ -21,6 +21,7 @@ import {
   Users,
   FolderOpen,
 } from "lucide-react";
+import PatientIdentifierLookup from "../components/PatientIdentifierLookup";
 
 function HospitalLogo() {
   return (
@@ -450,6 +451,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const [hospitalName, setHospitalName] = useState(null);
   const joinedRef = useRef(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [identifiedPatient, setIdentifiedPatient] = useState(null);
 
   useEffect(() => {
     if (!orgCode) return;
@@ -711,6 +713,9 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
               <span className={`inline-block rounded-full ${staffJoined ? "bg-green-500" : "bg-yellow-500"}`} style={staffJoined ? {width:"10px",height:"10px",animation:"pulse-dot 1.5s infinite",boxShadow:"0 0 0 3px rgba(34,197,94,0.3)"} : {width:"6px",height:"6px"}} />
               {staffJoined ? "Waiting \u2014 Ready for patient QR scan" : "Connecting..."}
             </div>
+            {isReception && !kiosk && (
+              <PatientIdentifierLookup orgCode={orgCode} onPatientFound={(data) => setIdentifiedPatient(data)} />
+            )}
             {waitingPatients.length > 0 && (
               <div className="w-full max-w-[400px] mb-2 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
