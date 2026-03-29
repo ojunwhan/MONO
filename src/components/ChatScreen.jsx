@@ -234,6 +234,9 @@ export default function ChatScreen() {
   // ── TTS auto-play toggle: OFF by default ──
   const voiceEnabledRef = useRef(localStorage.getItem("mono.voice") === "1");
   const [voiceEnabled, setVoiceEnabled] = useState(voiceEnabledRef.current);
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+  }, [voiceEnabled]);
   const [canSpeakCurrentLang, setCanSpeakCurrentLang] = useState(false);
   const showToast = useCallback((msg) => {
     setToast(msg);

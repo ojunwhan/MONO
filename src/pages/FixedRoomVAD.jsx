@@ -639,8 +639,8 @@ export default function FixedRoomVAD() {
   const messagesEndRef = useRef(null);
   const pendingMergedRef = useRef(false);
   const [textInputValue, setTextInputValue] = useState("");
-  const [ttsEnabled, setTtsEnabled] = useState(true);
-  const ttsEnabledRef = useRef(true);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const ttsEnabledRef = useRef(false);
   useEffect(() => {
     ttsEnabledRef.current = ttsEnabled;
   }, [ttsEnabled]);
