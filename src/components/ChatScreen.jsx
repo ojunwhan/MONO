@@ -1070,6 +1070,30 @@ export default function ChatScreen() {
       }
     };
 
+    /** PTT/stt:whisper: optimistic row has translatedText ""; server later emits stt:result with translation — hydrate bubble (MessageBubble: big = translatedText, small = originalText). */
+    const onSttResult = (data) => {
+      if (data?.final === false) return;
+      if (data?.roomId && data.roomId !== roomIdRef.current) return;
+      if (data?.participantId && data.participantId !== participantIdRef.current) return;
+      const utterance = String(data.text || "").trim();
+      const otherLang = String(data.translatedText || "").trim();
+      if (!utterance || !otherLang) return;
+      if (otherLang === utterance) return;
+      setMessages((prev) => {
+        const idx = prev.findIndex(
+          (m) =>
+            m.mine &&
+            String(m.text || "").trim() === utterance &&
+            (!m.translatedText || String(m.translatedText).trim() === "")
+        );
+        if (idx === -1) return prev;
+        const m = prev[idx];
+        return prev.map((x, i) =>
+          i === idx ? { ...m, text: utterance, translatedText: utterance, originalText: otherLang } : x
+        );
+      });
+    };
+
     socket.on("call-sign-assigned", onCallSignAssigned);
     socket.on("room-context", onRoomContext);
     socket.on("participants", onParticipants);
@@ -1090,6 +1114,7 @@ export default function ChatScreen() {
     socket.on("typing-stop", onTypingStop);
     socket.on("message-status", onMessageStatus);
     socket.on("tts_audio", onTtsAudio);
+    socket.on("stt:result", onSttResult);
 
     return () => {
       document.removeEventListener("touchstart", handleUserGesture);
@@ -1114,6 +1139,7 @@ export default function ChatScreen() {
       socket.off("typing-stop", onTypingStop);
       socket.off("message-status", onMessageStatus);
       socket.off("tts_audio", onTtsAudio);
+      socket.off("stt:result", onSttResult);
     };
   }, [showToast, roomId]);
 
