@@ -1184,6 +1184,19 @@ export default function FixedRoomVAD() {
       })();
     };
 
+    const onTtsAudio = (data) => {
+      console.log("[tts:client] received tts_audio", data?.audio?.length, "chars");
+      if (!data?.audio) return;
+      try {
+        const raw = atob(data.audio);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        enqueueTts(bytes.buffer, roomId);
+      } catch (e) {
+        console.warn("[tts:client] playback error:", e);
+      }
+    };
+
     socket.on("partner-joined", onPartnerJoined);
     socket.on("participants", onParticipants);
     socket.on("partner-left", onPartnerLeft);
