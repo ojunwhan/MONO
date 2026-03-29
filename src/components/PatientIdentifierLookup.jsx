@@ -109,22 +109,10 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     setError('');
   }, []);
 
-  const LANGS = [
-    { code: 'en', label: 'English' },
-    { code: 'zh', label: '\u4E2D\u6587' },
-    { code: 'ja', label: '\u65E5\u672C\u8A9E' },
-    { code: 'vi', label: 'Ti\u1EBFng Vi\u1EC7t' },
-    { code: 'th', label: '\u0E44\u0E17\u0E22' },
-    { code: 'ru', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439' },
-    { code: 'mn', label: '\u041C\u043E\u043D\u0433\u043E\u043B' },
-    { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629' },
-  ];
-
   const boxStyle = {
     background: '#f8f9fa',
     borderRadius: '8px',
     padding: '8px 12px',
-    width: '100%',
     boxSizing: 'border-box',
     marginBottom: '8px',
     border: '1px solid #e0e0e0',
@@ -200,14 +188,6 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
               disabled={loading}
               style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid #dee2e6', fontSize: '13px', outline: 'none' }}
             />
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              disabled={loading}
-              style={{ padding: '6px', borderRadius: '6px', border: '1px solid #dee2e6', fontSize: '12px', background: '#fff' }}
-            >
-              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-            </select>
             <button
               onClick={handleRegister}
               disabled={loading || !name.trim()}
