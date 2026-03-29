@@ -3947,7 +3947,7 @@ io.on('connection', (socket) => {
           id: msgId, roomId, roomType,
           senderPid: participantId,
           senderCallSign: senderP?.nativeName || "",
-          originalText: finalText, translatedText: translated,
+          originalText: translated, translatedText: finalText,
           text: finalText,
           isDraft: true, at: Date.now(), timestamp: Date.now(),
         });
