@@ -677,7 +677,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
   const headerHospitalName = hospitalName || displayTitle;
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-[var(--color-bg)] text-[var(--color-text)] overflow-x-hidden">
       <div className="flex-none border-b border-[var(--color-border)]" style={{padding:isMobile ? "10px 12px" : "12px 16px"}}>
         <div className="flex items-center justify-between mx-auto w-full" style={{maxWidth: isMobile ? "100%" : "520px"}}>
           <HospitalLogo />
@@ -697,7 +697,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           </div>
         </div>
       </div>
-      <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent:"center",minHeight:"80vh",maxWidth: isMobile ? "100%" : "520px",padding: isMobile ? "12px 16px" : isTablet ? "24px" : "32px"}}>
+      <div className="flex-1 flex flex-col items-center mx-auto w-full" style={{justifyContent: isMobile ? "flex-start" : "center",overflowY:"auto",maxWidth: isMobile ? "100%" : "520px",padding: isMobile ? "16px 16px 8px" : isTablet ? "24px" : "32px"}}>
         <div className="text-center mb-6">
           {!isReception && (
           <div style={{display:"flex",justifyContent:"center",marginBottom:"12px",fontSize:"clamp(40px, 8vw, 56px)",lineHeight:1}}>{"\uD83C\uDFE5"}</div>
