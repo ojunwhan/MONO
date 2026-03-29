@@ -205,6 +205,13 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         <div style={{ color: '#e03131', fontSize: '12px', marginTop: '4px', padding: '2px 6px' }}>{error}</div>
       )}
 
+      {/* Not found */}
+      {searchDone && !found && !error && (
+        <div style={{ marginTop: '6px', padding: '6px 10px', borderRadius: '6px', background: '#fff3cd', border: '1px solid #ffc107', fontSize: '12px', color: '#856404' }}>
+          {'\u26A0\uFE0F \uB4F1\uB85D\uB418\uC9C0 \uC54A\uC740 \uBC88\uD638\uC785\uB2C8\uB2E4. \uC544\uB798 \uC5EC\uAD8C \uC774\uB984\uC744 \uC785\uB825\uD558\uACE0 \uB4F1\uB85D\uD574\uC8FC\uC138\uC694.'}
+        </div>
+      )}
+
       {/* Result */}
       {isRegistered && patient && (
         <div style={{
