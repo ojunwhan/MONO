@@ -121,6 +121,7 @@ export default function DualConsultation() {
   const [copiedMonitor, setCopiedMonitor] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
   const staffRecordingRef = useRef(false);
+  const patientRecordingRef = useRef(false);
 
   const participantIdRef = useRef("");
   const roomIdRef = useRef("");
@@ -156,6 +157,10 @@ export default function DualConsultation() {
   useEffect(() => {
     patientLangRef.current = patientLang;
   }, [patientLang]);
+
+  useEffect(() => {
+    patientRecordingRef.current = patientRecording;
+  }, [patientRecording]);
 
   /** Re-bind participantId ↔ socket on every VAD start/restart (mic device change, pause/resume, tab visibility). Dual mode registers staff + patient PIDs. */
   const emitJoinForVadListen = useCallback(() => {
@@ -636,6 +641,7 @@ export default function DualConsultation() {
     patientStreamRef.current?.getTracks?.().forEach((t) => t.stop());
     patientStreamRef.current = null;
     patientRecorderRef.current = null;
+    patientRecordingRef.current = false;
     setPatientRecording(false);
   }, []);
 
@@ -730,7 +736,7 @@ export default function DualConsultation() {
       stopStaffRecording();
       return;
     }
-    if (patientRecording) {
+    if (patientRecordingRef.current) {
       stopPatientRecording();
       return;
     }
@@ -755,19 +761,22 @@ export default function DualConsultation() {
         }
         patientStreamRef.current?.getTracks?.().forEach((t) => t.stop());
         patientStreamRef.current = null;
+        patientRecordingRef.current = false;
         setPatientRecording(false);
       };
       recorder.start(300);
       patientRecorderRef.current = recorder;
       setPatientRecording(true);
+      patientRecordingRef.current = true;
     } catch (e) {
       console.warn("[DualConsultation] patient mic error:", e?.message);
       patientStreamRef.current?.getTracks?.().forEach((t) => t.stop());
       patientStreamRef.current = null;
       patientRecorderRef.current = null;
+      patientRecordingRef.current = false;
       setPatientRecording(false);
     }
-  }, [patientRecording, staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
+  }, [staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
   // Bluetooth remote / keyboard: Volume Up toggles patient PTT (same as patient mic button); PTT tab only.
   useEffect(() => {
