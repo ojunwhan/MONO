@@ -7,7 +7,8 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
   const [found, setFound] = useState(false);
   const [patient, setPatient] = useState(null);
   const [sessions, setSessions] = useState([]);
-  const [name, setName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [error, setError] = useState('');
 
   const handleSearch = useCallback(async () => {
@@ -23,7 +24,8 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     setFound(false);
     setPatient(null);
     setSessions([]);
-    setName('');
+    setLastName('');
+    setFirstName('');
 
     try {
       const res = await fetch(
@@ -59,17 +61,26 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
 
   const handleRegister = useCallback(async () => {
     const trimmedId = identifier.trim();
-    const trimmedName = name.trim();
+    const trimmedLast = lastName.trim().toUpperCase();
+    const trimmedFirst = firstName.trim().toUpperCase();
     if (!trimmedId || trimmedId.length < 2) {
       setError('\uC2DD\uBCC4\uBC88\uD638\uB97C \uBA3C\uC800 \uC785\uB825\uD558\uC138\uC694');
       return;
     }
-    if (!trimmedName) {
-      setError('\uC5EC\uAD8C \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694');
+    if (!trimmedLast) {
+      setError('\uC131(Last Name)\uC744 \uC785\uB825\uD558\uC138\uC694');
+      return;
+    }
+    if (!trimmedFirst) {
+      setError('\uC774\uB984(First Name)\uC744 \uC785\uB825\uD558\uC138\uC694');
       return;
     }
     setLoading(true);
     setError('');
+
+    // Combine as "LASTNAME FIRSTNAME" — matches Korean hospital passport registration format
+    const fullName = `${trimmedLast} ${trimmedFirst}`;
+
     try {
       const res = await fetch('/api/hospital/patient/lookup-or-create', {
         method: 'POST',
@@ -77,7 +88,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         body: JSON.stringify({
           patient_identifier: trimmedId,
           org_code: orgCode,
-          name: trimmedName,
+          name: fullName,
           language: 'en',
         }),
       });
@@ -96,7 +107,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     } finally {
       setLoading(false);
     }
-  }, [identifier, orgCode, name, onPatientFound]);
+  }, [identifier, orgCode, lastName, firstName, onPatientFound]);
 
   const handleClear = useCallback(() => {
     setIdentifier('');
@@ -104,9 +115,34 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     setFound(false);
     setPatient(null);
     setSessions([]);
-    setName('');
+    setLastName('');
+    setFirstName('');
     setError('');
   }, []);
+
+  const inputStyle = {
+    padding: '7px 10px',
+    borderRadius: '6px',
+    border: '1px solid #ced4da',
+    fontSize: '13px',
+    outline: 'none',
+  };
+
+  const btnBlue = {
+    padding: '7px 16px', borderRadius: '6px', border: 'none',
+    background: '#4A90D9', color: '#fff',
+    fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+
+  const btnGreen = {
+    padding: '7px 16px', borderRadius: '6px', border: 'none',
+    background: '#2f9e44', color: '#fff',
+    fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+
+  const isRegistered = searchDone && found;
 
   return (
     <div style={{
@@ -119,9 +155,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     }}>
       {/* Row 1: Identifier search */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ fontSize: '13px', fontWeight: 600, color: '#495057', whiteSpace: 'nowrap' }}>
-          {'\uD83C\uDD94'}
-        </span>
+        <span style={{ fontSize: '14px' }}>{'\uD83C\uDD94'}</span>
         <input
           type="text"
           value={identifier}
@@ -129,16 +163,12 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
           onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleSearch(); }}
           placeholder={'\uC5EC\uAD8C\uBC88\uD638 / \uC608\uC57D\uBC88\uD638'}
           disabled={loading}
-          style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid #ced4da', fontSize: '13px', outline: 'none' }}
+          style={{ ...inputStyle, flex: 1 }}
         />
         <button
           onClick={handleSearch}
           disabled={loading || !identifier.trim()}
-          style={{
-            padding: '7px 16px', borderRadius: '6px', border: 'none',
-            background: loading ? '#adb5bd' : '#4A90D9', color: '#fff',
-            fontSize: '13px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-          }}
+          style={{ ...btnBlue, background: loading ? '#adb5bd' : '#4A90D9', cursor: loading ? 'not-allowed' : 'pointer' }}
         >
           {loading ? '...' : '\uC870\uD68C'}
         </button>
@@ -152,28 +182,42 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         )}
       </div>
 
-      {/* Row 2: Name input + Register (always visible) */}
+      {/* Row 2: Last Name + First Name + Register */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input
           type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
-          placeholder={'\uC5EC\uAD8C \uC774\uB984 (Last First)'}
-          disabled={loading || (searchDone && found)}
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          placeholder={'Last Name (\uC131)'}
+          disabled={loading || isRegistered}
           style={{
-            flex: 1, padding: '7px 10px', borderRadius: '6px',
-            border: '1px solid #ced4da', fontSize: '13px', outline: 'none',
-            background: (searchDone && found) ? '#f1f3f5' : '#fff',
+            ...inputStyle,
+            flex: 1,
+            textTransform: 'uppercase',
+            background: isRegistered ? '#f1f3f5' : '#fff',
+          }}
+        />
+        <input
+          type="text"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
+          placeholder={'First Name (\uC774\uB984)'}
+          disabled={loading || isRegistered}
+          style={{
+            ...inputStyle,
+            flex: 1,
+            textTransform: 'uppercase',
+            background: isRegistered ? '#f1f3f5' : '#fff',
           }}
         />
         <button
           onClick={handleRegister}
-          disabled={loading || !identifier.trim() || !name.trim() || (searchDone && found)}
+          disabled={loading || !identifier.trim() || !lastName.trim() || !firstName.trim() || isRegistered}
           style={{
-            padding: '7px 16px', borderRadius: '6px', border: 'none',
-            background: (loading || (searchDone && found)) ? '#adb5bd' : '#2f9e44', color: '#fff',
-            fontSize: '13px', fontWeight: 600, cursor: (loading || (searchDone && found)) ? 'not-allowed' : 'pointer',
+            ...btnGreen,
+            background: (loading || isRegistered) ? '#adb5bd' : '#2f9e44',
+            cursor: (loading || isRegistered) ? 'not-allowed' : 'pointer',
           }}
         >
           {'\uB4F1\uB85D'}
@@ -185,26 +229,19 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         <div style={{ color: '#e03131', fontSize: '12px', marginTop: '4px', padding: '2px 6px' }}>{error}</div>
       )}
 
-      {/* Result: found patient */}
-      {searchDone && found && patient && (
+      {/* Result */}
+      {isRegistered && patient && (
         <div style={{
           marginTop: '6px', padding: '6px 10px', borderRadius: '6px',
-          background: '#e7f5ff', border: '1px solid #a5d8ff', fontSize: '12px', color: '#1971c2',
+          background: sessions.length > 0 ? '#e7f5ff' : '#ebfbee',
+          border: `1px solid ${sessions.length > 0 ? '#a5d8ff' : '#b2f2bb'}`,
+          fontSize: '12px',
+          color: sessions.length > 0 ? '#1971c2' : '#2f9e44',
         }}>
-          <strong>{'\uC7AC\uBC29\uBB38'}</strong>{' \u2014 '}
-          PT: {patient.chart_number}
+          {sessions.length > 0 ? '\uD83D\uDD04 \uC7AC\uBC29\uBB38' : '\u2705 \uC2E0\uADDC \uB4F1\uB85D'}
+          {' \u2014 PT: '}{patient.chart_number}
           {patient.name && <span>{' \u00B7 '}{patient.name}</span>}
           {sessions.length > 0 && <span>{' \u00B7 \uC774\uC804 '}{sessions.length}{'\uAC74'}</span>}
-        </div>
-      )}
-
-      {/* Result: newly registered */}
-      {searchDone && found && patient && patient.first_visit_at === patient.last_visit_at && sessions.length === 0 && (
-        <div style={{
-          marginTop: '4px', padding: '6px 10px', borderRadius: '6px',
-          background: '#ebfbee', border: '1px solid #b2f2bb', fontSize: '12px', color: '#2f9e44',
-        }}>
-          {'\u2705 \uC2E0\uADDC \uB4F1\uB85D \uC644\uB8CC'} \u2014 PT: {patient.chart_number}
         </div>
       )}
     </div>
