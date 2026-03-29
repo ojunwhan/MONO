@@ -148,7 +148,6 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     }}>
       {/* Row 1: Identifier search */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ fontSize: '14px' }}>{'\uD83C\uDD94'}</span>
         <input
           type="text"
           value={identifier}
@@ -182,7 +181,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
-          placeholder="\uC5EC\uAD8C \uC774\uB984 (HONG GILDONG)"
+          placeholder="Passport Name (HONG GILDONG)"
           disabled={loading || isRegistered}
           style={{
             ...inputStyle,
