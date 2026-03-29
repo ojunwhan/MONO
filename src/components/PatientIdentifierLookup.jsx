@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 
 export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
+  const [expanded, setExpanded] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
@@ -11,7 +12,6 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
   const [language, setLanguage] = useState('en');
   const [error, setError] = useState('');
 
-  // Step 1: Search only (GET)
   const handleSearch = useCallback(async () => {
     const trimmed = identifier.trim();
     if (!trimmed || trimmed.length < 2) {
@@ -35,31 +35,25 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
         `/api/hospital/patient-by-identifier/${encodeURIComponent(trimmed)}?org_code=${encodeURIComponent(orgCode)}`
       );
       if (!res.ok) throw new Error(`\uC11C\uBC84 \uC624\uB958 (${res.status})`);
-
       const data = await res.json();
       setSearchDone(true);
 
       if (data.found && data.patient) {
         setFound(true);
         setPatient(data.patient);
-
-        // Load sessions for this patient
         try {
-          const sessRes = await fetch(
-            `/api/hospital/patient/lookup-or-create`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ patient_identifier: trimmed, org_code: orgCode }),
-            }
-          );
+          const sessRes = await fetch(`/api/hospital/patient/lookup-or-create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patient_identifier: trimmed, org_code: orgCode }),
+          });
           if (sessRes.ok) {
             const sessData = await sessRes.json();
             setSessions(sessData.sessions || []);
             setPatient(sessData.patient || data.patient);
             if (onPatientFound) onPatientFound(sessData);
           }
-        } catch (_) { /* session load is optional */ }
+        } catch (_) {}
       } else {
         setFound(false);
       }
@@ -71,7 +65,6 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     }
   }, [identifier, orgCode, onPatientFound]);
 
-  // Step 2: Register new patient (POST)
   const handleRegister = useCallback(async () => {
     const trimmed = identifier.trim();
     const trimmedName = name.trim();
@@ -94,17 +87,14 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
           language: language,
         }),
       });
-
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `\uC11C\uBC84 \uC624\uB958 (${res.status})`);
       }
-
       const data = await res.json();
       setFound(true);
       setPatient(data.patient);
       setSessions(data.sessions || []);
-
       if (onPatientFound) onPatientFound(data);
     } catch (err) {
       console.error('[PatientIdentifierLookup] Register error:', err);
@@ -140,166 +130,184 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629' },
   ];
 
+  // Badge text when collapsed and patient is found
+  const badgeText = found && patient
+    ? `${patient.chart_number}${patient.name ? ' \u00B7 ' + patient.name : ''}`
+    : null;
+
   return (
     <div style={{
       background: '#f8f9fa',
-      borderRadius: '10px',
-      padding: '10px 12px',
-      marginBottom: '10px',
+      borderRadius: '8px',
       border: '1px solid #e9ecef',
+      marginBottom: '8px',
+      overflow: 'hidden',
     }}>
-      <div style={{
-        fontSize: '13px',
-        fontWeight: '600',
-        color: '#495057',
-        marginBottom: '8px',
-      }}>
-        {'\uD83C\uDD94 \uD658\uC790 \uC2DD\uBCC4\uBC88\uD638 \uC870\uD68C'}
+      {/* Toggle header — always visible */}
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 12px',
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '13px' }}>{'\uD83C\uDD94'}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: '#495057' }}>
+            {'\uD658\uC790 \uC2DD\uBCC4\uBC88\uD638'}
+          </span>
+          {!expanded && badgeText && (
+            <span style={{
+              fontSize: '12px',
+              color: '#1971c2',
+              background: '#d0ebff',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              fontWeight: '500',
+            }}>
+              {badgeText}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: '12px', color: '#adb5bd', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          ▼
+        </span>
       </div>
 
-      {/* Search row */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: error || searchDone ? '6px' : '0' }}>
-        <input
-          type="text"
-          value={identifier}
-          onChange={(e) => { setIdentifier(e.target.value); setSearchDone(false); setFound(false); setError(''); }}
-          onKeyDown={handleKeyDown}
-          placeholder={'\uC5EC\uAD8C\uBC88\uD638 / \uC608\uC57D\uBC88\uD638'}
-          disabled={loading}
-          style={{
-            flex: 1,
-            padding: '8px 10px',
-            borderRadius: '6px',
-            border: '1px solid #dee2e6',
-            fontSize: '13px',
-            outline: 'none',
-          }}
-        />
-        <button
-          onClick={handleSearch}
-          disabled={loading || !identifier.trim()}
-          style={{
-            padding: '8px 14px',
-            borderRadius: '6px',
-            border: 'none',
-            background: loading ? '#adb5bd' : '#4A90D9',
-            color: 'white',
-            fontSize: '13px',
-            fontWeight: '600',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {loading ? '...' : '\uC870\uD68C'}
-        </button>
-        {(searchDone || identifier) && (
-          <button
-            onClick={handleClear}
-            style={{
-              padding: '8px 10px',
-              borderRadius: '6px',
-              border: '1px solid #dee2e6',
-              background: 'white',
-              color: '#868e96',
-              fontSize: '13px',
-              cursor: 'pointer',
-            }}
-          >
-            {'\uCD08\uAE30\uD654'}
-          </button>
-        )}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div style={{ color: '#e03131', fontSize: '12px', padding: '4px 8px', background: '#fff5f5', borderRadius: '4px' }}>
-          {error}
-        </div>
-      )}
-
-      {/* Found: existing patient */}
-      {searchDone && found && patient && (
-        <div style={{
-          padding: '8px 10px',
-          borderRadius: '6px',
-          background: '#e7f5ff',
-          border: '1px solid #a5d8ff',
-        }}>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: '#1971c2', marginBottom: '4px' }}>
-            {'\uD83D\uDD04 \uC7AC\uBC29\uBB38 \uD658\uC790'}
-          </div>
-          <div style={{ fontSize: '12px', color: '#495057', lineHeight: '1.5' }}>
-            <span><strong>PT:</strong> {patient.chart_number}</span>
-            {patient.name && <span style={{ marginLeft: '10px' }}><strong>{'\uC774\uB984:'}</strong> {patient.name}</span>}
-            {patient.language && <span style={{ marginLeft: '10px' }}><strong>{'\uC5B8\uC5B4:'}</strong> {patient.language}</span>}
-            {sessions.length > 0 && <span style={{ marginLeft: '10px' }}><strong>{'\uC774\uC804 \uC0C1\uB2F4:'}</strong> {sessions.length}{'\uAC74'}</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Not found: show registration form */}
-      {searchDone && !found && (
-        <div style={{
-          padding: '8px 10px',
-          borderRadius: '6px',
-          background: '#fff9db',
-          border: '1px solid #ffe066',
-        }}>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: '#e67700', marginBottom: '6px' }}>
-            {'\uC2E0\uADDC \uD658\uC790 \u2014 \uC815\uBCF4\uB97C \uC785\uB825\uD558\uC138\uC694'}
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      {/* Expandable body */}
+      {expanded && (
+        <div style={{ padding: '0 12px 10px 12px' }}>
+          {/* Search row */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: searchDone || error ? '6px' : '0' }}>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
-              placeholder={'\uD658\uC790 \uC774\uB984 (English)'}
+              value={identifier}
+              onChange={(e) => { setIdentifier(e.target.value); setSearchDone(false); setFound(false); setError(''); }}
+              onKeyDown={handleKeyDown}
+              placeholder={'\uC5EC\uAD8C\uBC88\uD638 / \uC608\uC57D\uBC88\uD638'}
               disabled={loading}
+              autoFocus
               style={{
                 flex: 1,
-                minWidth: '120px',
-                padding: '8px 10px',
+                padding: '7px 10px',
                 borderRadius: '6px',
                 border: '1px solid #dee2e6',
                 fontSize: '13px',
                 outline: 'none',
               }}
             />
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              disabled={loading}
-              style={{
-                padding: '8px 6px',
-                borderRadius: '6px',
-                border: '1px solid #dee2e6',
-                fontSize: '13px',
-                background: 'white',
-              }}
-            >
-              {LANG_OPTIONS.map((l) => (
-                <option key={l.code} value={l.code}>{l.label}</option>
-              ))}
-            </select>
             <button
-              onClick={handleRegister}
-              disabled={loading || !name.trim()}
+              onClick={handleSearch}
+              disabled={loading || !identifier.trim()}
               style={{
-                padding: '8px 14px',
+                padding: '7px 14px',
                 borderRadius: '6px',
                 border: 'none',
-                background: loading ? '#adb5bd' : '#2f9e44',
+                background: loading ? '#adb5bd' : '#4A90D9',
                 color: 'white',
                 fontSize: '13px',
                 fontWeight: '600',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
               }}
             >
-              {loading ? '...' : '\uB4F1\uB85D'}
+              {loading ? '...' : '\uC870\uD68C'}
             </button>
+            {(searchDone || identifier) && (
+              <button
+                onClick={handleClear}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #dee2e6',
+                  background: 'white',
+                  color: '#868e96',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                {'\uCD08\uAE30\uD654'}
+              </button>
+            )}
           </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{ color: '#e03131', fontSize: '12px', padding: '4px 8px', background: '#fff5f5', borderRadius: '4px' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Found: existing patient */}
+          {searchDone && found && patient && (
+            <div style={{ padding: '6px 10px', borderRadius: '6px', background: '#e7f5ff', border: '1px solid #a5d8ff' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#1971c2', marginBottom: '2px' }}>
+                {'\uD83D\uDD04 \uC7AC\uBC29\uBB38 \uD658\uC790'}
+              </div>
+              <div style={{ fontSize: '12px', color: '#495057' }}>
+                <strong>PT:</strong> {patient.chart_number}
+                {patient.name && <span style={{ marginLeft: '8px' }}><strong>{'\uC774\uB984'}:</strong> {patient.name}</span>}
+                {patient.language && <span style={{ marginLeft: '8px' }}><strong>{'\uC5B8\uC5B4'}:</strong> {patient.language}</span>}
+                {sessions.length > 0 && <span style={{ marginLeft: '8px' }}><strong>{'\uC774\uC804'}:</strong> {sessions.length}{'\uAC74'}</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Not found: registration form */}
+          {searchDone && !found && (
+            <div style={{ padding: '6px 10px', borderRadius: '6px', background: '#fff9db', border: '1px solid #ffe066' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#e67700', marginBottom: '4px' }}>
+                {'\uC2E0\uADDC \uD658\uC790 \u2014 \uC815\uBCF4 \uC785\uB825'}
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
+                  placeholder={'\uD658\uC790 \uC774\uB984 (English)'}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #dee2e6',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                />
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  disabled={loading}
+                  style={{ padding: '6px', borderRadius: '6px', border: '1px solid #dee2e6', fontSize: '12px', background: 'white' }}
+                >
+                  {LANG_OPTIONS.map((l) => (
+                    <option key={l.code} value={l.code}>{l.label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleRegister}
+                  disabled={loading || !name.trim()}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: loading ? '#adb5bd' : '#2f9e44',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {loading ? '...' : '\uB4F1\uB85D'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
