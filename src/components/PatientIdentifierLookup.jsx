@@ -124,6 +124,8 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
     background: '#f8f9fa',
     borderRadius: '8px',
     padding: '8px 12px',
+    width: '100%',
+    boxSizing: 'border-box',
     marginBottom: '8px',
     border: '1px solid #e0e0e0',
   };
@@ -194,7 +196,7 @@ export default function PatientIdentifierLookup({ orgCode, onPatientFound }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleRegister(); }}
-              placeholder={'\uD658\uC790 \uC774\uB984 (English)'}
+              placeholder={'여권 이름 (Last First)'}
               disabled={loading}
               style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid #dee2e6', fontSize: '13px', outline: 'none' }}
             />
