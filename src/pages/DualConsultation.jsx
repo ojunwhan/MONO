@@ -73,6 +73,7 @@ async function toBase64FromBlob(blob) {
 
 export default function DualConsultation() {
   const [routerSearchParams] = useSearchParams();
+  const orgCode = routerSearchParams.get("org");
   const urlRoomName = routerSearchParams.get("roomName") || "";
   const modeParam = routerSearchParams.get("mode");
   const isConsultationSingle = modeParam === "vad" || modeParam === "webspeech";
@@ -113,11 +114,24 @@ export default function DualConsultation() {
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
   const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad"
+  const [pttKeys, setPttKeys] = useState({ staffKey: null, patientKey: null });
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
   const wasVadActiveRef = useRef(false);
   const isConsultationSingleRef = useRef(isConsultationSingle);
   const [showDisplayPanel, setShowDisplayPanel] = useState(false);
+
+  useEffect(() => {
+    if (!orgCode) return;
+    const saved = localStorage.getItem(`mono_ptt_devices_${orgCode}`);
+    if (saved) {
+      try {
+        setPttKeys(JSON.parse(saved));
+      } catch {
+        // ignore invalid localStorage JSON
+      }
+    }
+  }, [orgCode]);
   const [copiedMonitor, setCopiedMonitor] = useState(false);
   const [copiedTablet, setCopiedTablet] = useState(false);
   const staffRecordingRef = useRef(false);
@@ -778,17 +792,28 @@ export default function DualConsultation() {
     }
   }, [staffRecording, patientDeviceId, patientLang, sendWhisper, stopPatientRecording, stopStaffRecording]);
 
-  // Bluetooth remote / keyboard: Volume Up toggles patient PTT (same as patient mic button); PTT tab only.
+  // Bluetooth remote / keyboard: staff/patient PTT keys from dashboard localStorage; PTT tab only.
   useEffect(() => {
     if (inputMode !== "ptt") return;
+    const staffKeyCode = pttKeys.staffKey?.code;
+    const patientKeyCode = pttKeys.patientKey?.code || "AudioVolumeUp";
     const onKeyDown = (e) => {
-      if (e.key !== "AudioVolumeUp") return;
-      e.preventDefault();
-      startPatientRecording();
+      if (e.code === staffKeyCode) {
+        e.preventDefault();
+        e.stopPropagation();
+        startStaffRecording();
+        return;
+      }
+      if (e.code === patientKeyCode) {
+        e.preventDefault();
+        e.stopPropagation();
+        startPatientRecording();
+        return;
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [inputMode, startPatientRecording]);
+  }, [inputMode, pttKeys, startStaffRecording, startPatientRecording]);
 
   const handleVADToggle = useCallback(() => {
     if (vadActive) {
