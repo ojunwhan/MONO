@@ -798,13 +798,13 @@ export default function DualConsultation() {
     const staffKeyCode = pttKeys.staffKey?.code;
     const patientKeyCode = pttKeys.patientKey?.code || "AudioVolumeUp";
     const onKeyDown = (e) => {
-      if (e.code === staffKeyCode) {
+      if (e.code === staffKeyCode || e.key === staffKeyCode) {
         e.preventDefault();
         e.stopPropagation();
         startStaffRecording();
         return;
       }
-      if (e.code === patientKeyCode) {
+      if (e.code === patientKeyCode || e.key === patientKeyCode) {
         e.preventDefault();
         e.stopPropagation();
         startPatientRecording();
