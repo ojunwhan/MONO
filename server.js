@@ -8075,6 +8075,63 @@ app.post("/api/translate-word", async (req, res) => {
   }
 });
 
+// ── Dallyeori 1:1 chat: REST translate (전역 cors origin:true → localhost:5173 등 반사 허용) ──
+app.post("/api/translate", async (req, res) => {
+  try {
+    const text = String(req.body?.text ?? "").trim();
+    const fromLang = String(req.body?.fromLang ?? "").trim().toLowerCase();
+    const toLang = String(req.body?.toLang ?? "").trim().toLowerCase();
+    const toneRaw = String(req.body?.tone ?? "casual").trim().toLowerCase();
+    const tone = toneRaw === "formal" ? "formal" : "casual";
+
+    if (!text) {
+      return res.status(400).json({ error: "empty_text" });
+    }
+    if (!toLang) {
+      return res.status(400).json({ error: "toLang_required" });
+    }
+
+    if (fromLang && fromLang === toLang) {
+      return res.json({ translated: text });
+    }
+
+    if (!openai || isOpenAIBlocked()) {
+      return res.status(503).json({ error: "openai_unavailable" });
+    }
+
+    resetDailyStats();
+    usageStats.translationRequests += 1;
+    usageStats.openaiTranslations += 1;
+    sendConnectionAlert("translation");
+
+    const fromDesc = fromLang ? label(fromLang) : "the source language (infer from the text)";
+    const toDesc = label(toLang);
+    const toneInstruction =
+      tone === "formal"
+        ? "Translate formally, use polite/honorific speech where appropriate for the target language."
+        : "Translate casually, use informal speech where appropriate for the target language.";
+
+    const systemContent =
+      `You are a translator. Translate the following text from ${fromDesc} to ${toDesc}. ${toneInstruction} Return ONLY the translated text, nothing else.`;
+
+    const r = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemContent },
+        { role: "user", content: text },
+      ],
+      temperature: 0.3,
+    });
+
+    const translated = (r.choices?.[0]?.message?.content ?? "").trim() || text;
+    return res.json({ translated });
+  } catch (e) {
+    markOpenAIQuotaBlocked(e);
+    console.error("[api/translate]", e?.message);
+    return res.status(500).json({ error: "Translation failed" });
+  }
+});
+
 app.get("/healthz", async (req, res) => {
   try {
     const sockets = await io.fetchSockets();
