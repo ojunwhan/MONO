@@ -818,7 +818,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
           Go to Dashboard
         </button>
         <div style={{ borderTop:"1px solid #f3f4f6", marginTop:8, paddingTop:8 }}>
-          <button type="button" onClick={async () => { await fetch("/api/hospital/logout", { method: "POST", credentials: "include" }); navTo("/hospital-login"); }} style={{ fontSize:13, color:"#9ca3af", cursor:"pointer", background:"none", border:"none" }}>
+          <button type="button" onClick={async () => { await fetch("/api/hospital/auth/logout", { method: "POST", credentials: "include" }); navTo("/hospital-login"); }} style={{ fontSize:13, color:"#9ca3af", cursor:"pointer", background:"none", border:"none" }}>
             Sign Out
           </button>
         </div>

@@ -1257,7 +1257,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["https://lingora.chat", "http://localhost:3174", "http://127.0.0.1:3174"],
+    origin: ["https://lingora.chat", "https://hospital.lingora.chat", "http://localhost:3174", "http://127.0.0.1:3174"],
     methods: ["GET", "POST"],
     credentials: true,
   },

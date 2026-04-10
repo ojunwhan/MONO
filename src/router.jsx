@@ -36,6 +36,14 @@ import OrgStaff from "./pages/Org/OrgStaff";
 import OrgJoin from "./pages/Org/OrgJoin";
 import { fetchAuthMe, syncAuthUserToLocalIdentity } from "./auth/session";
 
+/** 병원 서브도메인(hospital.*)에서는 /login 이 병원 관리자 로그인, 메인 도메인에서는 기존 OAuth 로그인 유지 */
+function LoginHostSwitch() {
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("hospital.")) {
+    return <HospitalLogin />;
+  }
+  return <LoginPage />;
+}
+
 async function rootRedirectLoader({ request }) {
   const url = new URL(request.url);
   const pathname = url.pathname || "/";
@@ -57,9 +65,13 @@ async function rootRedirectLoader({ request }) {
   return redirect("/login");
 }
 
-async function hospitalDashboardLoader() {
+async function hospitalDashboardLoader({ request }) {
   const res = await fetch("/api/hospital/auth/me", { credentials: "include" });
   if (!res.ok) {
+    const pathname = new URL(request.url).pathname || "";
+    if (pathname === "/dashboard") {
+      return redirect("/login?redirect=" + encodeURIComponent("/dashboard"));
+    }
     return redirect("/hospital-login?redirect=" + encodeURIComponent("/hospital-dashboard"));
   }
   return null;
@@ -72,7 +84,16 @@ const router = createBrowserRouter([
   },
   {
     path: "/login",
-    element: <LoginPage />,
+    element: <LoginHostSwitch />,
+  },
+  {
+    path: "/register",
+    element: <HospitalRegister />,
+  },
+  {
+    path: "/dashboard",
+    loader: hospitalDashboardLoader,
+    element: <HospitalDashboard />,
   },
   {
     path: "/hospital/join/:orgCode",
