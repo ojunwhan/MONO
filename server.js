@@ -5591,6 +5591,10 @@ app.post("/api/auth/convert-guest", async (req, res) => {
 
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN ai_summary TEXT").catch(() => {});
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN deleted_at TEXT DEFAULT NULL").catch(() => {});
+    // Stage 1: manager note columns (실장 부연 메모, AI ai_summary와 분리)
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note TEXT").catch(() => {});
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note_edited_by TEXT").catch(() => {});
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note_edited_at TEXT").catch(() => {});
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
@@ -6308,7 +6312,8 @@ app.post('/api/hospital/patient/lookup-or-create', async (req, res) => {
 
       // Load previous sessions for this patient
       const sessions = await dbAll(
-        `SELECT id, room_id, status, created_at, ended_at, host_lang, guest_lang, department, ai_summary
+        `SELECT id, room_id, status, created_at, ended_at, host_lang, guest_lang, department, ai_summary,
+         manager_note, manager_note_edited_by, manager_note_edited_at
          FROM hospital_sessions
          WHERE chart_number = ? AND org_code = ?
          ORDER BY created_at DESC LIMIT 20`,
@@ -7062,6 +7067,10 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     if (ptNumber) {
       rows = await dbAll(
         `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
+         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id,
+         CASE WHEN hs.patient_id IS NULL THEN NULL
+              ELSE ROW_NUMBER() OVER (PARTITION BY hs.patient_id ORDER BY hs.created_at ASC)
+         END AS session_index,
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
@@ -7073,6 +7082,10 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     } else {
       rows = await dbAll(
         `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
+         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id,
+         CASE WHEN hs.patient_id IS NULL THEN NULL
+              ELSE ROW_NUMBER() OVER (PARTITION BY hs.patient_id ORDER BY hs.created_at ASC)
+         END AS session_index,
          COALESCE(hs.guest_lang, hp.language, '') AS language,
          COALESCE(hp.name, '') AS name
          FROM hospital_sessions hs
@@ -7105,6 +7118,10 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
         ended_at: r.ended_at,
         patient_lang: r.language || '',
         patient_name: r.name || '',
+        manager_note: r.manager_note != null ? r.manager_note : null,
+        manager_note_edited_by: r.manager_note_edited_by != null ? r.manager_note_edited_by : null,
+        manager_note_edited_at: r.manager_note_edited_at != null ? r.manager_note_edited_at : null,
+        session_index: r.session_index != null ? Number(r.session_index) : null,
       };
     });
 
@@ -7344,6 +7361,58 @@ app.patch('/api/hospital/sessions/:sessionId/clear-summary', requireHospitalAdmi
   } catch (e) {
     console.error('[hospital:clear-summary]', e?.message);
     res.status(500).json({ error: 'clear_summary_failed' });
+  }
+});
+
+// PATCH /api/hospital/sessions/:sessionId/manager-note — 실장 부연 메모 (ai_summary 미변경)
+app.patch('/api/hospital/sessions/:sessionId/manager-note', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId || !String(sessionId).trim()) {
+      return res.status(400).json({ error: 'invalid sessionId' });
+    }
+    const { note } = req.body || {};
+    if (typeof note !== 'string') {
+      return res.status(400).json({ error: 'invalid note' });
+    }
+    if (note.length > 5000) {
+      return res.status(400).json({ error: 'invalid note' });
+    }
+
+    const session = await dbGet(
+      'SELECT org_code FROM hospital_sessions WHERE id = ? AND deleted_at IS NULL',
+      [sessionId]
+    );
+    if (!session) {
+      return res.status(404).json({ error: 'session not found' });
+    }
+    if (String(session.org_code || 'UNKNOWN') !== String(req.hospitalOrgCode || 'UNKNOWN')) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    const editor = req.hospitalAdminEmail || req.hospitalOrgCode || 'unknown';
+
+    await dbRun(
+      `UPDATE hospital_sessions SET manager_note = ?, manager_note_edited_by = ?, manager_note_edited_at = datetime('now') WHERE id = ?`,
+      [note, editor, sessionId]
+    );
+
+    const updated = await dbGet(
+      'SELECT manager_note, manager_note_edited_by, manager_note_edited_at FROM hospital_sessions WHERE id = ? LIMIT 1',
+      [sessionId]
+    );
+
+    console.log('[hospital] manager_note updated for session', sessionId, 'by', editor);
+
+    res.json({
+      success: true,
+      manager_note: updated?.manager_note ?? note,
+      manager_note_edited_by: updated?.manager_note_edited_by ?? editor,
+      manager_note_edited_at: updated?.manager_note_edited_at ?? null,
+    });
+  } catch (err) {
+    console.error('[hospital] manager-note update failed', err);
+    res.status(500).json({ error: 'internal error' });
   }
 });
 
