@@ -89,6 +89,7 @@ export default function DualConsultation() {
   const [staffDeviceId, setStaffDeviceId] = useState("");
   const [patientDeviceId, setPatientDeviceId] = useState("");
   const [devices, setDevices] = useState([]);
+  const [micRefreshSpin, setMicRefreshSpin] = useState(false);
   const [messages, setMessages] = useState([]);
   const [staffRecording, setStaffRecording] = useState(false);
   const [patientRecording, setPatientRecording] = useState(false);
@@ -1369,28 +1370,14 @@ export default function DualConsultation() {
               >
                 <div>
                   <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Staff Mic</label>
-                  <select
-                    value={staffDeviceId}
-                    onChange={(e) => {
-                      console.log('[Dual][diag] mic selected:', e.target.value);
-                      setStaffDeviceId(e.target.value);
-                    }}
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
-                  >
-                    {devices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {!isConsultationSingle && (
-                  <div>
-                    <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "stretch" }}>
                     <select
-                      value={patientDeviceId}
-                      onChange={(e) => setPatientDeviceId(e.target.value)}
-                      style={{ width: "100%", borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                      value={staffDeviceId}
+                      onChange={(e) => {
+                        console.log('[Dual][diag] mic selected:', e.target.value);
+                        setStaffDeviceId(e.target.value);
+                      }}
+                      style={{ flex: 1, borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
                     >
                       {devices.map((d) => (
                         <option key={d.deviceId} value={d.deviceId}>
@@ -1398,6 +1385,101 @@ export default function DualConsultation() {
                         </option>
                       ))}
                     </select>
+                    <button
+                      type="button"
+                      title="마이크 목록 새로고침"
+                      onClick={async () => {
+                        try {
+                          // Request permission first so labels become visible
+                          const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+                          s.getTracks().forEach((t) => t.stop());
+                        } catch (err) {
+                          console.warn('[Dual] mic permission request failed:', err?.name);
+                        }
+                        refreshAudioDevices();
+                        setMicRefreshSpin(true);
+                        setTimeout(() => setMicRefreshSpin(false), 800);
+                      }}
+                      style={{
+                        width: "32px",
+                        minWidth: "32px",
+                        borderRadius: "4px",
+                        border: "1px solid #d1d5db",
+                        background: "#f9fafb",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        color: "#4b5563",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          transition: "transform 0.8s ease",
+                          transform: micRefreshSpin ? "rotate(360deg)" : "rotate(0deg)",
+                        }}
+                      >
+                        ↻
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                {!isConsultationSingle && (
+                  <div>
+                    <label style={{ marginBottom: "4px", display: "block", fontWeight: 500, color: "#4b5563" }}>Patient Mic</label>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "stretch" }}>
+                      <select
+                        value={patientDeviceId}
+                        onChange={(e) => setPatientDeviceId(e.target.value)}
+                        style={{ flex: 1, borderRadius: "4px", border: "1px solid #d1d5db", background: "#fff", padding: "6px 8px" }}
+                      >
+                        {devices.map((d) => (
+                          <option key={d.deviceId} value={d.deviceId}>
+                            {d.label || `Mic ${d.deviceId.slice(0, 8)}`}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        title="마이크 목록 새로고침"
+                        onClick={async () => {
+                          try {
+                            const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            s.getTracks().forEach((t) => t.stop());
+                          } catch (err) {
+                            console.warn('[Dual] mic permission request failed:', err?.name);
+                          }
+                          refreshAudioDevices();
+                          setMicRefreshSpin(true);
+                          setTimeout(() => setMicRefreshSpin(false), 800);
+                        }}
+                        style={{
+                          width: "32px",
+                          minWidth: "32px",
+                          borderRadius: "4px",
+                          border: "1px solid #d1d5db",
+                          background: "#f9fafb",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "14px",
+                          color: "#4b5563",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            transition: "transform 0.8s ease",
+                            transform: micRefreshSpin ? "rotate(360deg)" : "rotate(0deg)",
+                          }}
+                        >
+                          ↻
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
