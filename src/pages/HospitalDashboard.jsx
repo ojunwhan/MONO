@@ -784,6 +784,9 @@ export default function HospitalDashboard() {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummarySearch, setAiSummarySearch] = useState("");
   const [aiSummarySearchInput, setAiSummarySearchInput] = useState("");
+  const [editingNoteSessionId, setEditingNoteSessionId] = useState(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -818,6 +821,45 @@ export default function HospitalDashboard() {
       console.error("ai-summaries fetch error", e);
     } finally {
       setAiSummaryLoading(false);
+    }
+  }, [authUser?.org_code]);
+
+  const saveManagerNote = useCallback(async (sessionId, orgCode, note) => {
+    setNoteSaving(true);
+    try {
+      const res = await fetch(
+        urlWithOrg(`/api/hospital/sessions/${encodeURIComponent(sessionId)}/manager-note`, orgCode || authUser?.org_code),
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note }),
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`저장 실패 (${res.status}): ${errText}`);
+      }
+      const data = await res.json();
+      setAiSummaries((prev) =>
+        prev.map((item) =>
+          item.session_id === sessionId
+            ? {
+                ...item,
+                manager_note: data.manager_note ?? note,
+                manager_note_edited_by: data.manager_note_edited_by ?? null,
+                manager_note_edited_at: data.manager_note_edited_at ?? null,
+              }
+            : item
+        )
+      );
+      setEditingNoteSessionId(null);
+      setNoteDraft("");
+    } catch (err) {
+      console.error("[HospitalDashboard] saveManagerNote failed", err);
+      alert("상담사 노트 저장에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setNoteSaving(false);
     }
   }, [authUser?.org_code]);
 
@@ -968,7 +1010,24 @@ export default function HospitalDashboard() {
                   {aiSummaries.map((item) => (
                     <div key={item.session_id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <span style={{ fontWeight: 700, fontSize: "16px", color: "#111827" }}>{item.pt_number}</span>
+                        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, fontSize: "16px", color: "#111827" }}>{item.pt_number}</span>
+                          {item.session_index != null ? (
+                            <span
+                              style={{
+                                marginLeft: "8px",
+                                padding: "2px 8px",
+                                background: "#eef2ff",
+                                color: "#4f46e5",
+                                borderRadius: "12px",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                              }}
+                            >
+                              {item.session_index}차 상담
+                            </span>
+                          ) : null}
+                        </div>
                         <span style={{ fontSize: "12px", color: "#6b7280" }}>
                           {item.created_at ? new Date(item.created_at).toLocaleString("ko-KR") : ""}
                         </span>
@@ -1039,6 +1098,166 @@ export default function HospitalDashboard() {
                       ) : (
                         <div style={{ color: "#9ca3af", fontSize: "14px" }}>요약 없음</div>
                       )}
+                      {/* 상담사 노트 섹션 */}
+                      <div
+                        style={{
+                          marginTop: "16px",
+                          paddingTop: "16px",
+                          borderTop: "1px solid #e5e7eb",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: "600",
+                              color: "#374151",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            <span>📝</span>
+                            <span>상담사 노트</span>
+                          </div>
+                          {editingNoteSessionId !== item.session_id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteSessionId(item.session_id);
+                                setNoteDraft(item.manager_note || "");
+                              }}
+                              style={{
+                                padding: "4px 12px",
+                                fontSize: "12px",
+                                background: "#f3f4f6",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                color: "#374151",
+                              }}
+                            >
+                              {item.manager_note ? "수정" : "작성"}
+                            </button>
+                          )}
+                        </div>
+                        {editingNoteSessionId === item.session_id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <textarea
+                              value={noteDraft}
+                              onChange={(e) => setNoteDraft(e.target.value)}
+                              maxLength={5000}
+                              placeholder="환자 특이사항, AI가 놓친 맥락, 다음 상담 체크포인트 등을 자유롭게 기록하세요."
+                              style={{
+                                width: "100%",
+                                minHeight: "100px",
+                                padding: "10px",
+                                fontSize: "14px",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "8px",
+                                resize: "vertical",
+                                fontFamily: "inherit",
+                                boxSizing: "border-box",
+                              }}
+                              disabled={noteSaving}
+                            />
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+                              <span style={{ fontSize: "12px", color: "#9ca3af", marginRight: "auto" }}>
+                                {noteDraft.length} / 5000
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingNoteSessionId(null);
+                                  setNoteDraft("");
+                                }}
+                                disabled={noteSaving}
+                                style={{
+                                  padding: "6px 14px",
+                                  fontSize: "13px",
+                                  background: "#fff",
+                                  border: "1px solid #d1d5db",
+                                  borderRadius: "6px",
+                                  cursor: noteSaving ? "not-allowed" : "pointer",
+                                  color: "#374151",
+                                }}
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveManagerNote(item.session_id, item.org_code, noteDraft)}
+                                disabled={noteSaving}
+                                style={{
+                                  padding: "6px 14px",
+                                  fontSize: "13px",
+                                  background: noteSaving ? "#9ca3af" : "#4f46e5",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  cursor: noteSaving ? "not-allowed" : "pointer",
+                                  color: "#fff",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {noteSaving ? "저장 중..." : "저장"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {item.manager_note ? (
+                              <>
+                                <div
+                                  style={{
+                                    padding: "12px",
+                                    background: "#fafafa",
+                                    borderRadius: "8px",
+                                    fontSize: "14px",
+                                    color: "#374151",
+                                    whiteSpace: "pre-wrap",
+                                    lineHeight: "1.5",
+                                  }}
+                                >
+                                  {item.manager_note}
+                                </div>
+                                {item.manager_note_edited_by && (
+                                  <div
+                                    style={{
+                                      marginTop: "6px",
+                                      fontSize: "12px",
+                                      color: "#9ca3af",
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    ✏️ {item.manager_note_edited_by}
+                                    {item.manager_note_edited_at ? ` · ${item.manager_note_edited_at}` : ""}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div
+                                style={{
+                                  padding: "12px",
+                                  background: "#fafafa",
+                                  borderRadius: "8px",
+                                  fontSize: "13px",
+                                  color: "#9ca3af",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                아직 작성된 노트가 없습니다. 우측 '작성' 버튼을 눌러 추가하세요.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
