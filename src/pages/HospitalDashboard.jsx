@@ -1180,6 +1180,38 @@ const ROOM_TEMPLATE_CARDS = [
   },
 ];
 
+/** KeyboardEvent.code 형식 → 등록 플로우와 동일한 { code, label } (localStorage 호환) */
+function parseManualPttKeyCode(raw) {
+  const t = String(raw ?? "").trim();
+  if (!t) return null;
+
+  const fMatch = t.match(/^F(\d{1,2})$/i);
+  if (fMatch) {
+    const n = parseInt(fMatch[1], 10);
+    if (n >= 1 && n <= 24) {
+      const code = `F${n}`;
+      return { code, label: code };
+    }
+    return null;
+  }
+
+  const keyMatch = t.match(/^Key([A-Z])$/i);
+  if (keyMatch) {
+    const code = `Key${keyMatch[1].toUpperCase()}`;
+    return { code, label: code };
+  }
+
+  if (/^Digit[0-9]$/.test(t)) return { code: t, label: t };
+  if (/^F(1?[0-9]|2[0-4])$/.test(t)) return { code: t, label: t };
+  if (/^Numpad[0-9]$/.test(t)) return { code: t, label: t };
+  if (
+    /^(Numpad(Add|Subtract|Multiply|Divide|Enter|Decimal)|Space|Enter|Tab|Escape|Backspace|Delete|Arrow(Up|Down|Left|Right))$/.test(t)
+  ) {
+    return { code: t, label: t };
+  }
+  return null;
+}
+
 function RoomsPanel({ authUser }) {
   const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
@@ -1190,6 +1222,8 @@ function RoomsPanel({ authUser }) {
   const [templateToast, setTemplateToast] = useState(null);
   const [pttDevices, setPttDevices] = useState({ staffKey: null, patientKey: null });
   const [registeringKey, setRegisteringKey] = useState(null);
+  const [manualPttStaff, setManualPttStaff] = useState("");
+  const [manualPttPatient, setManualPttPatient] = useState("");
 
   useEffect(() => {
     if (!templateToast) return undefined;
@@ -1248,6 +1282,27 @@ function RoomsPanel({ authUser }) {
         localStorage.setItem(`mono_ptt_devices_${orgCode}`, JSON.stringify(updated));
         return updated;
       });
+    },
+    [authUser?.org_code]
+  );
+
+  const saveManualPttKey = useCallback(
+    (role, raw) => {
+      const parsed = parseManualPttKeyCode(raw);
+      if (!parsed) {
+        alert("올바른 키 코드를 입력하세요. (예: F13, F14, KeyA, Digit1)");
+        return;
+      }
+      const orgCode = authUser?.org_code;
+      if (!orgCode) return;
+      const field = role === "staff" ? "staffKey" : "patientKey";
+      setPttDevices((prev) => {
+        const updated = { ...prev, [field]: parsed };
+        localStorage.setItem(`mono_ptt_devices_${orgCode}`, JSON.stringify(updated));
+        return updated;
+      });
+      if (role === "staff") setManualPttStaff("");
+      else setManualPttPatient("");
     },
     [authUser?.org_code]
   );
@@ -1532,6 +1587,39 @@ function RoomsPanel({ authUser }) {
           >
             {registeringKey === "staff" ? "버튼을 누르세요..." : "등록"}
           </button>
+          <input
+            type="text"
+            value={manualPttStaff}
+            onChange={(e) => setManualPttStaff(e.target.value)}
+            placeholder="F13"
+            disabled={registeringKey === "patient"}
+            aria-label="직원 PTT 키 코드 직접 입력"
+            style={{
+              width: "88px",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              border: "1px solid #d1d5db",
+              fontSize: "13px",
+              fontFamily: "monospace",
+              opacity: registeringKey === "patient" ? 0.5 : 1,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => saveManualPttKey("staff", manualPttStaff)}
+            disabled={registeringKey === "patient"}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: "1px solid #93c5fd",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              fontSize: "13px",
+              cursor: registeringKey === "patient" ? "not-allowed" : "pointer",
+            }}
+          >
+            저장
+          </button>
           {pttDevices.staffKey ? (
             <button
               type="button"
@@ -1586,6 +1674,39 @@ function RoomsPanel({ authUser }) {
             }}
           >
             {registeringKey === "patient" ? "버튼을 누르세요..." : "등록"}
+          </button>
+          <input
+            type="text"
+            value={manualPttPatient}
+            onChange={(e) => setManualPttPatient(e.target.value)}
+            placeholder="F14"
+            disabled={registeringKey === "staff"}
+            aria-label="환자 PTT 키 코드 직접 입력"
+            style={{
+              width: "88px",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              border: "1px solid #d1d5db",
+              fontSize: "13px",
+              fontFamily: "monospace",
+              opacity: registeringKey === "staff" ? 0.5 : 1,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => saveManualPttKey("patient", manualPttPatient)}
+            disabled={registeringKey === "staff"}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: "1px solid #86efac",
+              background: "#f0fdf4",
+              color: "#15803d",
+              fontSize: "13px",
+              cursor: registeringKey === "staff" ? "not-allowed" : "pointer",
+            }}
+          >
+            저장
           </button>
           {pttDevices.patientKey ? (
             <button
