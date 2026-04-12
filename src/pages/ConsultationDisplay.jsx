@@ -225,33 +225,6 @@ export default function ConsultationDisplay() {
       setTimeout(scrollToBottom, 50);
     };
 
-    const onSttResult = (payload) => {
-      const {
-        roomId: incomingRoomId,
-        text,
-        translatedText: payloadTranslated,
-        fromLang: fl,
-        participantId: sttPid,
-      } = payload || {};
-      if (incomingRoomId && incomingRoomId !== rid) return;
-      if (!text) return;
-      const staff = isStaffMessage({ fromLang: fl, originalText: text, senderPid: sttPid }, pid, plang);
-      const msgId = `stt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      seenIdsRef.current.add(msgId);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: msgId,
-          originalText: text,
-          translatedText: payloadTranslated ?? text,
-          isStaff: staff,
-          timestamp: Date.now(),
-          streaming: false,
-        },
-      ]);
-      setTimeout(scrollToBottom, 50);
-    };
-
     socket.on("receive-message", onReceiveMessage);
     socket.on("receive-message-stream", onStream);
     socket.on("receive-message-stream-end", onStreamEnd);
@@ -259,7 +232,6 @@ export default function ConsultationDisplay() {
     socket.on("display:stream", onStream);
     socket.on("display:stream-end", onStreamEnd);
     socket.on("revise-message", onReviseMessage);
-    socket.on("stt:result", onSttResult);
 
     return () => {
       socket.off("receive-message", onReceiveMessage);
@@ -269,7 +241,6 @@ export default function ConsultationDisplay() {
       socket.off("display:stream", onStream);
       socket.off("display:stream-end", onStreamEnd);
       socket.off("revise-message", onReviseMessage);
-      socket.off("stt:result", onSttResult);
     };
   }, [roomId, participantId, lang, scrollToBottom]);
 
