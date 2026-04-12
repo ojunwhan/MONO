@@ -42,7 +42,7 @@ const LOCATION_LABELS = {
 
 const STATUS = {
   IDLE: "대기 중",
-  LOADING: "VAD 모델 로딩 중...",
+  LOADING: "음성 인식 모델 로딩 중...",
   LISTENING: "🎤 듣는 중",
   SPEAKING: "🎤 음성 감지 중",
   PROCESSING: "번역 중...",
@@ -417,7 +417,7 @@ export default function FixedRoom() {
             fontSize: "12px",
             color: "#fca5a5",
           }}>
-            VAD 오류: {vad.errored}
+            음성 인식 오류: {vad.errored}
           </div>
         )}
       </div>

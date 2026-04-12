@@ -634,7 +634,7 @@ function StaffModePanel({ template, selectedDept, roomName, consultationRoomId, 
 
   const handleStartInterpretation = async (patient) => {
     localStorage.setItem("myLang", selectedLang);
-    const inputMode = template === "reception" ? "ptt" : "vad";
+    const inputMode = "ptt";
     let sessionId = null;
     try {
       const delRes = await fetch(`/api/hospital/waiting/${encodeURIComponent(patient.roomId)}`, { method: "DELETE" });

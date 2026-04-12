@@ -76,8 +76,8 @@ export default function DualConsultation() {
   const orgCode = routerSearchParams.get("org");
   const urlRoomName = routerSearchParams.get("roomName") || "";
   const modeParam = routerSearchParams.get("mode");
-  const isConsultationSingle = modeParam === "vad" || modeParam === "webspeech";
-  const initialInputMode = modeParam === "vad" || modeParam === "webspeech" ? "vad" : "ptt";
+  const isConsultationSingle =
+    modeParam === "single" || modeParam === "vad" || modeParam === "webspeech";
   const LANG_TO_LABEL = {en:"ENG",ko:"KOR",zh:"CHN",ja:"JPN",vi:"VNM",th:"THA",id:"IDN",ms:"MYS",tl:"PHL",my:"MMR",km:"KHM",ne:"NPL",mn:"MNG",uz:"UZB",ru:"RUS",es:"ESP",pt:"PRT",fr:"FRA",de:"DEU",ar:"ARA"};
   const [ptNumber, setPtNumber] = useState("");
   const [connected, setConnected] = useState(false);
@@ -114,7 +114,7 @@ export default function DualConsultation() {
   const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [showStaffGrid, setShowStaffGrid] = useState(false);
   const [showPatientGrid, setShowPatientGrid] = useState(false);
-  const [inputMode, setInputMode] = useState(initialInputMode); // "ptt" | "vad"
+  const inputMode = "ptt";
   const [pttKeys, setPttKeys] = useState({ staffKey: null, patientKey: null });
   const [vadActive, setVadActive] = useState(false);
   const vadActiveRef = useRef(false);
@@ -1266,107 +1266,6 @@ export default function DualConsultation() {
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
               <div
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                  marginBottom: 12,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputMode("ptt");
-                  }}
-                  style={{
-                    flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
-                    padding: "10px 6px",
-                    borderRadius: 8,
-                    border: inputMode === "ptt" ? "2px solid #4A90D9" : "1px solid #ddd",
-                    background: inputMode === "ptt" ? "#EBF3FC" : "#fff",
-                    fontWeight: inputMode === "ptt" ? 700 : 400,
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  {"\uD83C\uDFA4 PTT"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputMode("vad");
-                  }}
-                  style={{
-                    flex: isConsultationSingle ? "1 1 120px" : "1 1 90px",
-                    padding: "10px 6px",
-                    borderRadius: 8,
-                    border: inputMode === "vad" ? "2px solid #4A90D9" : "1px solid #ddd",
-                    background: inputMode === "vad" ? "#EBF3FC" : "#fff",
-                    fontWeight: inputMode === "vad" ? 700 : 400,
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  VAD
-                </button>
-              </div>
-              {inputMode === "vad" && (
-                <div style={{ marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    onClick={handleVADToggle}
-                    disabled={!connected || (vadActive && vadInitializing)}
-                    style={{
-                      width: "100%",
-                      padding: "12px 0",
-                      borderRadius: 8,
-                      border: "none",
-                      background:
-                        !connected || (vadActive && vadInitializing)
-                          ? "#9ca3af"
-                          : vadActive
-                            ? "#EF4444"
-                            : "#22C55E",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 16,
-                      cursor: !connected || (vadActive && vadInitializing) ? "not-allowed" : "pointer",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {vadActive
-                      ? "\u23F9 \uC74C\uC131\uC778\uC2DD \uC911\uC9C0"
-                      : "\u25B6 \uC74C\uC131\uC778\uC2DD \uC2DC\uC791"}
-                  </button>
-                  {vadActive && vadInitializing ? (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#92400e",
-                        textAlign: "center",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 14,
-                          height: 14,
-                          border: "2px solid #ca8a04",
-                          borderTopColor: "transparent",
-                          borderRadius: "50%",
-                          animation: "dual-vad-spin 0.7s linear infinite",
-                        }}
-                      />
-                      Initializing microphone\u2026
-                    </div>
-                  ) : null}
-                </div>
-              )}
-              <div
-                style={{
                   display: "grid",
                   gridTemplateColumns: isConsultationSingle ? "1fr" : "1fr 1fr",
                   gap: "12px",
@@ -1560,49 +1459,11 @@ export default function DualConsultation() {
           </div>
         ))}
         <div ref={messagesEndRef} style={{ height: 1, pointerEvents: "none" }} />
-        {inputMode === "vad" && vadActive && vadListening && (
-          <div
-            style={{
-              marginTop: "auto",
-              padding: "8px 16px",
-              background: vadSpeaking ? "#FEF2F2" : "#F0FDF4",
-              borderTop: "1px solid #e5e7eb",
-              minHeight: 40,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              justifyContent: "center",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#22C55E",
-                  animation: "pulse 1.5s infinite",
-                }}
-              />
-              <span style={{ color: "#166534", fontSize: 14, fontWeight: 600 }}>
-                {"\uD83C\uDF99\uFE0F \uC790\uB3D9 \uC778\uC2DD \uC911..."}
-              </span>
-            </div>
-            {vadSpeaking ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#B91C1C", fontWeight: 600 }}>
-                <span aria-hidden>{"\uD83D\uDD34 "}</span>
-                <span>{"\uC74C\uC131 \uAC10\uC9C0 \uC911..."}</span>
-              </div>
-            ) : null}
-          </div>
-        )}
       </main>
 
       {/* Mic buttons - full width */}
       <footer style={{ display: "flex", flexShrink: 0, gap: "8px", borderTop: "1px solid #e5e7eb", background: "#fff", padding: "12px" }}>
-        {inputMode === "ptt" ? (
-          <>
+        <>
             <button
               type="button"
               onClick={startStaffRecording}
@@ -1637,8 +1498,7 @@ export default function DualConsultation() {
             >
               {patientRecording ? "Stop" : patientDisplayName.trim() || "Patient"}
             </button>
-          </>
-        ) : null}
+        </>
       </footer>
 
       {/* Text input bar - at very bottom */}

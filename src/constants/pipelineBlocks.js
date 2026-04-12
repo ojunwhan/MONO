@@ -14,7 +14,7 @@ export const PIPELINE_BLOCKS = [
   { id: 'text_input', lane: 'input',     label: '텍스트 입력',  icon: '⌨️',  color: '#6366F1' },
   // STT
   { id: 'groq_whisper', lane: 'stt',     label: 'Whisper',      icon: '⚡',  color: '#0EA5E9' },
-  { id: 'vad_auto',   lane: 'stt',       label: 'VAD 자동',     icon: '🎯',  color: '#0EA5E9' },
+  { id: 'vad_auto',   lane: 'stt',       label: '자동 음성 감지', icon: '🎯',  color: '#0EA5E9' },
   // 번역
   { id: 'gpt4o_hospital', lane: 'translate', label: 'GPT-4o 병원', icon: '🏥', color: '#10B981' },
   { id: 'gpt4o_general',  lane: 'translate', label: 'GPT-4o 일반', icon: '🌐', color: '#10B981' },

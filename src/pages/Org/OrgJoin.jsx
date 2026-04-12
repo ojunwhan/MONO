@@ -159,7 +159,7 @@ export default function OrgJoin() {
       const storageMode = runtime.storageMode || "none";
       const saveMessages = storageMode === "db";
       const summaryOnly = storageMode === "summary";
-      const inputMode = runtime.inputMode || "ptt";
+      const inputMode = runtime.inputMode === "vad" ? "ptt" : runtime.inputMode || "ptt";
       const autoReset = runtime.autoReset === true;
 
       navigate(targetPath, {

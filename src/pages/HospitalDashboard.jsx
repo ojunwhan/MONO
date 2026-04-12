@@ -29,8 +29,6 @@ import {
   Trash2,
   Monitor,
   Tablet,
-  Mic,
-  MicOff,
   Sparkles,
   Lock,
   Volume2,
@@ -1570,7 +1568,7 @@ const ROOM_TEMPLATE_CARDS = [
   {
     value: TEMPLATE_UI.CONSULTATION_SINGLE,
     title: "상담실 · 싱글마이크 · PC 1대",
-    subtitle: "PC 1대 + 마이크 1개 (VAD 자동인식)",
+    subtitle: "PC 1대 + 마이크 1개 (탭하여 말하기)",
     comingSoon: false,
     Illustration: SvgSingleMicIllust,
   },
@@ -1747,7 +1745,7 @@ function RoomsPanel({ authUser }) {
       }
       if (tpl === "consultation_single" || tpl === "consultation-single") {
         const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=vad`;
+        return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=single`;
       }
       const urlTemplate =
         tpl === "consultation" || tpl === "consultation-tablet" ? "consultation" : tpl === "reception" || !tpl ? "reception" : tpl;
@@ -1799,7 +1797,7 @@ function RoomsPanel({ authUser }) {
           setAddName("");
           setAddTemplate(TEMPLATE_UI.RECEPTION);
           navigate(
-            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}&mode=vad`
+            `/dual-consultation?room=${encodeURIComponent(data.room.id)}&org=${encodeURIComponent(authUser?.org_code || "")}&roomName=${encodeURIComponent(data.room.name)}&mode=single`
           );
           setSubmitting(false);
           return;
@@ -2223,13 +2221,13 @@ function RoomCard({ room, orgCode, staffUrl, kioskUrl, qrUrl, onPrintQR, onDelet
       : room.template === "consultation_single"
         ? "싱글마이크 · 음성인식"
         : room.template === "consultation"
-          ? "상담 모드 (VAD)"
+          ? "상담 모드 (탭하여 말하기)"
           : "접수 모드 (탭하여 말하기)";
   const opensDualConsultation =
     room.template === "consultation_dual" || room.template === "consultation_single";
 
   const openDualConsultation = () => {
-    const modeSuffix = room.template === "consultation_single" ? "&mode=vad" : "";
+    const modeSuffix = room.template === "consultation_single" ? "&mode=single" : "";
     navigate(
       `/dual-consultation?room=${encodeURIComponent(room.id)}${orgCode ? `&org=${encodeURIComponent(orgCode)}` : ""}&roomName=${encodeURIComponent(room.name)}${modeSuffix}`
     );
@@ -2320,10 +2318,9 @@ const HOSPITAL_TEXT_MUTED_DARK = "#94a3b8";
 function OverviewPanel({ authUser }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [startModal, setStartModal] = useState(null); // null | 'choose' | 'reception' | 'consultation-mode' | 'consultation-qr'
+  const [startModal, setStartModal] = useState(null); // null | 'choose' | 'reception' | 'consultation-qr'
   const [receptionRoom, setReceptionRoom] = useState(null);
   const [consultationRoom, setConsultationRoom] = useState(null);
-  const [consultationInputMode, setConsultationInputMode] = useState(null); // 'vad' | 'ptt'
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [tabletUrlCopied, setTabletUrlCopied] = useState(false);
   const [doctorPcUrlCopied, setDoctorPcUrlCopied] = useState(false);
@@ -2421,7 +2418,7 @@ function OverviewPanel({ authUser }) {
     }
     if (room.template === "consultation_single") {
       const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
-      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=vad`;
+      return `${origin}/dual-consultation?room=${encodeURIComponent(room.id)}${orgSuffix}&mode=single`;
     }
     const base = `/hospital?template=${room.template || "reception"}&room=${room.id}`;
     const orgSuffix = authUser?.org_code ? `&org=${encodeURIComponent(authUser.org_code)}` : "";
@@ -2469,46 +2466,6 @@ function OverviewPanel({ authUser }) {
 
   return (
     <div className="space-y-6">
-      {/* 모달: 상담실 — VAD / PTT 선택 */}
-      {startModal === "consultation-mode" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-[18px] font-bold text-slate-800 dark:text-slate-100">상담실 통역 방식</h3>
-              <button type="button" onClick={() => setStartModal(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => { setConsultationInputMode("vad"); getOrCreateConsultationRoom(); }}
-                disabled={roomsLoading}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
-              >
-                <Mic size={24} style={{ color: HOSPITAL_PRIMARY }} />
-                <div className="flex-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">VAD (자동 음성감지)</span>
-                  <span className="text-[12px] text-slate-500">말하면 자동 감지</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setConsultationInputMode("ptt"); getOrCreateConsultationRoom(); }}
-                disabled={roomsLoading}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-left hover:border-[#2563EB] hover:bg-blue-50/50 dark:hover:bg-slate-800"
-              >
-                <MicOff size={24} style={{ color: HOSPITAL_PRIMARY }} />
-                <div className="flex-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-100 block">탭하여 말하기</span>
-                  <span className="text-[12px] text-slate-500">탭하면 말하기</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 모달: 접수처 — 직원 PC / 태블릿 QR */}
       {startModal === "reception" && receptionRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
@@ -2554,7 +2511,7 @@ function OverviewPanel({ authUser }) {
         </div>
       )}
 
-      {/* 모달: 상담실 — 태블릿 QR + 링크 복사 (환자 스캔용 QR에는 inputMode 포함) */}
+      {/* 모달: 상담실 — 태블릿 QR + 링크 복사 */}
       {startModal === "consultation-qr" && consultationRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStartModal(null)}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
@@ -2566,7 +2523,7 @@ function OverviewPanel({ authUser }) {
             </div>
             <div className="space-y-4">
               <p className="text-[12px] text-slate-500">
-                {consultationInputMode === "vad" ? "VAD (자동 음성감지)" : "탭하여 말하기"} · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
+                탭하여 말하기 · 환자 QR 스캔 시 태블릿이 통역 화면으로 전환됩니다.
               </p>
               <button
                 type="button"
@@ -2593,7 +2550,7 @@ function OverviewPanel({ authUser }) {
                 <p className="text-[11px] text-slate-500 mb-1">환자 스캔용 QR (태블릿에 띄우세요)</p>
                 <div className="p-3 bg-white rounded-xl inline-block">
                   <Suspense fallback={<span className="inline-block w-[200px] h-[200px] bg-[var(--color-bg-secondary)] animate-pulse rounded" />}>
-                    <QRCode value={buildPatientJoinUrl(consultationRoom, { inputMode: consultationInputMode })} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
+                    <QRCode value={buildPatientJoinUrl(consultationRoom)} size={200} bgColor="#FFFFFF" fgColor={HOSPITAL_PRIMARY} level="M" />
                   </Suspense>
                 </div>
                 <button
