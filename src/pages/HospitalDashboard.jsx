@@ -787,6 +787,9 @@ export default function HospitalDashboard() {
   const [editingNoteSessionId, setEditingNoteSessionId] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [editingStaffSessionId, setEditingStaffSessionId] = useState(null);
+  const [staffDraft, setStaffDraft] = useState("");
+  const [staffSaving, setStaffSaving] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -860,6 +863,57 @@ export default function HospitalDashboard() {
       alert("상담사 노트 저장에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setNoteSaving(false);
+    }
+  }, [authUser?.org_code]);
+
+  const saveStaffName = useCallback(async (sessionId, orgCode, name) => {
+    setStaffSaving(true);
+    const trimmed = name.trim().slice(0, 100);
+    const staffSnap = { captured: false, prev: null };
+    setAiSummaries((prev) => {
+      if (!staffSnap.captured) {
+        const cur = prev.find((i) => i.session_id === sessionId);
+        staffSnap.prev = cur?.staff_name ?? null;
+        staffSnap.captured = true;
+      }
+      return prev.map((i) =>
+        i.session_id === sessionId ? { ...i, staff_name: trimmed || null } : i
+      );
+    });
+    try {
+      const res = await fetch(
+        urlWithOrg(`/api/hospital/sessions/${encodeURIComponent(sessionId)}/staff-name`, orgCode || authUser?.org_code),
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ staff_name: trimmed || null }),
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`저장 실패 (${res.status}): ${errText}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      setAiSummaries((prev) =>
+        prev.map((i) =>
+          i.session_id === sessionId
+            ? { ...i, staff_name: data.staff_name ?? (trimmed || null) }
+            : i
+        )
+      );
+      setEditingStaffSessionId(null);
+      setStaffDraft("");
+    } catch (err) {
+      console.error("[HospitalDashboard] saveStaffName failed", err);
+      setAiSummaries((prev) =>
+        prev.map((i) =>
+          i.session_id === sessionId ? { ...i, staff_name: staffSnap.prev } : i
+        )
+      );
+      alert("담당 상담사 이름 저장에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setStaffSaving(false);
     }
   }, [authUser?.org_code]);
 
@@ -1098,6 +1152,151 @@ export default function HospitalDashboard() {
                       ) : (
                         <div style={{ color: "#9ca3af", fontSize: "14px" }}>요약 없음</div>
                       )}
+                      {/* 담당 상담사 (메타데이터) — AI 요약 필드와 상담사 노트 사이 */}
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          paddingTop: "12px",
+                          borderTop: "1px solid #e5e7eb",
+                          background: "#fafafa",
+                          marginLeft: "-4px",
+                          marginRight: "-4px",
+                          paddingLeft: "12px",
+                          paddingRight: "12px",
+                          paddingBottom: "10px",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              color: "#6b7280",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "5px",
+                            }}
+                          >
+                            <span>👤</span>
+                            <span>담당 상담사</span>
+                          </div>
+                          {editingStaffSessionId !== item.session_id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingStaffSessionId(item.session_id);
+                                setStaffDraft(item.staff_name || "");
+                              }}
+                              style={{
+                                padding: "3px 10px",
+                                fontSize: "11px",
+                                background: "#f3f4f6",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                color: "#374151",
+                              }}
+                            >
+                              {item.staff_name ? "수정" : "입력"}
+                            </button>
+                          )}
+                        </div>
+                        {editingStaffSessionId === item.session_id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <input
+                              type="text"
+                              value={staffDraft}
+                              onChange={(e) => setStaffDraft(e.target.value.slice(0, 100))}
+                              maxLength={100}
+                              placeholder="이름을 입력하세요"
+                              style={{
+                                width: "100%",
+                                padding: "8px 10px",
+                                fontSize: "13px",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "6px",
+                                fontFamily: "inherit",
+                                boxSizing: "border-box",
+                                background: "#fff",
+                              }}
+                              disabled={staffSaving}
+                            />
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+                              <span style={{ fontSize: "11px", color: "#9ca3af", marginRight: "auto" }}>
+                                {staffDraft.length} / 100
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingStaffSessionId(null);
+                                  setStaffDraft("");
+                                }}
+                                disabled={staffSaving}
+                                style={{
+                                  padding: "5px 12px",
+                                  fontSize: "12px",
+                                  background: "#fff",
+                                  border: "1px solid #d1d5db",
+                                  borderRadius: "6px",
+                                  cursor: staffSaving ? "not-allowed" : "pointer",
+                                  color: "#374151",
+                                }}
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveStaffName(item.session_id, item.org_code, staffDraft)}
+                                disabled={staffSaving}
+                                style={{
+                                  padding: "5px 12px",
+                                  fontSize: "12px",
+                                  background: staffSaving ? "#9ca3af" : "#4f46e5",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  cursor: staffSaving ? "not-allowed" : "pointer",
+                                  color: "#fff",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {staffSaving ? "저장 중..." : "저장"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {item.staff_name ? (
+                              <div
+                                style={{
+                                  fontSize: "13px",
+                                  color: "#4b5563",
+                                  fontWeight: 500,
+                                }}
+                              >
+                                {item.staff_name}
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: "#9ca3af",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                담당자 미지정
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       {/* 상담사 노트 섹션 */}
                       <div
                         style={{
