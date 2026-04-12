@@ -1077,7 +1077,7 @@ export default function DualConsultation() {
                             <>
                               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{"\uD0DC\uBE14\uB9BF \uC5F0\uACB0 (\uB9C8\uC774\uD06C \uC0AC\uC6A9)"}</div>
                               <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{"\uD0DC\uBE14\uB9BF\uC73C\uB85C \uC544\uB798 QR\uC744 \uC2A4\uCE94\uD558\uC138\uC694"}</div>
-                              <QRCode value={tabletUrl} size={200} bgColor="#FFFFFF" fgColor="#ec407a" level="M" style={{ display: "block", margin: "12px auto", borderRadius: 8 }} />
+                              <QRCode value={tabletUrl} size={260} bgColor="#FFFFFF" fgColor="#0B1E3F" level="M" style={{ display: "block", margin: "12px auto" }} />
                               <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", wordBreak: "break-all" }}>{tabletUrl}</div>
                             </>
                           );
