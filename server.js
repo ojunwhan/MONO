@@ -4366,9 +4366,13 @@ io.on('connection', (socket) => {
           if (!activeSession) {
             // Auto-create session for DualConsultation mode
             const newSessionId = require('uuid').v4();
-            const staffNameWhisper = (typeof meta?.staffName === 'string' && meta.staffName.trim())
+            const staffNameFromPayload = (typeof data?.staffName === 'string' && data.staffName.trim())
+              ? data.staffName.trim().slice(0, 100)
+              : null;
+            const staffNameFromRoomMeta = (typeof meta?.staffName === 'string' && meta.staffName.trim())
               ? meta.staffName.trim().slice(0, 100)
               : null;
+            const staffNameWhisper = staffNameFromPayload || staffNameFromRoomMeta;
             await dbRun(
               `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at, staff_name)
                VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'), ?)`,

@@ -676,6 +676,10 @@ export default function DualConsultation() {
           : asStaff
             ? (patientLangRef.current || "en")
             : (staffLang || "ko");
+      const cleanStaffName =
+        typeof staffName === "string" && staffName.trim()
+          ? staffName.trim().slice(0, 100)
+          : null;
       const payload = {
         roomId: rid,
         participantId: pid,
@@ -685,6 +689,7 @@ export default function DualConsultation() {
         mimeType,
         senderRole: isStaff ? "host" : "guest",
         orgCode: getRegistrationOrgCode(),
+        staffName: cleanStaffName,
       };
       if (inputModeRef.current === "vad") {
         payload.vadStaffLang = staffLangRef.current;
@@ -694,7 +699,7 @@ export default function DualConsultation() {
         if (!ack?.ok && ack?.error) console.warn("[DualConsultation] stt ack:", ack.error);
       });
     },
-    [connected, roomId, patientLang, staffLang]
+    [connected, roomId, patientLang, staffLang, staffName]
   );
 
   const startStaffRecording = useCallback(async () => {
