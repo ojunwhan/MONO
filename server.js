@@ -4457,6 +4457,17 @@ io.on('connection', (socket) => {
     }
     ackReply({ ok: true, text: normalized, translatedText: tt });
     socket.emit("stt:result", sttResultPayload);
+    // Broadcast to display viewers (patient phone, external monitor)
+    io.to(roomId).emit("display:message", {
+      id: require("uuid").v4(),
+      roomId,
+      originalText: normalized,
+      translatedText: tt,
+      fromLang: fromLang || lang,
+      senderPid: participantId,
+      participantId,
+      final: true,
+    });
   });
 
   // --- send-message 핸들러 (room-type aware) ---
