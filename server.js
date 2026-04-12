@@ -3692,10 +3692,13 @@ io.on('connection', (socket) => {
             const newSessionId = require("uuid").v4();
             const pToken = room.patientToken || null;
             const orgCode = room.orgCode || null;
+            const staffNameSeg = (typeof room.staffName === "string" && room.staffName.trim())
+              ? room.staffName.trim().slice(0, 100)
+              : null;
             await dbRun(
-              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at)
-               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'))`,
-              [newSessionId, session.roomId, pToken, orgCode, session.roomId]
+              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at, staff_name)
+               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'), ?)`,
+              [newSessionId, session.roomId, pToken, orgCode, session.roomId, staffNameSeg]
             ).catch(() => null);
             effectiveSession = { id: newSessionId, patient_token: pToken };
             console.log("[hospital] Auto-created session in stt:segment_end for room:", session.roomId, "sessionId:", newSessionId);
@@ -4363,10 +4366,13 @@ io.on('connection', (socket) => {
           if (!activeSession) {
             // Auto-create session for DualConsultation mode
             const newSessionId = require('uuid').v4();
+            const staffNameWhisper = (typeof meta?.staffName === 'string' && meta.staffName.trim())
+              ? meta.staffName.trim().slice(0, 100)
+              : null;
             await dbRun(
-              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at)
-               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'))`,
-              [newSessionId, roomId, pToken || null, meta?.orgCode || whisperOrgCode || null, roomId || 'auto']
+              `INSERT INTO hospital_sessions (id, room_id, patient_token, status, org_code, chart_number, station_id, created_at, started_at, staff_name)
+               VALUES (?, ?, ?, 'active', ?, ?, 'dual-consultation', datetime('now'), datetime('now'), ?)`,
+              [newSessionId, roomId, pToken || null, meta?.orgCode || whisperOrgCode || null, roomId || 'auto', staffNameWhisper]
             ).catch(() => null);
             activeSession = { id: newSessionId };
             console.log("[hospital] Auto-created session for room:", roomId, "sessionId:", newSessionId);
@@ -5595,6 +5601,7 @@ app.post("/api/auth/convert-guest", async (req, res) => {
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note TEXT").catch(() => {});
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note_edited_by TEXT").catch(() => {});
     await dbRun("ALTER TABLE hospital_sessions ADD COLUMN manager_note_edited_at TEXT").catch(() => {});
+    await dbRun("ALTER TABLE hospital_sessions ADD COLUMN staff_name TEXT").catch(() => {});
 
     // 슈퍼관리자 초기값 삽입
     await dbRun(
@@ -6055,7 +6062,10 @@ app.post("/api/hospital/stt-provider", async (req, res) => {
 // consultation + room: 진료실 QR 스캔 시 pt(기존 PT번호) 있으면 세션 재사용 및 assigned_room 연결, 없으면 새 PT 생성
 app.post('/api/hospital/join', async (req, res) => {
   try {
-    const { department, patientToken, patientId, language, org, room: consultationRoomId, pt: existingPtRoomId } = req.body || {};
+    const { department, patientToken, patientId, language, org, room: consultationRoomId, pt: existingPtRoomId, staffName: staffNameRaw } = req.body || {};
+    const staffNameJoin = (typeof staffNameRaw === 'string' && staffNameRaw.trim())
+      ? staffNameRaw.trim().slice(0, 100)
+      : null;
     const dept = String(department || 'general').trim();
     const pToken = patientToken ? String(patientToken).trim() : (patientId ? String(patientId).trim() : null);
     const lang = language ? String(language).trim() : null;
@@ -6127,9 +6137,9 @@ app.post('/api/hospital/join', async (req, res) => {
         sessionId = uuidv4();
         const createdAt = new Date().toISOString();
         await dbRun(
-          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, assigned_room, org_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
-          [sessionId, pToken || null, roomId, 'consultation', createdAt, pToken || 'auto', 'hospital', orgId, consultRoomId, orgCode]
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, assigned_room, org_code, staff_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+          [sessionId, pToken || null, roomId, 'consultation', createdAt, pToken || 'auto', 'hospital', orgId, consultRoomId, orgCode, staffNameJoin]
         );
         ROOMS.set(roomId, {
           roomType: 'oneToOne',
@@ -6230,9 +6240,9 @@ app.post('/api/hospital/join', async (req, res) => {
       createdAt = new Date().toISOString();
       try {
         await dbRun(
-          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode]
+          `INSERT INTO hospital_sessions (id, patient_token, room_id, dept, started_at, chart_number, station_id, status, org_id, org_code, staff_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+          [sessionId, pToken || null, roomId, dept, createdAt, pToken || 'auto', 'hospital', orgId, orgCode, staffNameJoin]
         );
       } catch (dbErr) {
         console.warn('[hospital:join] session insert warning:', dbErr?.message);
@@ -6750,7 +6760,7 @@ app.get('/api/hospital/patient/:patientToken/pending-messages', async (req, res)
 // POST /api/hospital/session — 직원이 병원 세션 생성
 app.post('/api/hospital/session', async (req, res) => {
   try {
-    const { chartNumber, stationId, hostLang, roomId, department, guestLang, patientId } = req.body || {};
+    const { chartNumber, stationId, hostLang, roomId, department, guestLang, patientId, staffName: staffNameRaw } = req.body || {};
     if (!chartNumber || !/^\d+$/.test(String(chartNumber).trim())) {
       return res.status(400).json({ error: 'chart_number_required', message: '차트번호는 숫자만 입력하세요.' });
     }
@@ -6762,11 +6772,14 @@ app.post('/api/hospital/session', async (req, res) => {
     const dept = String(department || '').trim() || null;
     const gLang = String(guestLang || '').trim() || null;
     const pid = patientId ? String(patientId).trim() : null;
+    const staffNameSession = (typeof staffNameRaw === 'string' && staffNameRaw.trim())
+      ? staffNameRaw.trim().slice(0, 100)
+      : null;
 
     await dbRun(
-      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, department, host_lang, guest_lang, patient_id, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-      [sessionId, rid, cleanChart, station, dept, lang, gLang, pid]
+      `INSERT INTO hospital_sessions (id, room_id, chart_number, station_id, department, host_lang, guest_lang, patient_id, status, staff_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+      [sessionId, rid, cleanChart, station, dept, lang, gLang, pid, staffNameSession]
     );
 
     // Register kiosk station mapping
@@ -7067,7 +7080,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     if (ptNumber) {
       rows = await dbAll(
         `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
-         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id,
+         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id, hs.staff_name,
          CASE WHEN hs.patient_id IS NULL THEN NULL
               ELSE ROW_NUMBER() OVER (PARTITION BY hs.patient_id ORDER BY hs.created_at ASC)
          END AS session_index,
@@ -7082,7 +7095,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
     } else {
       rows = await dbAll(
         `SELECT hs.id, hs.room_id, hs.org_code, hs.ai_summary, hs.created_at, hs.ended_at,
-         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id,
+         hs.manager_note, hs.manager_note_edited_by, hs.manager_note_edited_at, hs.patient_id, hs.staff_name,
          CASE WHEN hs.patient_id IS NULL THEN NULL
               ELSE ROW_NUMBER() OVER (PARTITION BY hs.patient_id ORDER BY hs.created_at ASC)
          END AS session_index,
@@ -7122,6 +7135,7 @@ app.get('/api/hospital/ai-summaries', requireHospitalAdminJwt, async (req, res) 
         manager_note_edited_by: r.manager_note_edited_by != null ? r.manager_note_edited_by : null,
         manager_note_edited_at: r.manager_note_edited_at != null ? r.manager_note_edited_at : null,
         session_index: r.session_index != null ? Number(r.session_index) : null,
+        staff_name: r.staff_name || null,
       };
     });
 
@@ -7412,6 +7426,48 @@ app.patch('/api/hospital/sessions/:sessionId/manager-note', requireHospitalAdmin
     });
   } catch (err) {
     console.error('[hospital] manager-note update failed', err);
+    res.status(500).json({ error: 'internal error' });
+  }
+});
+
+// PATCH /api/hospital/sessions/:sessionId/staff-name — 세션 담당 직원 표시명 (ai_summary 미변경)
+app.patch('/api/hospital/sessions/:sessionId/staff-name', requireHospitalAdminJwt, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId || !String(sessionId).trim()) {
+      return res.status(400).json({ error: 'invalid sessionId' });
+    }
+    const { staff_name } = req.body || {};
+    if (typeof staff_name !== 'string') {
+      return res.status(400).json({ error: 'invalid staff_name' });
+    }
+    const trimmed = staff_name.trim();
+    const value = trimmed.length === 0 ? null : trimmed.slice(0, 100);
+
+    const session = await dbGet(
+      'SELECT org_code FROM hospital_sessions WHERE id = ? AND deleted_at IS NULL',
+      [sessionId]
+    );
+    if (!session) {
+      return res.status(404).json({ error: 'session not found' });
+    }
+    if (String(session.org_code || 'UNKNOWN') !== String(req.hospitalOrgCode || 'UNKNOWN')) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    await dbRun(
+      `UPDATE hospital_sessions SET staff_name = ? WHERE id = ?`,
+      [value, sessionId]
+    );
+
+    const updated = await dbGet(
+      'SELECT staff_name FROM hospital_sessions WHERE id = ? LIMIT 1',
+      [sessionId]
+    );
+
+    res.json({ ok: true, staff_name: updated?.staff_name ?? value });
+  } catch (err) {
+    console.error('[hospital] staff-name update failed', err);
     res.status(500).json({ error: 'internal error' });
   }
 });
