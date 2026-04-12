@@ -22,7 +22,6 @@ import {
   MessageSquare,
   Activity,
   RefreshCw,
-  Download,
   Copy,
   LayoutGrid,
   Plus,
@@ -57,7 +56,6 @@ const MENU_ITEMS = [
   { id: "history", label: "환자 통역 이력", icon: Users },
   { id: "departments", label: "진료과별 현황", icon: Building2 },
   { id: "rooms", label: "\uBC29 \uB9CC\uB4E4\uAE30", icon: LayoutGrid },
-  { id: "reports", label: "보고서 출력", icon: FileText },
   { id: "usage-billing", label: "사용량 & 요금", icon: FileText },
   { id: "ai-summary", label: "AI 요약", icon: Sparkles },
   { id: "tts-settings", label: "TTS 음성", icon: Volume2 },
@@ -164,11 +162,6 @@ function formatTime(dateStr) {
 }
 
 function todayStr() { return new Date().toISOString().split("T")[0]; }
-function weekAgoStr() {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  return d.toISOString().split("T")[0];
-}
 function monthStartStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -1011,7 +1004,6 @@ export default function HospitalDashboard() {
           {activeMenu === "history" && <HistoryPanel authUser={authUser} />}
           {activeMenu === "departments" && <DepartmentsPanel authUser={authUser} />}
           {activeMenu === "rooms" && <RoomsPanel authUser={authUser} />}
-          {activeMenu === "reports" && <ReportsPanel authUser={authUser} />}
           {activeMenu === "usage-billing" && <UsageBillingTab authUser={authUser} />}
           {activeMenu === "admin" && <AdminDataPanel authUser={authUser} />}
           {activeMenu === "tts-settings" && <TtsSettingsPanel authUser={authUser} />}
@@ -3160,159 +3152,6 @@ function DepartmentsPanel({ authUser }) {
 }
 
 // ═══════════════════════════════════════════
-// 4. REPORTS PANEL — 보고서 출력
-// ═══════════════════════════════════════════
-function ReportsPanel({ authUser }) {
-  const [startDate, setStartDate] = useState(monthStartStr());
-  const [endDate, setEndDate] = useState(todayStr());
-  const [generating, setGenerating] = useState(false);
-
-  const handleGenerateReport = async () => {
-    setGenerating(true);
-    try {
-      const statsUrl = urlWithOrg(`/api/hospital/dashboard/stats?startDate=${startDate}&endDate=${endDate}`, authUser?.org_code);
-      const statsR = await fetch(statsUrl, { credentials: "include" });
-      const statsData = await statsR.json();
-
-      const sessUrl = urlWithOrg(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=100`, authUser?.org_code);
-      const sessR = await fetch(sessUrl, { credentials: "include" });
-      const sessData = await sessR.json();
-
-      // Generate a printable report
-      printReport(statsData, sessData?.sessions || [], startDate, endDate);
-    } catch (e) {
-      console.error("report generation failed:", e);
-      alert("보고서 생성 중 오류가 발생했습니다.");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleDownloadCSV = async () => {
-    setGenerating(true);
-    try {
-      const url = urlWithOrg(`/api/hospital/dashboard/sessions?startDate=${startDate}&endDate=${endDate}&limit=1000`, authUser?.org_code);
-      const r = await fetch(url, { credentials: "include" });
-      const data = await r.json();
-      if (!data.success || !data.sessions?.length) {
-        alert("내보낼 데이터가 없습니다.");
-        return;
-      }
-
-      const BOM = "\uFEFF";
-      const header = "날짜,차트번호,진료과,호스트언어,환자언어,통역시간(분),메시지수,상태\n";
-      const rows = data.sessions.map((s) => {
-        return [
-          formatDate(s.created_at),
-          s.chart_number || "",
-          getDeptLabel(s.department),
-          getLangLabel(s.host_lang),
-          getLangLabel(s.guest_lang),
-          s.duration_min ?? "",
-          s.message_count || 0,
-          s.status === "active" ? "진행중" : "종료",
-        ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
-      }).join("\n");
-
-      const blob = new Blob([BOM + header + rows], { type: "text/csv;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `MONO_hospital_report_${startDate}_${endDate}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      console.error("CSV export failed:", e);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Date selection */}
-      <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
-        <h3 className="text-[14px] font-semibold mb-4 text-[var(--color-text)]">
-          📄 보고서 기간 설정
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-[11px] font-medium text-[var(--color-text-secondary)] mb-1">
-              시작일
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full h-[40px] px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px] focus:outline-none focus:border-[#3B82F6]"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-[var(--color-text-secondary)] mb-1">
-              종료일
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full h-[40px] px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-[13px] focus:outline-none focus:border-[#3B82F6]"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={handleGenerateReport}
-            disabled={generating}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#3B82F6] text-white text-[13px] font-medium hover:bg-[#2563EB] disabled:opacity-50 transition-colors"
-          >
-            <Printer size={14} />
-            {generating ? "생성 중..." : "보고서 인쇄"}
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadCSV}
-            disabled={generating}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] border border-[var(--color-border)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)] disabled:opacity-50 transition-colors"
-          >
-            <Download size={14} />
-            CSV 다운로드
-          </button>
-        </div>
-      </div>
-
-      {/* Quick presets */}
-      <div className="p-5 rounded-[16px] bg-[var(--color-bg)] border border-[var(--color-border)]">
-        <h3 className="text-[14px] font-semibold mb-3 text-[var(--color-text)]">
-          빠른 기간 선택
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { label: "오늘", start: todayStr(), end: todayStr() },
-            { label: "최근 7일", start: weekAgoStr(), end: todayStr() },
-            { label: "이번 달", start: monthStartStr(), end: todayStr() },
-            {
-              label: "지난 달",
-              start: (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; })(),
-              end: (() => { const d = new Date(); d.setDate(0); return d.toISOString().split("T")[0]; })(),
-            },
-          ].map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              onClick={() => { setStartDate(p.start); setEndDate(p.end); }}
-              className="px-4 py-2 rounded-full border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[#EFF6FF] hover:text-[#3B82F6] hover:border-[#3B82F6] dark:hover:bg-[#1E3A5F] transition-colors"
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════
 // USAGE & BILLING TAB
 // ═══════════════════════════════════════════
 const USAGE_BILLING_TIERS = [
@@ -3766,73 +3605,6 @@ function printConversation(session, messages) {
         </div>
       `).join("")}
     </div>
-    <div class="footer">
-      <p>Powered by MONO Medical Interpreter (lingora.chat)</p>
-      <p>출력일: ${new Date().toLocaleString("ko-KR")}</p>
-    </div>
-  </body></html>`);
-  win.document.close();
-  setTimeout(() => win.print(), 500);
-}
-
-function printReport(stats, sessions, startDate, endDate) {
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>MONO 병원 통역 보고서</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #1a1a1a; }
-      .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3B82F6; padding-bottom: 20px; }
-      .header h1 { font-size: 22px; color: #3B82F6; }
-      .header p { font-size: 12px; color: #666; margin-top: 6px; }
-      .section { margin-bottom: 24px; }
-      .section h2 { font-size: 16px; margin-bottom: 10px; color: #333; }
-      .cards { display: flex; gap: 16px; margin-bottom: 24px; }
-      .card { flex: 1; padding: 16px; border: 1px solid #e5e5e5; border-radius: 10px; text-align: center; }
-      .card .value { font-size: 28px; font-weight: bold; color: #3B82F6; }
-      .card .label { font-size: 11px; color: #666; margin-top: 4px; }
-      table { width: 100%; border-collapse: collapse; font-size: 11px; }
-      th { background: #f8f9fa; padding: 8px 10px; text-align: left; border-bottom: 2px solid #e5e5e5; font-weight: 600; }
-      td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
-      .footer { text-align: center; margin-top: 30px; font-size: 10px; color: #999; }
-      @media print { body { padding: 20px; } .no-print { display: none; } }
-    </style></head><body>
-    <div class="header">
-      <h1>MONO Hospital - 통역 보고서</h1>
-      <p>${startDate} ~ ${endDate}</p>
-    </div>
-    <div class="cards">
-      <div class="card"><div class="value">${stats?.todayCount ?? 0}</div><div class="label">오늘 건수</div></div>
-      <div class="card"><div class="value">${stats?.monthCount ?? 0}</div><div class="label">월 누적</div></div>
-      <div class="card"><div class="value">${stats?.languageCount ?? 0}</div><div class="label">언어 수</div></div>
-      <div class="card"><div class="value">${stats?.avgDuration ?? 0}</div><div class="label">평균 시간(분)</div></div>
-    </div>
-    <div class="section">
-      <h2>통역 세션 목록</h2>
-      <table>
-        <thead><tr><th>날짜</th><th>차트번호</th><th>진료과</th><th>언어</th><th>시간</th><th>메시지</th><th>상태</th></tr></thead>
-        <tbody>
-          ${sessions.map((s) => `<tr>
-            <td>${formatDate(s.created_at)}</td>
-            <td>${s.chart_number || "-"}</td>
-            <td>${getDeptLabel(s.department)}</td>
-            <td>${getLangLabel(s.host_lang)} → ${getLangLabel(s.guest_lang)}</td>
-            <td>${s.duration_min != null ? s.duration_min + "분" : "-"}</td>
-            <td>${s.message_count || 0}</td>
-            <td>${s.status === "active" ? "진행 중" : "종료"}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>
-    ${stats?.languageStats?.length ? `
-    <div class="section">
-      <h2>언어별 통계</h2>
-      <table>
-        <thead><tr><th>언어</th><th>건수</th></tr></thead>
-        <tbody>${stats.languageStats.map((l) => `<tr><td>${getLangLabel(l.language)}</td><td>${l.count}</td></tr>`).join("")}</tbody>
-      </table>
-    </div>` : ""}
     <div class="footer">
       <p>Powered by MONO Medical Interpreter (lingora.chat)</p>
       <p>출력일: ${new Date().toLocaleString("ko-KR")}</p>
