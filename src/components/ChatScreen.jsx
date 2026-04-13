@@ -263,8 +263,13 @@ export default function ChatScreen() {
   const [participants, setParticipants] = useState([]);
   // 아래 sendChatImage / onImageFileSelected useCallback보다 위에 두어야 함 (TDZ: canAttachImage)
   const isBroadcastListener = !isHospitalMode && roomType === "broadcast" && roleHint !== "owner";
+  // participants 이벤트가 호스트에서 늦거나 누락돼도 partner-joined 등으로 상대 언어가 오면 첨부 허용
   const canAttachImage =
-    roomType === "oneToOne" && !isBroadcastListener && participants.length === 2;
+    roomType === "oneToOne" &&
+    !isBroadcastListener &&
+    (participants.length >= 2 ||
+      !!partnerLang ||
+      !!(peerInfo && peerInfo.peerLang));
   const [typingPeerName, setTypingPeerName] = useState("");
   const [serverWarning, setServerWarning] = useState("");
   const [reconnectState, setReconnectState] = useState("connected");
@@ -2293,9 +2298,9 @@ export default function ChatScreen() {
               />
               <button
                 type="button"
-                disabled={!canAttachImage}
+                aria-disabled={!canAttachImage}
                 onClick={() => canAttachImage && imageFileInputRef.current?.click()}
-                className={`w-10 h-10 rounded-full border border-[#e5e7eb] bg-white text-[#6b7280] flex items-center justify-center shrink-0 ${
+                className={`w-10 h-10 rounded-full border border-[#e5e7eb] bg-white text-[#6b7280] flex items-center justify-center shrink-0 touch-manipulation ${
                   !canAttachImage ? "opacity-40 cursor-not-allowed" : ""
                 }`}
                 title={t("chat.attach")}
