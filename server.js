@@ -1699,6 +1699,8 @@ const LIMITS = {
   STT_AUDIO_PER_10S: 300,
   STT_SEGMENT_END_PER_30S: 60,
   STT_WHISPER_PER_30S: 30,
+  CHAT_IMAGE_PER_10S: 30,
+  MAX_CHAT_IMAGE_BYTES: 5 * 1024 * 1024,
 };
 
 function consumeRate(socketId, eventName, limit, windowMs) {
@@ -4897,6 +4899,89 @@ io.on('connection', (socket) => {
         }
       } catch (e) {}
     }
+  });
+
+  // --- chat:image — 1:1 relay only (no translation, DB, TTS, push)
+  socket.on("chat:image", (data, ack) => {
+    const ackReply = (payload) => {
+      if (typeof ack === "function") {
+        try {
+          ack(payload);
+        } catch {}
+      }
+    };
+    if (!consumeRate(socket.id, "chat:image", LIMITS.CHAT_IMAGE_PER_10S, 10000)) {
+      ackReply({ ok: false, error: "rate_limited" });
+      return;
+    }
+    const { roomId, participantId, id, mimeType, data: b64 } = data || {};
+    if (!roomId || !participantId || !id || b64 == null) {
+      ackReply({ ok: false, error: "invalid_payload" });
+      return;
+    }
+    if (!isAuthorizedParticipant(socket, roomId, participantId)) {
+      ackReply({ ok: false, error: "unauthorized" });
+      return;
+    }
+    if (typeof id !== "string" || id.length > 128) {
+      ackReply({ ok: false, error: "invalid_message_id" });
+      return;
+    }
+    if (mimeType !== "image/jpeg") {
+      ackReply({ ok: false, error: "invalid_mime" });
+      return;
+    }
+    if (typeof b64 !== "string" || b64.length > LIMITS.MAX_CHAT_IMAGE_BYTES * 1.4) {
+      ackReply({ ok: false, error: "payload_too_large" });
+      return;
+    }
+    let buf;
+    try {
+      buf = Buffer.from(b64, "base64");
+    } catch {
+      ackReply({ ok: false, error: "invalid_base64" });
+      return;
+    }
+    if (!buf.length || buf.length > LIMITS.MAX_CHAT_IMAGE_BYTES) {
+      ackReply({ ok: false, error: "payload_size" });
+      return;
+    }
+    if (buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) {
+      ackReply({ ok: false, error: "not_jpeg" });
+      return;
+    }
+    const meta = ensureRoomMeta(roomId);
+    if (!meta?.participants || meta.roomType !== "oneToOne") {
+      ackReply({ ok: false, error: "not_one_to_one" });
+      return;
+    }
+    const otherPid = Object.keys(meta.participants).find((p) => p !== participantId);
+    const otherP = otherPid ? meta.participants[otherPid] : null;
+    if (!otherP?.socketId) {
+      ackReply({ ok: false, error: "peer_offline" });
+      return;
+    }
+    if (isRecentDuplicateMessage(roomId, id)) {
+      ackReply({ ok: true, duplicate: true });
+      return;
+    }
+    const ts = Date.now();
+    io.to(otherP.socketId).emit("receive-chat-image", {
+      id,
+      roomId,
+      senderPid: participantId,
+      mimeType: "image/jpeg",
+      data: b64,
+      timestamp: ts,
+    });
+    socket.emit("message-status", {
+      roomId,
+      messageId: id,
+      participantId: otherPid,
+      status: "delivered",
+      at: ts,
+    });
+    ackReply({ ok: true, accepted: true });
   });
 
   socket.on('disconnect', (reason) => {

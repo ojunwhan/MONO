@@ -7,7 +7,7 @@ import AudioWaveform from "./AudioWaveform";
 import QRCode from "react-qr-code";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
-import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode, Copy } from "lucide-react";
+import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode, Copy, Check, CheckCheck, Clock3 } from "lucide-react";
 import BottomSheet from "./BottomSheet";
 import ToastMessage from "./ToastMessage";
 import SITE_CONTEXTS from "../constants/siteContexts";
@@ -97,6 +97,100 @@ function dedupeRepeats(s) {
   return dedupeRepeatTokens(result);
 }
 
+const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+/** 디코드 기준 상한 — 서버 5MB 대비 여유 (base64 오버헤드 포함) */
+const ADAPTIVE_IMAGE_MAX_BYTES = Math.floor(4.5 * 1024 * 1024);
+
+const ADAPTIVE_JPEG_STEPS = [
+  { maxEdge: 2048, quality: 0.92 },
+  { maxEdge: 2048, quality: 0.88 },
+  { maxEdge: 2048, quality: 0.85 },
+  { maxEdge: 2048, quality: 0.8 },
+  { maxEdge: 1920, quality: 0.85 },
+  { maxEdge: 1600, quality: 0.85 },
+  { maxEdge: 1280, quality: 0.8 },
+];
+
+function base64FromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result || "");
+      const i = s.indexOf(",");
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error("read"));
+    r.readAsDataURL(blob);
+  });
+}
+
+async function compressAdaptively(file) {
+  const t = (file.type || "").toLowerCase();
+  if (!/^image\/(jpeg|png|webp)$/.test(t)) {
+    throw new Error("type");
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("load"));
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  const nw = img.naturalWidth || img.width;
+  const nh = img.naturalHeight || img.height;
+  if (!nw || !nh) throw new Error("dims");
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+
+  for (let i = 0; i < ADAPTIVE_JPEG_STEPS.length; i++) {
+    const { maxEdge, quality } = ADAPTIVE_JPEG_STEPS[i];
+    let tw = nw;
+    let th = nh;
+    if (tw > maxEdge || th > maxEdge) {
+      if (tw >= th) {
+        th = Math.round((th * maxEdge) / tw);
+        tw = maxEdge;
+      } else {
+        tw = Math.round((tw * maxEdge) / th);
+        th = maxEdge;
+      }
+    }
+    canvas.width = tw;
+    canvas.height = th;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, tw, th);
+    ctx.drawImage(img, 0, 0, tw, th);
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
+    });
+    if (!blob) continue;
+    let b64;
+    try {
+      b64 = await base64FromBlob(blob);
+    } catch {
+      continue;
+    }
+    let binLen = 0;
+    try {
+      binLen = atob(b64).length;
+    } catch {
+      continue;
+    }
+    if (binLen <= ADAPTIVE_IMAGE_MAX_BYTES) {
+      console.log(`[image] passed at step ${i + 1} (${maxEdge}px/q=${quality})`);
+      return b64;
+    }
+  }
+  throw new Error("too_large");
+}
+
 export default function ChatScreen() {
   const { t } = useTranslation();
   const { roomId } = useParams();
@@ -184,6 +278,7 @@ export default function ChatScreen() {
     return !isStandalone;
   });
   const roomMenuRef = useRef(null);
+  const imageFileInputRef = useRef(null);
 
   useEffect(() => {
     const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone);
@@ -470,7 +565,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!roomId || !historyLoadedRef.current || !messages.length) return;
     const tasks = messages
-      .filter((m) => m?.id && !m?.system)
+      .filter((m) => m?.id && !m?.system && m.kind !== "image")
       .map((m) =>
         saveMessage({
           id: m.id,
@@ -494,7 +589,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!isGuestMode || !isHospitalMode || !roomId || messages.length === 0) return;
     const toSave = messages
-      .filter((m) => !m?.system)
+      .filter((m) => !m?.system && m.kind !== "image")
       .map((m) => ({
         id: m.id,
         originalText: m.originalText ?? m.text ?? "",
@@ -1001,6 +1096,46 @@ export default function ChatScreen() {
       if (vibrationEnabled && navigator?.vibrate) navigator.vibrate([120, 60, 120]);
     };
 
+    const onReceiveChatImage = (payload) => {
+      const { id, roomId: incomingRoomId, senderPid, data, mimeType } = payload || {};
+      if (!id || data == null) return;
+      if (incomingRoomId && incomingRoomId !== roomIdRef.current) return;
+      if (seenIdsRef.current.has(id)) return;
+      seenIdsRef.current.add(id);
+      const eventTs = Number(payload?.timestamp || Date.now());
+      const isMine = senderPid && senderPid === participantIdRef.current;
+      if (isMine) return;
+      const mt = mimeType || "image/jpeg";
+      const url = `data:${mt};base64,${data}`;
+      recordRoomActivity(roomIdRef.current, {
+        roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
+        lastMessagePreview: "[이미지]",
+        lastMessageAt: eventTs,
+        lastMessageMine: false,
+        unreadCount: 0,
+      }).catch(() => {});
+      const resolvedSenderName =
+        roomTypeRef.current === "oneToOne"
+          ? partnerNameRef.current || ""
+          : payload?.senderCallSign || "";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id,
+          kind: "image",
+          imageDataUrl: url,
+          mine: false,
+          senderId: senderPid || "",
+          status: "translated",
+          timestamp: eventTs,
+          senderDisplayName: resolvedSenderName,
+          senderCallSign: payload?.senderCallSign || "",
+          senderFlagUrl: roomTypeRef.current === "oneToOne" ? partnerFlagRef.current : "",
+          senderLabel: roomTypeRef.current === "oneToOne" ? partnerShortRef.current : "",
+        },
+      ]);
+    };
+
     const onServerWarning = (payload) => {
       const msg = payload?.message || "";
       if (!msg) return;
@@ -1077,6 +1212,7 @@ export default function ChatScreen() {
     socket.on("room-context", onRoomContext);
     socket.on("participants", onParticipants);
     socket.on("receive-message", onReceiveMessage);
+    socket.on("receive-chat-image", onReceiveChatImage);
     socket.on("receive-message-stream", onReceiveMessageStream);
     socket.on("receive-message-stream-end", onReceiveMessageStreamEnd);
     socket.on("recent-messages", onRecentMessages);
@@ -1101,6 +1237,7 @@ export default function ChatScreen() {
       socket.off("room-context", onRoomContext);
       socket.off("participants", onParticipants);
       socket.off("receive-message", onReceiveMessage);
+      socket.off("receive-chat-image", onReceiveChatImage);
       socket.off("receive-message-stream", onReceiveMessageStream);
       socket.off("receive-message-stream-end", onReceiveMessageStreamEnd);
       socket.off("recent-messages", onRecentMessages);
@@ -1596,6 +1733,108 @@ export default function ChatScreen() {
     touchRoom(roomId).catch(() => {});
   };
 
+  const sendChatImageFromBase64 = useCallback(
+    (msgId, base64) => {
+      if (!roomId || !participantId) return;
+      let binLen = 0;
+      try {
+        const bin = atob(base64);
+        binLen = bin.length;
+      } catch {
+        showToast(t("chat.imageSendFail") || "이미지를 보낼 수 없습니다.");
+        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+        return;
+      }
+      if (binLen > MAX_CHAT_IMAGE_BYTES) {
+        showToast(t("chat.imageTooLarge") || "이미지가 너무 큽니다.");
+        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+        return;
+      }
+      socket.emit(
+        "chat:image",
+        {
+          roomId,
+          participantId,
+          id: msgId,
+          mimeType: "image/jpeg",
+          data: base64,
+        },
+        (ack) => {
+          if (ack?.ok || ack?.duplicate) {
+            seenIdsRef.current.add(msgId);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === msgId ? { ...m, status: "sent", queued: false } : m
+              )
+            );
+            return;
+          }
+          setMessages((prev) => prev.filter((m) => m.id !== msgId));
+          const err = ack?.error || "";
+          showToast(
+            err === "peer_offline"
+              ? t("chat.imagePeerOffline") || "상대가 연결되어 있지 않습니다."
+              : t("chat.imageSendFail") || "이미지를 보낼 수 없습니다."
+          );
+        }
+      );
+    },
+    [roomId, participantId, showToast, t]
+  );
+
+  const onImageFileSelected = useCallback(
+    async (e) => {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (!file || !canAttachImage) return;
+      const msgId = uuidv4();
+      let previewDataUrl = "";
+      let base64 = "";
+      try {
+        base64 = await compressAdaptively(file);
+        previewDataUrl = `data:image/jpeg;base64,${base64}`;
+      } catch {
+        showToast(t("chat.imageProcessFail") || "사진을 처리할 수 없습니다.");
+        return;
+      }
+      try {
+        const bin = atob(base64);
+        if (bin.length > MAX_CHAT_IMAGE_BYTES) {
+          showToast(t("chat.imageTooLarge") || "이미지가 너무 큽니다.");
+          return;
+        }
+      } catch {
+        showToast(t("chat.imageProcessFail") || "이미지를 처리할 수 없습니다.");
+        return;
+      }
+      const ts = Date.now();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: msgId,
+          kind: "image",
+          imageDataUrl: previewDataUrl,
+          mine: true,
+          senderId: participantIdRef.current,
+          status: "sending",
+          timestamp: ts,
+          senderFlagUrl: myFlagRef.current,
+          senderLabel: myShortRef.current,
+        },
+      ]);
+      recordRoomActivity(roomId, {
+        roomType: roomTypeRef.current === "broadcast" ? "broadcast" : "1to1",
+        lastMessagePreview: "[이미지]",
+        lastMessageAt: ts,
+        lastMessageMine: true,
+        unreadCount: 0,
+      }).catch(() => {});
+      touchRoom(roomId).catch(() => {});
+      sendChatImageFromBase64(msgId, base64);
+    },
+    [canAttachImage, roomId, showToast, t, sendChatImageFromBase64]
+  );
+
   // Site context label
   const siteLabel = useMemo(() => {
     return SITE_CONTEXTS.find(c => c.id === siteContext)?.labelKo || siteContext;
@@ -1613,6 +1852,14 @@ export default function ChatScreen() {
       "---",
     ];
     messages.filter((m) => !m?.system).forEach((m) => {
+      if (m.kind === "image") {
+        if (m.mine) {
+          lines.push(`직원 (${staffLang}): [이미지]`);
+        } else {
+          lines.push(`환자 (${patientLang}): [이미지]`);
+        }
+        return;
+      }
       const orig = (m.originalText || m.text || "").trim();
       const trans = (m.translatedText || m.text || "").trim();
       if (m.mine) {
@@ -1671,6 +1918,8 @@ export default function ChatScreen() {
 
   // Broadcast listeners cannot send — 병원 모드는 항상 1:1이므로 수신전용 안 됨
   const isBroadcastListener = !isHospitalMode && roomType === "broadcast" && roleHint !== "owner";
+  const canAttachImage =
+    roomType === "oneToOne" && !isBroadcastListener && participants.length === 2;
   const partnerOnline = useMemo(
     () => participants.some((p) => p?.pid && p.pid !== participantId && p.online !== false),
     [participants, participantId]
@@ -1895,6 +2144,105 @@ export default function ChatScreen() {
                     <span className="h-px flex-1 bg-[var(--color-border)]" />
                   </div>
                 ) : null}
+                {m.kind === "image" ? (() => {
+                  const isMine = !!m.mine || String(m.senderId || "") === String(participantIdRef.current);
+                  const isGroupRoom = roomType !== "oneToOne";
+                  const title =
+                    m.senderDisplayName &&
+                    !["unknown", "null", "undefined"].includes(String(m.senderDisplayName).toLowerCase())
+                      ? m.senderDisplayName
+                      : t("messageBubble.unknownUser");
+                  const timeText = m.timestamp
+                    ? (() => {
+                        try {
+                          return new Date(m.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+                        } catch {
+                          return "";
+                        }
+                      })()
+                    : "";
+                  const StatusIcon =
+                    m.queued || m.status === "sending" ? Clock3 : m.status === "read" ? CheckCheck : Check;
+                  return (
+                    <div
+                      className={`w-full flex ${isMine ? "justify-end" : "justify-start"} ${
+                        groupedWithPrev ? "mt-[4px]" : "mt-[16px]"
+                      }`}
+                    >
+                      {!isMine && isGroupRoom ? (
+                        <div className="w-9 h-9 rounded-full bg-[#D9D9DE] text-[#555] text-[13px] font-semibold flex items-center justify-center mr-2 mt-1">
+                          {String(m.senderAvatarText || title.charAt(0) || "?").slice(0, 2)}
+                        </div>
+                      ) : null}
+                      <div className="max-w-[75%]">
+                        {!isMine && isGroupRoom && !groupedWithPrev ? (
+                          <div className="mb-1 px-1 flex items-center gap-1 text-[12px] text-[#8E8E93]">
+                            {m.senderFlagUrl ? <img className="flag" src={m.senderFlagUrl} alt="" /> : null}
+                            {m.senderLabel ? <span>{m.senderLabel}</span> : null}
+                            <span className="truncate">{title}</span>
+                          </div>
+                        ) : null}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            openMessageMenu(m);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openMessageMenu(m);
+                            }
+                          }}
+                          style={
+                            isMine
+                              ? {
+                                  background: "linear-gradient(135deg, #7C6FEB, #a78bfa)",
+                                  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                                }
+                              : { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+                          }
+                          className={`inline-block max-w-full overflow-hidden ${
+                            isMine
+                              ? "rounded-[18px] rounded-br-[4px] p-1"
+                              : "rounded-[18px] rounded-bl-[4px] p-1 bg-[#f3f4f6]"
+                          }`}
+                        >
+                          {m.imageDataUrl ? (
+                            <img
+                              src={m.imageDataUrl}
+                              alt=""
+                              className="max-w-full h-auto max-h-[min(50vh,320px)] object-contain rounded-[14px] block"
+                              loading="lazy"
+                            />
+                          ) : null}
+                        </div>
+                        <div
+                          className={`mt-0.5 px-1 text-[11px] text-[#8E8E93] inline-flex items-center gap-1 ${
+                            isMine ? "justify-start" : "justify-end"
+                          } w-full`}
+                        >
+                          {isMine ? (
+                            <>
+                              <span>{timeText}</span>
+                              <StatusIcon
+                                size={12}
+                                className={`${m.status === "read" ? "text-[#3B82F6]" : "text-[#8E8E93]"} inline-block`}
+                              />
+                              {m.queued ? <span>{t("messageBubble.queued")}</span> : null}
+                            </>
+                          ) : (
+                            <span>{timeText}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : (
                 <MessageBubble
                   message={m}
                   onPlay={() => playMessageOnce(m)}
@@ -1903,6 +2251,7 @@ export default function ChatScreen() {
                   roomType={roomType}
                   groupedWithPrev={groupedWithPrev}
                 />
+                )}
               </React.Fragment>
             );
           })}
@@ -1933,9 +2282,22 @@ export default function ChatScreen() {
             }}
           >
             <div className="px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] min-h-[56px] flex items-center gap-2">
+              <input
+                ref={imageFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden sr-only"
+                aria-hidden
+                tabIndex={-1}
+                onChange={onImageFileSelected}
+              />
               <button
                 type="button"
-                className="w-10 h-10 rounded-full border border-[#e5e7eb] bg-white text-[#6b7280] flex items-center justify-center shrink-0"
+                disabled={!canAttachImage}
+                onClick={() => canAttachImage && imageFileInputRef.current?.click()}
+                className={`w-10 h-10 rounded-full border border-[#e5e7eb] bg-white text-[#6b7280] flex items-center justify-center shrink-0 ${
+                  !canAttachImage ? "opacity-40 cursor-not-allowed" : ""
+                }`}
                 title={t("chat.attach")}
                 aria-label={t("chat.attach")}
               >
@@ -1947,7 +2309,9 @@ export default function ChatScreen() {
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{replyTarget.mine ? t("chat.replyMe") : (replyTarget.senderDisplayName || t("chat.replyOther"))}</div>
                       <div className="truncate text-[var(--color-text-secondary)]">
-                        {replyTarget.translatedText || replyTarget.originalText || replyTarget.text}
+                        {replyTarget.kind === "image"
+                          ? "[이미지]"
+                          : replyTarget.translatedText || replyTarget.originalText || replyTarget.text}
                       </div>
                     </div>
                     <button
@@ -2069,7 +2433,10 @@ export default function ChatScreen() {
           <button
             type="button"
             onClick={async () => {
-              const copied = menuMessage?.translatedText || menuMessage?.originalText || menuMessage?.text || "";
+              const copied =
+                menuMessage?.kind === "image"
+                  ? "[이미지]"
+                  : menuMessage?.translatedText || menuMessage?.originalText || menuMessage?.text || "";
               try {
                 await navigator.clipboard.writeText(copied);
                 showToast(t("chat.copyDone"));
