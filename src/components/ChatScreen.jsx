@@ -7,7 +7,7 @@ import AudioWaveform from "./AudioWaveform";
 import QRCode from "react-qr-code";
 import { v4 as uuidv4 } from "uuid";
 import InstallBanner from "./InstallBanner";
-import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode, Copy, Check, CheckCheck, Clock3 } from "lucide-react";
+import { ChevronLeft, MoreVertical, SendHorizontal, Plus, UserPlus, Link2, Share2, QrCode, Copy, Check, CheckCheck, Clock3, X } from "lucide-react";
 import BottomSheet from "./BottomSheet";
 import ToastMessage from "./ToastMessage";
 import SITE_CONTEXTS from "../constants/siteContexts";
@@ -191,6 +191,30 @@ async function compressAdaptively(file) {
   throw new Error("too_large");
 }
 
+function chatImageDownloadFilename(message) {
+  let ts = Date.now();
+  if (message?.timestamp != null) {
+    try {
+      ts = new Date(message.timestamp).getTime();
+    } catch {
+      /* keep Date.now() */
+    }
+  }
+  return `mono-image-${ts}.jpg`;
+}
+
+function triggerDataUrlDownload(dataUrl, filename) {
+  if (!dataUrl || typeof document === "undefined") return;
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename || `mono-image-${Date.now()}.jpg`;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 export default function ChatScreen() {
   const { t } = useTranslation();
   const { roomId } = useParams();
@@ -276,6 +300,7 @@ export default function ChatScreen() {
   const [menuMessage, setMenuMessage] = useState(null);
   const [replyTarget, setReplyTarget] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [viewerImage, setViewerImage] = useState(null);
   const [toast, setToast] = useState("");
   const [roomMenuOpen, setRoomMenuOpen] = useState(false);
   const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
@@ -293,6 +318,15 @@ export default function ChatScreen() {
     const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone);
     if (isStandalone) setShowInstallBanner(false);
   }, []);
+
+  useEffect(() => {
+    if (!viewerImage) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setViewerImage(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewerImage]);
 
   // ── 접수처 EMR/CRM 복사용: org 설정 (직원만) ──
   const orgCodeForCopy = location.state?.orgCode || searchParams.get("org") || "";
@@ -2150,6 +2184,7 @@ export default function ChatScreen() {
                   </div>
                 ) : null}
                 {m.kind === "image" ? (() => {
+                  const dlName = chatImageDownloadFilename(m);
                   const isMine = !!m.mine || String(m.senderId || "") === String(participantIdRef.current);
                   const isGroupRoom = roomType !== "oneToOne";
                   const title =
@@ -2218,12 +2253,22 @@ export default function ChatScreen() {
                           }`}
                         >
                           {m.imageDataUrl ? (
-                            <img
-                              src={m.imageDataUrl}
-                              alt=""
-                              className="max-w-full h-auto max-h-[min(50vh,320px)] object-contain rounded-[14px] block"
-                              loading="lazy"
-                            />
+                            <a
+                              href={m.imageDataUrl}
+                              download={dlName}
+                              className="block rounded-[14px] cursor-zoom-in touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setViewerImage({ dataUrl: m.imageDataUrl, filename: dlName });
+                              }}
+                            >
+                              <img
+                                src={m.imageDataUrl}
+                                alt=""
+                                className="max-w-full h-auto max-h-[min(50vh,320px)] object-contain rounded-[14px] block"
+                                loading="lazy"
+                              />
+                            </a>
                           ) : null}
                         </div>
                         <div
@@ -2454,6 +2499,18 @@ export default function ChatScreen() {
           >
             📋 {t("chat.copy")}
           </button>
+          {menuMessage?.kind === "image" && menuMessage?.imageDataUrl ? (
+            <button
+              type="button"
+              onClick={() => {
+                triggerDataUrlDownload(menuMessage.imageDataUrl, chatImageDownloadFilename(menuMessage));
+                closeMessageMenu();
+              }}
+              className="w-full h-[52px] px-3 text-left text-[15px] border-b border-[var(--color-border)]"
+            >
+              💾 {t("chat.imageSaveDownload") || "이미지 저장"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -2516,6 +2573,42 @@ export default function ChatScreen() {
           </div>
         </div>
       ) : null}
+
+      {viewerImage ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("chat.imageViewer") || "이미지 보기"}
+          onClick={() => setViewerImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute z-[101] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))] w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center touch-manipulation"
+            aria-label={t("common.close")}
+            onClick={(e) => {
+              e.stopPropagation();
+              setViewerImage(null);
+            }}
+          >
+            <X size={22} strokeWidth={2} />
+          </button>
+          <a
+            href={viewerImage.dataUrl}
+            download={viewerImage.filename}
+            className="relative z-[1] max-w-full max-h-full flex items-center justify-center touch-manipulation"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={viewerImage.dataUrl}
+              alt=""
+              className="max-w-[95vw] max-h-[min(88vh,100dvh)] w-auto h-auto object-contain rounded-sm select-none"
+              draggable={false}
+            />
+          </a>
+        </div>
+      ) : null}
+
       <BottomSheet open={inviteSheetOpen} onClose={() => { setInviteSheetOpen(false); setShowInviteQr(false); }} title={t("chat.inviteRoom")}>
         <div className="px-3 pb-2">
           <button
