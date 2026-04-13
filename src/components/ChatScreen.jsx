@@ -261,6 +261,10 @@ export default function ChatScreen() {
   const [mediaStream, setMediaStream] = useState(null);
   const [mobileRecordSeconds, setMobileRecordSeconds] = useState(0);
   const [participants, setParticipants] = useState([]);
+  // 아래 sendChatImage / onImageFileSelected useCallback보다 위에 두어야 함 (TDZ: canAttachImage)
+  const isBroadcastListener = !isHospitalMode && roomType === "broadcast" && roleHint !== "owner";
+  const canAttachImage =
+    roomType === "oneToOne" && !isBroadcastListener && participants.length === 2;
   const [typingPeerName, setTypingPeerName] = useState("");
   const [serverWarning, setServerWarning] = useState("");
   const [reconnectState, setReconnectState] = useState("connected");
@@ -1916,10 +1920,6 @@ export default function ChatScreen() {
     );
   }, []);
 
-  // Broadcast listeners cannot send — 병원 모드는 항상 1:1이므로 수신전용 안 됨
-  const isBroadcastListener = !isHospitalMode && roomType === "broadcast" && roleHint !== "owner";
-  const canAttachImage =
-    roomType === "oneToOne" && !isBroadcastListener && participants.length === 2;
   const partnerOnline = useMemo(
     () => participants.some((p) => p?.pid && p.pid !== participantId && p.online !== false),
     [participants, participantId]
