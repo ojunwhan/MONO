@@ -229,6 +229,7 @@
     "termsAgree": "By signing in, you agree to the Terms and Privacy Policy.",
     "terms": "Terms",
     "privacy": "Privacy Policy",
+    "termsAgreeRegister": "By registering, you agree to the Terms of Service and Privacy Policy",
     "instantQR": "Instant interpretation with QR",
     "startWithoutLogin": "Start interpretation with QR (no login)",
     "hospitalAdminLink": "Hospital or organization admin?",

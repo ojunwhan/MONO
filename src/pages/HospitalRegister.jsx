@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MonoLogo from "../components/MonoLogo";
 
 export default function HospitalRegister() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [hospitalName, setHospitalName] = useState("");
@@ -117,6 +119,19 @@ export default function HospitalRegister() {
             {loading ? "처리 중..." : "등록 신청"}
           </button>
         </div>
+
+        <p className="mt-4 text-center text-[12px] text-[var(--color-text-secondary)]">
+          {t("login.termsAgreeRegister")}{" "}
+          <span className="whitespace-nowrap">
+            <a href="/terms" className="underline">
+              {t("login.terms")}
+            </a>
+            {" / "}
+            <a href="/privacy" className="underline">
+              {t("login.privacy")}
+            </a>
+          </span>
+        </p>
 
         <p className="mt-5 text-center text-[12px] text-[var(--color-text-secondary)]">
           이미 계정이 있으신가요?{" "}
