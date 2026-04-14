@@ -41,20 +41,45 @@ self.addEventListener('notificationclick', (event) => {
     : (data.url || "/interpret");
   const targetUrl = new URL(targetPath, self.location.origin).href;
 
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Focus existing window if available
-      for (const client of windowClients) {
-        if (client.url.includes(self.location.origin)) {
-          client.focus();
-          client.navigate(targetUrl);
+  event.waitUntil((async () => {
+    const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    let targetPathname = '';
+    try {
+      targetPathname = new URL(targetUrl).pathname;
+    } catch {
+      targetPathname = targetPath;
+    }
+    const normPath = (p) => (p && p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p);
+
+    // Pass 1: already on target room/path — focus only (no navigate flicker)
+    for (const client of windowClients) {
+      try {
+        const u = new URL(client.url);
+        if (u.origin !== self.location.origin) continue;
+        if (normPath(u.pathname) === normPath(targetPathname)) {
+          await client.focus();
           return;
         }
-      }
-      // Otherwise open new window
-      return clients.openWindow(targetUrl);
-    })
-  );
+      } catch (_) { /* ignore invalid client.url */ }
+    }
+
+    // Pass 2: any same-origin window — focus then navigate
+    for (const client of windowClients) {
+      try {
+        const u = new URL(client.url);
+        if (u.origin !== self.location.origin) continue;
+        await client.focus();
+        if (typeof client.navigate === 'function') {
+          await client.navigate(targetUrl);
+        } else {
+          await self.clients.openWindow(targetUrl);
+        }
+        return;
+      } catch (_) { /* try next */ }
+    }
+
+    await self.clients.openWindow(targetUrl);
+  })());
 });
 
 // ── Message from client (fallback local notification) ──

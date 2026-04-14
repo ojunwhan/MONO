@@ -229,6 +229,20 @@ export default function ChatScreen() {
   const queryIsCreator = searchParams.get("isCreator") === "1";
   const querySiteContext = searchParams.get("siteContext") || "";
   const queryRoomType = searchParams.get("roomType") || "";
+  const monoGuestRaw = (() => {
+    try {
+      if (location.state) return null;
+      const rid = roomId != null ? String(roomId) : "";
+      if (!rid) return null;
+      const raw = sessionStorage.getItem("mono_guest");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (String(parsed?.roomId || "") !== rid) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  })();
   const isGuestMode = !!location.state?.isGuest;
 
   // PID
@@ -240,6 +254,8 @@ export default function ChatScreen() {
     // 1:1 room path (RoomList/Setup): use stable userId for server identity + push routing
     const explicitUserId = location.state?.myUserId || "";
     if (explicitUserId) return explicitUserId;
+    const guestFromStorage = monoGuestRaw?.guestId;
+    if (guestFromStorage) return String(guestFromStorage);
     let id = localStorage.getItem(pidKey);
     if (!id) {
       id = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
@@ -249,14 +265,17 @@ export default function ChatScreen() {
   });
 
   const [fromLang] = useState(
-    location.state?.fromLang || queryFromLang || localStorage.getItem("myLang") || "ko"
+    location.state?.fromLang || queryFromLang || monoGuestRaw?.lang || localStorage.getItem("myLang") || "ko"
   );
-  const [localName] = useState(location.state?.localName || queryLocalName || "");
+  const [localName] = useState(
+    location.state?.localName || queryLocalName || monoGuestRaw?.name || ""
+  );
   const [selectedRole] = useState(location.state?.role || "Tech");
   const roleHint = isGuestMode ? "guest" : (location.state?.isCreator || queryIsCreator ? "owner" : "guest");
   const isKioskMode = !!location.state?.isKiosk;
   const kioskStationId = location.state?.stationId || "default";
-  const effectiveSiteContext = location.state?.siteContext || querySiteContext || "";
+  const effectiveSiteContext =
+    location.state?.siteContext || querySiteContext || monoGuestRaw?.siteContext || "";
   const isHospitalMode = String(effectiveSiteContext).startsWith("hospital_");
   const hospitalDept = location.state?.hospitalDept || null;
   const chartNumber = location.state?.chartNumber || "";
