@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MonoLogo from "../components/MonoLogo";
 
 export default function HospitalLogin() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo =
@@ -86,6 +88,17 @@ export default function HospitalLogin() {
             {loading ? "확인 중..." : "로그인"}
           </button>
         </div>
+
+        <p className="mt-4 text-center text-[12px] text-[var(--color-text-secondary)]">
+          {t("login.termsAgree")}{" "}
+          <a href="/terms" className="underline">
+            {t("login.terms")}
+          </a>
+          {" / "}
+          <a href="/privacy" className="underline">
+            {t("login.privacy")}
+          </a>
+        </p>
 
         <p className="mt-5 text-center text-[12px] text-[var(--color-text-secondary)]">
           계정이 없으신가요?{" "}
