@@ -8,6 +8,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useVADPipeline } from "../hooks/useVADPipeline";
 import socket from "../socket";
 import { enqueueTts, unlockAudio, setActiveRoom } from "../audio/ttsPlayer";
@@ -566,6 +567,7 @@ export default function FixedRoomVAD() {
   const { roomId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const state = location.state || {};
 
   // ── location.state에서 수신 ──
@@ -1617,6 +1619,28 @@ export default function FixedRoomVAD() {
               </div>
             )}
           </div>
+          <div
+            style={{
+              flexShrink: 0,
+              padding: "12px 16px",
+              borderTop: "1px solid #f3f4f6",
+              background: "#ffffff",
+              textAlign: "center",
+            }}
+            aria-label="법적 고지"
+          >
+            <p style={{ margin: 0, fontSize: "11px", lineHeight: 1.4, color: "#6b7280" }}>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <a href="/terms" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.terms")}
+                </a>
+                {" / "}
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.privacy")}
+                </a>
+              </span>
+            </p>
+          </div>
         </>
       )}
 
@@ -1757,6 +1781,28 @@ export default function FixedRoomVAD() {
             )}
 
           </div>
+          <div
+            style={{
+              flexShrink: 0,
+              padding: "12px 16px",
+              borderTop: "1px solid #f3f4f6",
+              background: "#ffffff",
+              textAlign: "center",
+            }}
+            aria-label="법적 고지"
+          >
+            <p style={{ margin: 0, fontSize: "11px", lineHeight: 1.4, color: "#6b7280" }}>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <a href="/terms" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.terms")}
+                </a>
+                {" / "}
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.privacy")}
+                </a>
+              </span>
+            </p>
+          </div>
         </>
       )}
 
@@ -1839,65 +1885,89 @@ export default function FixedRoomVAD() {
       {/* STEP: ENDED */}
       {/* ═══════════════════════════════════════ */}
       {step === "ended" && (
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "24px",
-          padding: "32px",
-        }}>
+        <>
           <div style={{
-            width: "80px", height: "80px", borderRadius: "50%",
-            background: "rgba(124, 111, 235, 0.1)",
-            display: "flex", alignItems: "center", justifyContent: "center",
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "24px",
+            padding: "32px",
           }}>
-            <CheckCircle size={40} color="#7C6FEB" />
-          </div>
-
-          <div style={{ textAlign: "center" }}>
-            <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#1f2937" }}>
-              통역이 종료되었습니다. 수고하셨습니다.
-            </h2>
-            <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>
-              {isOwner ? "아래 버튼으로 통역 대기 화면으로 돌아가세요." : "이 페이지를 닫아도 됩니다."}
-            </p>
-          </div>
-
-          {/* 직원: 통역 대기로 돌아가기 */}
-          {isOwner && (
-            <button
-              type="button"
-              onClick={handleBackToDashboard}
-              style={{
-                padding: "14px 28px",
-                borderRadius: "16px",
-                border: "none",
-                background: "linear-gradient(135deg, #7C6FEB, #a78bfa)",
-                color: "white",
-                fontSize: "15px",
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 15px rgba(124,111,235,0.3)",
-              }}
-            >
-              통역 대기로 돌아가기
-            </button>
-          )}
-
-          {!isOwner && hospitalDept && (
             <div style={{
-              textAlign: "center", padding: "12px 24px",
-              background: "#f9fafb", borderRadius: "12px", border: "1px solid #e5e7eb",
+              width: "80px", height: "80px", borderRadius: "50%",
+              background: "rgba(124, 111, 235, 0.1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <span style={{ fontSize: "32px" }}>{hospitalDept.icon}</span>
-              <p style={{ fontSize: "14px", marginTop: "4px", color: "#6b7280" }}>
-                {hospitalDept.labelKo}
+              <CheckCircle size={40} color="#7C6FEB" />
+            </div>
+
+            <div style={{ textAlign: "center" }}>
+              <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#1f2937" }}>
+                통역이 종료되었습니다. 수고하셨습니다.
+              </h2>
+              <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>
+                {isOwner ? "아래 버튼으로 통역 대기 화면으로 돌아가세요." : "이 페이지를 닫아도 됩니다."}
               </p>
             </div>
-          )}
-        </div>
+
+            {/* 직원: 통역 대기로 돌아가기 */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={handleBackToDashboard}
+                style={{
+                  padding: "14px 28px",
+                  borderRadius: "16px",
+                  border: "none",
+                  background: "linear-gradient(135deg, #7C6FEB, #a78bfa)",
+                  color: "white",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(124,111,235,0.3)",
+                }}
+              >
+                통역 대기로 돌아가기
+              </button>
+            )}
+
+            {!isOwner && hospitalDept && (
+              <div style={{
+                textAlign: "center", padding: "12px 24px",
+                background: "#f9fafb", borderRadius: "12px", border: "1px solid #e5e7eb",
+              }}>
+                <span style={{ fontSize: "32px" }}>{hospitalDept.icon}</span>
+                <p style={{ fontSize: "14px", marginTop: "4px", color: "#6b7280" }}>
+                  {hospitalDept.labelKo}
+                </p>
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              flexShrink: 0,
+              padding: "12px 16px",
+              borderTop: "1px solid #f3f4f6",
+              background: "#ffffff",
+              textAlign: "center",
+            }}
+            aria-label="법적 고지"
+          >
+            <p style={{ margin: 0, fontSize: "11px", lineHeight: 1.4, color: "#6b7280" }}>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <a href="/terms" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.terms")}
+                </a>
+                {" / "}
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  {t("login.privacy")}
+                </a>
+              </span>
+            </p>
+          </div>
+        </>
       )}
 
       {/* CSS animation */}
