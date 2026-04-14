@@ -1,6 +1,7 @@
 // src/pages/HospitalDashboard.jsx — 병원 전용 관리 대시보드
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MonoLogo from "../components/MonoLogo";
 import HOSPITAL_DEPARTMENTS from "../constants/hospitalDepartments";
 import { getLanguageByCode } from "../constants/languages";
@@ -766,6 +767,7 @@ function AdminPasswordChangeForm({ authUser }) {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
 export default function HospitalDashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -967,6 +969,23 @@ export default function HospitalDashboard() {
             );
           })}
         </nav>
+
+        <div
+          className="shrink-0 px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg)]"
+          aria-label="법적 고지"
+        >
+          <p className="text-center text-[11px] leading-snug text-[var(--color-text-secondary)]">
+            <span className="whitespace-nowrap">
+              <a href="/terms" className="underline underline-offset-2 hover:text-[var(--color-text)]">
+                {t("login.terms")}
+              </a>
+              {" / "}
+              <a href="/privacy" className="underline underline-offset-2 hover:text-[var(--color-text)]">
+                {t("login.privacy")}
+              </a>
+            </span>
+          </p>
+        </div>
       </aside>
 
       {/* Main content */}
