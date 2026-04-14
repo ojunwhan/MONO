@@ -227,6 +227,8 @@
     "guestAccess": "Toegang als gast",
     "subtitle": "AI real-time tolk messenger",
     "termsAgree": "Door in te loggen gaat u akkoord met de gebruiksvoorwaarden en het privacybeleid",
+    "termsAgreePatientJoin": "Door de tolkservice bij {{hospitalName}} te gebruiken, gaat u akkoord met de <1>Servicevoorwaarden</1> en het <2>Privacybeleid</2>.",
+    "termsAgreePatientJoinFallback": "Door de tolkservice te gebruiken, gaat u akkoord met de <1>Servicevoorwaarden</1> en het <2>Privacybeleid</2>.",
     "terms": "Gebruiksvoorwaarden",
     "privacy": "Privacybeleid",
     "termsAgreeRegister": "Door te registreren gaat u akkoord met de Servicevoorwaarden en het Privacybeleid.",

@@ -227,6 +227,8 @@
     "guestAccess": "Кунак буларак керү",
     "subtitle": "AI реаль вакыт тәрҗемә мессенджеры",
     "termsAgree": "Кергәндә куллану шартлары һәм шәхси мәгълүмат эшкәртү сәясәтенә ризалык бирәсез",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Куллану шартлары",
     "privacy": "Шәхси мәгълүмат эшкәртү сәясәте",
     "termsAgreeRegister": "Теркәлү аша сез хезмәт шартлары һәм шәхси мәгълүмат эшкәртү сәясәтен кабул итәсез.",

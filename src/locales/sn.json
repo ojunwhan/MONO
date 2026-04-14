@@ -227,6 +227,8 @@
     "guestAccess": "Pinda semuenzi",
     "subtitle": "AI Kududzira kwechokwadi Messenger",
     "termsAgree": "Kubvuma mazwi ekushandisa uye mutemo wekuvanzika paunopinda",
+    "termsAgreePatientJoin": "Nekushandisa basa rekuturikira pa{{hospitalName}}, unobvuma <1>Mitemo yeBasa</1> ne<2>Rongorongo rekuvanzika</2>.",
+    "termsAgreePatientJoinFallback": "Nekushandisa basa rekuturikira, unobvuma <1>Mitemo yeBasa</1> ne<2>Rongorongo rekuvanzika</2>.",
     "terms": "Mazwi ekushandisa",
     "privacy": "Mutemo wekuvanzika",
     "termsAgreeRegister": "Nemukuyisa zita, unopswera kuMitemo yeSevhisi neMutemo wekuvanzika.",

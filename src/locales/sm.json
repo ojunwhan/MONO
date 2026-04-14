@@ -227,6 +227,8 @@
     "guestAccess": "Ulufale o se malo",
     "subtitle": "AI fa'aliliu taimi moni fe'au",
     "termsAgree": "E te ioe i le fa'aoga ma le faiga o fa'amaumauga patino pe a saini",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Fa'aaogaina",
     "privacy": "Faiga o fa'amaumauga patino",
     "termsAgreeRegister": "O le lesitalaina o lau sauāoga i le Tulafono Auaunaga ma le Polisi Faalilolilo.",

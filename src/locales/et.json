@@ -227,6 +227,8 @@
     "guestAccess": "Sisene külalisena",
     "subtitle": "AI reaalajas tõlke messenger",
     "termsAgree": "Sisselogimisel nõustute kasutustingimuste ja privaatsuspoliitikaga",
+    "termsAgreePatientJoin": "{{hospitalName}} tõlketeenuse kasutamisega nõustute <1>Teenusetingimustega</1> ja <2>Privaatsuspoliitikaga</2>.",
+    "termsAgreePatientJoinFallback": "Tõlketeenuse kasutamisega nõustute <1>Teenusetingimustega</1> ja <2>Privaatsuspoliitikaga</2>.",
     "terms": "Kasutustingimused",
     "privacy": "Privaatsuspoliitika",
     "termsAgreeRegister": "Registreerudes nõustute teenusetingimuste ja privaatsuspoliitikaga.",

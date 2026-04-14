@@ -227,6 +227,8 @@
     "guestAccess": "Ngena njengesivakashi",
     "subtitle": "Umlayezo Wokuhumusha Wesikhathi Sangempela we-AI",
     "termsAgree": "Ngiyavuma imigomo yokusebenzisa kanye nenqubomgomo yobumfihlo uma ngingena ngemvume",
+    "termsAgreePatientJoin": "Ngisebenzisa insiza yokuhumusha e-{{hospitalName}}, uyavuma <1>Imigomo Yensiza</1> ne-<2>Inqubomgomo Yobumfihlo</2>.",
+    "termsAgreePatientJoinFallback": "Ngisebenzisa insiza yokuhumusha, uyavuma <1>Imigomo Yensiza</1> ne-<2>Inqubomgomo Yobumfihlo</2>.",
     "terms": "Imigomo Yokusebenzisa",
     "privacy": "Inqubomgomo Yobumfihlo",
     "termsAgreeRegister": "Ngokubhalisa, uyavuma Imigomo Yesevisi nePolisi Yobumfihlo.",

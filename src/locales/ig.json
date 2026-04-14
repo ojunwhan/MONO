@@ -227,6 +227,8 @@
     "guestAccess": "Banye dị ka ọbịa",
     "subtitle": "AI ozi nkọwa oge n'ezie",
     "termsAgree": "Site na nbanye, ị kwenyere na Usoro ojiji na Nzuzo",
+    "termsAgreePatientJoin": "Site na iji ọrụ ntụgharị asụsụ na {{hospitalName}}, ị kwenyere na <1>Usoro ọrụ</1> na <2>Iwu nzuzo</2>.",
+    "termsAgreePatientJoinFallback": "Site na iji ọrụ ntụgharị asụsụ, ị kwenyere na <1>Usoro ọrụ</1> na <2>Iwu nzuzo</2>.",
     "terms": "Usoro ojiji",
     "privacy": "Nzuzo",
     "termsAgreeRegister": "Site na ndebanye aha, ị kwadoro Usoro ọrụ na Iwu nzuzo.",

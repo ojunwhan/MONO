@@ -4,7 +4,7 @@
 // patientToken을 localStorage에 저장하여 재방문 시 같은 환자로 인식
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import MonoLogo from "../components/MonoLogo";
 import LanguageFlagPicker from "../components/LanguageFlagPicker";
@@ -325,25 +325,56 @@ export default function HospitalPatientJoin() {
           {t("hospitalPatientJoin.connectingSubtitle")}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <button
-          type="button"
-          onClick={() => {
-            clearReturningPatientStorage(orgCode);
-            setReturningPatient(null);
-          }}
+        <div
           style={{
             marginTop: "auto",
-            paddingTop: "32px",
-            background: "none",
-            border: "none",
-            color: "#6b7280",
-            fontSize: "13px",
-            textDecoration: "underline",
-            cursor: "pointer",
+            width: "100%",
+            maxWidth: "400px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
           }}
         >
-          {t("hospitalPatientJoin.notMeTap", { name: returningPatient.name })}
-        </button>
+          <p className="mt-4 w-full text-center text-[12px] text-[var(--color-text-secondary)]">
+            {!hospitalNameLoading && hospitalName?.trim() ? (
+              <Trans
+                i18nKey="login.termsAgreePatientJoin"
+                values={{ hospitalName: hospitalName.trim() }}
+                components={{
+                  1: <a href="/terms" className="underline" />,
+                  2: <a href="/privacy" className="underline" />,
+                }}
+              />
+            ) : (
+              <Trans
+                i18nKey="login.termsAgreePatientJoinFallback"
+                components={{
+                  1: <a href="/terms" className="underline" />,
+                  2: <a href="/privacy" className="underline" />,
+                }}
+              />
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              clearReturningPatientStorage(orgCode);
+              setReturningPatient(null);
+            }}
+            style={{
+              marginTop: "12px",
+              paddingTop: "8px",
+              background: "none",
+              border: "none",
+              color: "#6b7280",
+              fontSize: "13px",
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            {t("hospitalPatientJoin.notMeTap", { name: returningPatient.name })}
+          </button>
+        </div>
       </div>
     );
   }
@@ -451,6 +482,26 @@ export default function HospitalPatientJoin() {
             >
               {t("hospitalPatientJoin.startInterpret")}
             </button>
+            <p className="mt-4 w-full max-w-[400px] text-center text-[12px] text-[var(--color-text-secondary)]">
+              {!hospitalNameLoading && hospitalName?.trim() ? (
+                <Trans
+                  i18nKey="login.termsAgreePatientJoin"
+                  values={{ hospitalName: hospitalName.trim() }}
+                  components={{
+                    1: <a href="/terms" className="underline" />,
+                    2: <a href="/privacy" className="underline" />,
+                  }}
+                />
+              ) : (
+                <Trans
+                  i18nKey="login.termsAgreePatientJoinFallback"
+                  components={{
+                    1: <a href="/terms" className="underline" />,
+                    2: <a href="/privacy" className="underline" />,
+                  }}
+                />
+              )}
+            </p>
           </>
         )}
 

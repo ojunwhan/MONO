@@ -227,6 +227,8 @@
     "guestAccess": "Asup/log in salaku tamu",
     "subtitle": "Messenger AI nerjemahkeun langsung",
     "termsAgree": "Asup/log in hartina anjeun satuju kana Sarat Pamakéan sareng Kabijakan Privasi",
+    "termsAgreePatientJoin": "Ku nganggo jasa tarjamahan di {{hospitalName}}, anjeun satuju jeung <1>Ketentuan Jasa</1> sareng <2>Kabijakan Privasi</2>.",
+    "termsAgreePatientJoinFallback": "Ku nganggo jasa tarjamahan, anjeun satuju jeung <1>Ketentuan Jasa</1> sareng <2>Kabijakan Privasi</2>.",
     "terms": "Sarat Pamakéan",
     "privacy": "Kabijakan Privasi",
     "termsAgreeRegister": "Ku cara ngadaptar, anjeun satuju jeung Syarat Layanan sareng Kawijakan Privasi.",

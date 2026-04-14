@@ -227,6 +227,8 @@
     "guestAccess": "Masuk sebagai tetamu",
     "subtitle": "Messenger terjemahan masa nyata AI",
     "termsAgree": "Dengan log masuk, anda bersetuju dengan terma penggunaan dan dasar privasi",
+    "termsAgreePatientJoin": "Dengan menggunakan perkhidmatan pentafsiran di {{hospitalName}}, anda bersetuju dengan <1>Terma Perkhidmatan</1> dan <2>Dasar Privasi</2>.",
+    "termsAgreePatientJoinFallback": "Dengan menggunakan perkhidmatan pentafsiran, anda bersetuju dengan <1>Terma Perkhidmatan</1> dan <2>Dasar Privasi</2>.",
     "terms": "Terma penggunaan",
     "privacy": "Dasar privasi",
     "termsAgreeRegister": "Dengan mendaftar, anda bersetuju dengan Terma Perkhidmatan dan Dasar Privasi.",

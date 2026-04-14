@@ -227,6 +227,8 @@
     "guestAccess": "Vào với tư cách Khách",
     "subtitle": "Tin nhắn phiên dịch thời gian thực AI",
     "termsAgree": "Khi đăng nhập, bạn đồng ý với Điều khoản và Chính sách quyền riêng tư.",
+    "termsAgreePatientJoin": "Khi sử dụng dịch vụ thông dịch tại {{hospitalName}}, bạn đồng ý với <1>Điều khoản dịch vụ</1> và <2>Chính sách quyền riêng tư</2>.",
+    "termsAgreePatientJoinFallback": "Khi sử dụng dịch vụ thông dịch, bạn đồng ý với <1>Điều khoản dịch vụ</1> và <2>Chính sách quyền riêng tư</2>.",
     "terms": "Điều khoản",
     "privacy": "Chính sách quyền riêng tư",
     "termsAgreeRegister": "Bằng việc đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách quyền riêng tư.",

@@ -227,6 +227,8 @@
     "guestAccess": "Misafir olarak gir",
     "subtitle": "AI Gerçek Zamanlı Tercüme Mesajlaşma",
     "termsAgree": "Giriş yaparak kullanım şartları ve gizlilik politikasını kabul ediyorum",
+    "termsAgreePatientJoin": "{{hospitalName}} bünyesindeki çeviri hizmetini kullanarak <1>Hizmet Şartları</1> ve <2>Gizlilik Politikası</2>'nı kabul etmiş olursunuz.",
+    "termsAgreePatientJoinFallback": "Çeviri hizmetini kullanarak <1>Hizmet Şartları</1> ve <2>Gizlilik Politikası</2>'nı kabul etmiş olursunuz.",
     "terms": "Kullanım Şartları",
     "privacy": "Gizlilik Politikası",
     "termsAgreeRegister": "Kayıt olarak Hizmet Şartları ve Gizlilik Politikası'nı kabul etmiş olursunuz.",

@@ -227,6 +227,8 @@
     "guestAccess": "Daħħal bħala mistieden",
     "subtitle": "Messaġġier ta' interpretazzjoni AI f'ħin reali",
     "termsAgree": "Meta tidħol, inti taqbel mat-termini ta' użu u l-politika tal-privatezza",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Termini ta' Użu",
     "privacy": "Politika tal-Privatezza",
     "termsAgreeRegister": "Billi tirreġistra, taċċetta t-Termini tas-Servizz u l-Politika tal-Privatezza.",

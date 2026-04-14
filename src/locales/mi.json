@@ -227,6 +227,8 @@
     "guestAccess": "Uru hei manuhiri",
     "subtitle": "Karere AI Whakamāori Tūturu",
     "termsAgree": "Mā te takiuru, ka whakaae koe ki ngā tikanga me te kaupapahere tūmataiti",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Ngā Tikanga",
     "privacy": "Kaupapahere Tūmataiti",
     "termsAgreeRegister": "Mā te rēhitatanga, ka whakaae koe ki ngā Ture Ratonga me te Kaupapa Tūmataiti.",

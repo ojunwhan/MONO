@@ -227,6 +227,8 @@
     "guestAccess": "Ngena njengendwendwe",
     "subtitle": "Umyalezo wokuhumusha ngexesha langempela we-AI",
     "termsAgree": "Ngena ungene uyavuma imigomo yokusebenzisa kunye nenqubomgomo yabucala",
+    "termsAgreePatientJoin": "Ngokusebenzisa inkonzo yoluvo lwelwimi ku-{{hospitalName}}, uyavuma <1>Imininingwane yenkonzo</1> kunye <2>Ngqwalaselo yabucala</2>.",
+    "termsAgreePatientJoinFallback": "Ngokusebenzisa inkonzo yoluvo lwelwimi, uyavuma <1>Imininingwane yenkonzo</1> kunye <2>Ngqwalaselo yabucala</2>.",
     "terms": "Imigomo yokusebenzisa",
     "privacy": "Inqubomgomo yabucala",
     "termsAgreeRegister": "Ngokubhalisa, uyavuma Imiqathango yenkonzo kunye nePolisi yabucala.",

@@ -227,6 +227,8 @@
     "guestAccess": "Vstop kot gost",
     "subtitle": "AI realnočasovni tolmačevalni messenger",
     "termsAgree": "S prijavo se strinjate s pogoji uporabe in politiko zasebnosti",
+    "termsAgreePatientJoin": "Z uporabo tolmačkih storitev v {{hospitalName}} soglašate s <1>Pogoji storitve</1> in <2>Pravilnikom o zasebnosti</2>.",
+    "termsAgreePatientJoinFallback": "Z uporabo tolmačkih storitev soglašate s <1>Pogoji storitve</1> in <2>Pravilnikom o zasebnosti</2>.",
     "terms": "Pogoji uporabe",
     "privacy": "Politika zasebnosti",
     "termsAgreeRegister": "Z registracijo sprejemate pogoje storitve in politiko zasebnosti.",

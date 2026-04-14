@@ -227,6 +227,8 @@
     "guestAccess": "Midira ho vahiny",
     "subtitle": "AI Messenger fandikan-teny mivantana",
     "termsAgree": "Amin'ny fidirana dia manaiky ny fepetra sy ny politika momba ny fiainana manokana ianao",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Fepetra fampiasana",
     "privacy": "Politika momba ny fiainana manokana",
     "termsAgreeRegister": "Amin'ny fisoratana anarana, manaiky ny fepetra momba ny serivisy sy ny politika momba ny fiainana manokana ianao.",

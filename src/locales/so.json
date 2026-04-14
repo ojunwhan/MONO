@@ -227,6 +227,8 @@
     "guestAccess": "Gal marti ahaan",
     "subtitle": "AI Messenger Tarjumaan Waqtiga Dhabta ah",
     "termsAgree": "Markaad gasho, waxaad ogolaatay shuruudaha adeegga iyo siyaasadda khaaska ah",
+    "termsAgreePatientJoin": "Ad isticmaasho adeegga turjumaada ee {{hospitalName}}, waxaad ogolaatay <1>Xeerarka Adeegga</1> iyo <2>Siyaasadda Asturnaanta</2>.",
+    "termsAgreePatientJoinFallback": "Ad isticmaasho adeegga turjumaada, waxaad ogolaatay <1>Xeerarka Adeegga</1> iyo <2>Siyaasadda Asturnaanta</2>.",
     "terms": "Shuruudaha adeegga",
     "privacy": "Siyaasadda khaaska ah",
     "termsAgreeRegister": "Markaad iska diiwaangeliso, waxaad ogolaatayaa Xeerarka Adeegga iyo Siyaasadda Asturnaanta.",

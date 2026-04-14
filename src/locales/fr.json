@@ -227,6 +227,8 @@
     "guestAccess": "Entrer en tant qu'invité",
     "subtitle": "Messagerie d'interprétation en temps réel par IA",
     "termsAgree": "En vous connectant, vous acceptez les Conditions et la Politique de confidentialité.",
+    "termsAgreePatientJoin": "En utilisant le service d'interprétation au sein de {{hospitalName}}, vous acceptez les <1>Conditions d'utilisation</1> et la <2>Politique de confidentialité</2>.",
+    "termsAgreePatientJoinFallback": "En utilisant le service d'interprétation, vous acceptez les <1>Conditions d'utilisation</1> et la <2>Politique de confidentialité</2>.",
     "terms": "Conditions",
     "privacy": "Politique de confidentialité",
     "termsAgreeRegister": "En vous inscrivant, vous acceptez les Conditions d'utilisation et la Politique de confidentialité.",

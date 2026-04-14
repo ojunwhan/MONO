@@ -227,6 +227,8 @@
     "guestAccess": "ゲストとして入る",
     "subtitle": "AIリアルタイム通訳メッセンジャー",
     "termsAgree": "サインインすることで、利用規約とプライバシーポリシーに同意したことになります。",
+    "termsAgreePatientJoin": "{{hospitalName}}における通訳サービス利用時、<1>利用規約</1>および<2>プライバシーポリシー</2>に同意します。",
+    "termsAgreePatientJoinFallback": "通訳サービス利用時、<1>利用規約</1>および<2>プライバシーポリシー</2>に同意します。",
     "terms": "利用規約",
     "privacy": "プライバシーポリシー",
     "termsAgreeRegister": "登録により、利用規約およびプライバシーポリシーに同意したものとみなされます。",

@@ -227,6 +227,8 @@
     "guestAccess": "以访客身份进入",
     "subtitle": "AI 实时口译即时通讯",
     "termsAgree": "登录即表示同意服务条款和隐私政策。",
+    "termsAgreePatientJoin": "在{{hospitalName}}使用口译服务时，即表示您同意<1>服务条款</1>和<2>隐私政策</2>。",
+    "termsAgreePatientJoinFallback": "使用口译服务时，即表示您同意<1>服务条款</1>和<2>隐私政策</2>。",
     "terms": "条款",
     "privacy": "隐私政策",
     "termsAgreeRegister": "注册即表示您同意服务条款和隐私政策。",

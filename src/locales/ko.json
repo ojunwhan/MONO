@@ -227,6 +227,8 @@
     "guestAccess": "게스트로 입장",
     "subtitle": "AI 실시간 통역 메신저",
     "termsAgree": "로그인 시 이용약관 및 개인정보처리방침에 동의합니다",
+    "termsAgreePatientJoin": "{{hospitalName}}에서의 통역 서비스 이용 시 <1>이용약관</1> 및 <2>개인정보처리방침</2>에 동의합니다",
+    "termsAgreePatientJoinFallback": "통역 서비스 이용 시 <1>이용약관</1> 및 <2>개인정보처리방침</2>에 동의합니다",
     "terms": "이용약관",
     "privacy": "개인정보처리방침",
     "termsAgreeRegister": "등록 시 이용약관 및 개인정보처리방침에 동의합니다",

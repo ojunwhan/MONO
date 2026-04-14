@@ -227,6 +227,8 @@
     "guestAccess": "بە شێوەی میوان بچۆ ژوورەوە",
     "subtitle": "پەیامبەری ترجمەی ڕاستەوخۆی AI",
     "termsAgree": "بە چوونە ژوورەوە، ڕەزامەندی بە بەکارهێنانی مەرجەکان و سیاستی پاراستنی تایبەتی دەدەیت",
+    "termsAgreePatientJoin": "Bi karanîna xizmeta wergerê li {{hospitalName}}, hûn bi <1>Mercên Xizmetê</1> û <2>Siyaseta Nepenîtiyê</2> razî dibin.",
+    "termsAgreePatientJoinFallback": "Bi karanîna xizmeta wergerê, hûn bi <1>Mercên Xizmetê</1> û <2>Siyaseta Nepenîtiyê</2> razî dibin.",
     "terms": "مەرجەکان",
     "privacy": "سیاستی پاراستنی تایبەتی",
     "termsAgreeRegister": "Bi tomar kirin, hûn şertên xizmetê û polîtîkaya taybetmendiyê qebûl dikin.",

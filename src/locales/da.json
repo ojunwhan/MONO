@@ -227,6 +227,8 @@
     "guestAccess": "Deltag som gæst",
     "subtitle": "AI realtids tolkemessenger",
     "termsAgree": "Ved login accepterer du vilkår og betingelser samt privatlivspolitik",
+    "termsAgreePatientJoin": "Ved brug af tolkeservicen hos {{hospitalName}} accepterer du <1>Servicevilkårene</1> og <2>Privatlivspolitikken</2>.",
+    "termsAgreePatientJoinFallback": "Ved brug af tolkeservicen accepterer du <1>Servicevilkårene</1> og <2>Privatlivspolitikken</2>.",
     "terms": "Vilkår og betingelser",
     "privacy": "Privatlivspolitik",
     "termsAgreeRegister": "Ved at registrere accepterer du servicevilkårene og privatlivspolitikken.",

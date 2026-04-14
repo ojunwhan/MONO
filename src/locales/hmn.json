@@ -227,6 +227,8 @@
     "guestAccess": "Nkag mus ua qhua",
     "subtitle": "AI lub sijhawm tiag tiag txhais lus messenger",
     "termsAgree": "Thaum nkag mus, koj pom zoo rau cov lus siv thiab cov cai ntiag tug",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Cov lus siv",
     "privacy": "Cov cai ntiag tug",
     "termsAgreeRegister": "Thaum koj sau npe, koj pom zoo rau cov lus siv thiab cov cai ntiag tug.",

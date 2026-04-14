@@ -227,6 +227,8 @@
     "guestAccess": "Lowani ngati mlembi",
     "subtitle": "AI yomasulira nthawi yeniyeni",
     "termsAgree": "Mukalowa, mumavomereza Migwirizano ndi Zinsinsi",
+    "termsAgreePatientJoin": "Pogwiritsa ntchito wothandizira kumasulira ku {{hospitalName}}, mumavomereza <1>Migwirizano ya ntchito</1> ndi <2>Malamulo a chinsinsi</2>.",
+    "termsAgreePatientJoinFallback": "Pogwiritsa ntchito wothandizira kumasulira, mumavomereza <1>Migwirizano ya ntchito</1> ndi <2>Malamulo a chinsinsi</2>.",
     "terms": "Migwirizano",
     "privacy": "Zinsinsi",
     "termsAgreeRegister": "Poti kulembetsa, mumakhulupirira Malamulo a Utumiki ndi Malamulo achinsinsi.",

@@ -227,6 +227,8 @@
     "guestAccess": "Prisijungti kaip svečias",
     "subtitle": "AI realaus laiko vertimo pasiuntinys",
     "termsAgree": "Prisijungdami sutinkate su naudojimo sąlygomis ir privatumo politika",
+    "termsAgreePatientJoin": "Naudodamiesi vertimo paslaugomis {{hospitalName}}, sutinkate su <1>Paslaugų teikimo sąlygomis</1> ir <2>Privatumo politika</2>.",
+    "termsAgreePatientJoinFallback": "Naudodamiesi vertimo paslaugomis, sutinkate su <1>Paslaugų teikimo sąlygomis</1> ir <2>Privatumo politika</2>.",
     "terms": "Naudojimo sąlygos",
     "privacy": "Privatumo politika",
     "termsAgreeRegister": "Registruodamiesi sutinkate su Paslaugos sąlygomis ir Privatumo politika.",

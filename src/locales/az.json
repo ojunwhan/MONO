@@ -227,6 +227,8 @@
     "guestAccess": "Qonaq kimi daxil ol",
     "subtitle": "AI real vaxt tərcümə messenceri",
     "termsAgree": "Giriş zamanı istifadə şərtləri və məxfilik siyasətinə razılaşırsınız",
+    "termsAgreePatientJoin": "{{hospitalName}} üzrə tərcümə xidmətindən istifadə etməklə siz <1>Xidmət Şərtləri</1> və <2>Məxfilik Siyasəti</2> ilə razılaşırsınız.",
+    "termsAgreePatientJoinFallback": "Tərcümə xidmətindən istifadə etməklə siz <1>Xidmət Şərtləri</1> və <2>Məxfilik Siyasəti</2> ilə razılaşırsınız.",
     "terms": "İstifadə şərtləri",
     "privacy": "Məxfilik siyasəti",
     "termsAgreeRegister": "Qeydiyyatdan keçməklə Xidmət Şərtləri və Məxfilik siyasətini qəbul edirsiniz.",

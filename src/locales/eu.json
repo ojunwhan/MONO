@@ -227,6 +227,8 @@
     "guestAccess": "Sartu gonbidatu gisa",
     "subtitle": "AI denbora errealean itzulpen mezularia",
     "termsAgree": "Saioa hasiz gero, erabilera baldintzak eta pribatutasun politika onartzen dituzu",
+    "termsAgreePatientJoin": "{{hospitalName}}-eko itzulpengintza-zerbitzua erabiltzean, <1>Zerbitzu-baldintzak</1> eta <2>Pribatutasun-politika</2> onartzen dituzu.",
+    "termsAgreePatientJoinFallback": "Itzulpengintza-zerbitzua erabiltzean, <1>Zerbitzu-baldintzak</1> eta <2>Pribatutasun-politika</2> onartzen dituzu.",
     "terms": "Erabilera baldintzak",
     "privacy": "Pribatutasun politika",
     "termsAgreeRegister": "Erregistratuz, Zerbitzu-baldintzak eta Pribatutasun-politika onartzen dituzu.",

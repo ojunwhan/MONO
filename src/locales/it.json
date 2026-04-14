@@ -227,6 +227,8 @@
     "guestAccess": "Accedi come ospite",
     "subtitle": "Messenger di interpretazione AI in tempo reale",
     "termsAgree": "Accedendo accetti i Termini di servizio e l'Informativa sulla privacy",
+    "termsAgreePatientJoin": "Utilizzando il servizio di interpretariato presso {{hospitalName}}, accetti i <1>Termini di servizio</1> e l'<2>Informativa sulla privacy</2>.",
+    "termsAgreePatientJoinFallback": "Utilizzando il servizio di interpretariato, accetti i <1>Termini di servizio</1> e l'<2>Informativa sulla privacy</2>.",
     "terms": "Termini di servizio",
     "privacy": "Informativa sulla privacy",
     "termsAgreeRegister": "Registrandoti accetti i Termini di servizio e l'Informativa sulla privacy.",

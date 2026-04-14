@@ -227,6 +227,8 @@
     "guestAccess": "Mehmon sifatida kirish",
     "subtitle": "AI real vaqt tarjima messenjeri",
     "termsAgree": "Kirishda foydalanish shartlari va maxfiylik siyosatiga rozilik bildirasiz",
+    "termsAgreePatientJoin": "{{hospitalName}}da tarjima xizmatidan foydalangan holda siz <1>Xizmat ko'rsatish shartlari</1> va <2>Maxfiylik siyosati</2>ga rozilik bildirasiz.",
+    "termsAgreePatientJoinFallback": "Tarjima xizmatidan foydalangan holda siz <1>Xizmat ko'rsatish shartlari</1> va <2>Maxfiylik siyosati</2>ga rozilik bildirasiz.",
     "terms": "Foydalanish shartlari",
     "privacy": "Maxfiylik siyosati",
     "termsAgreeRegister": "Ro'yxatdan o'tish bilan siz Xizmat shartlari va Maxfiylik siyosatiga rozilik bildirasiz.",

@@ -227,6 +227,8 @@
     "guestAccess": "Intrare ca invitat",
     "subtitle": "Mesager AI de interpretare în timp real",
     "termsAgree": "Sunt de acord cu termenii și condițiile de utilizare și politica de confidențialitate la autentificare",
+    "termsAgreePatientJoin": "Utilizând serviciul de interpretare la {{hospitalName}}, sunteți de acord cu <1>Termenii de utilizare</1> și <2>Politica de confidențialitate</2>.",
+    "termsAgreePatientJoinFallback": "Utilizând serviciul de interpretare, sunteți de acord cu <1>Termenii de utilizare</1> și <2>Politica de confidențialitate</2>.",
     "terms": "Termeni de utilizare",
     "privacy": "Politica de confidențialitate",
     "termsAgreeRegister": "Înregistrându-vă, acceptați Termenii de utilizare și Politica de confidențialitate.",

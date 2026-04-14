@@ -227,6 +227,8 @@
     "guestAccess": "Kena e le moeti",
     "subtitle": "Molaetsa oa phetolelo ea nako ea nnete ea AI",
     "termsAgree": "Ka ho kena, u lumellana le lipehelo tsa tšebeliso le leano la lekunutu",
+    "termsAgreePatientJoin": "Ha u sebelisa litšebeletso tsa phetolelo ho {{hospitalName}}, o lumela ho <1>Liqeto tsa Tshebeletso</1> le <2>Leano la Bochebe</2>.",
+    "termsAgreePatientJoinFallback": "Ha u sebelisa litšebeletso tsa phetolelo, o lumela ho <1>Liqeto tsa Tshebeletso</1> le <2>Leano la Bochebe</2>.",
     "terms": "Lipehelo tsa tšebeliso",
     "privacy": "Leano la lekunutu",
     "termsAgreeRegister": "Ka ho ingodisa, o lumela Melao ea Ts'ebeletso le Leanotheo la Lekunutu.",

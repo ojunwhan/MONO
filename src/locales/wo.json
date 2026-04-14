@@ -227,6 +227,8 @@
     "guestAccess": "Jëfandikoo ci nit ki",
     "subtitle": "AI waxtaan ci kanam",
     "termsAgree": "Jël na ci jëfandikoo",
+    "termsAgreePatientJoin": "Ci lëkkale gi yërë yu {{hospitalName}}, nga nangu <1>Ci yoon yi ci lëkkale gi</1> ak <2>Politig bu sutura</2>.",
+    "termsAgreePatientJoinFallback": "Ci lëkkale gi yërë, nga nangu <1>Ci yoon yi ci lëkkale gi</1> ak <2>Politig bu sutura</2>.",
     "terms": "Jëfandikoo",
     "privacy": "Jëfandikoo",
     "termsAgreeRegister": "Ci bind bi, nga nangu yoon yi ci serwiis bi ak politig bi ci sutura bi.",

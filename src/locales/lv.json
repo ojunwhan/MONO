@@ -227,6 +227,8 @@
     "guestAccess": "Piekļūt kā viesis",
     "subtitle": "AI reāllaika tulkošanas ziņojumapmaiņa",
     "termsAgree": "Piesakoties, jūs piekrītat lietošanas noteikumiem un privātuma politikai",
+    "termsAgreePatientJoin": "Izmantojot tulkošanas pakalpojumu {{hospitalName}}, jūs piekrītat <1>Pakalpojuma noteikumiem</1> un <2>Privātuma politikai</2>.",
+    "termsAgreePatientJoinFallback": "Izmantojot tulkošanas pakalpojumu, jūs piekrītat <1>Pakalpojuma noteikumiem</1> un <2>Privātuma politikai</2>.",
     "terms": "Lietošanas noteikumi",
     "privacy": "Privātuma politika",
     "termsAgreeRegister": "Reģistrējoties jūs piekrītat Pakalpojuma noteikumiem un Privātuma politikai.",

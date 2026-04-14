@@ -227,6 +227,8 @@
     "guestAccess": "Belépés vendégként",
     "subtitle": "AI valós idejű tolmács üzenetküldő",
     "termsAgree": "Bejelentkezéskor elfogadja a felhasználási feltételeket és az adatvédelmi irányelveket",
+    "termsAgreePatientJoin": "A {{hospitalName}} intézményben nyújtott tolmácsszolgáltatás igénybevételével elfogadja a <1>Szolgáltatási feltételeket</1> és az <2>Adatvédelmi irányelveket</2>.",
+    "termsAgreePatientJoinFallback": "A tolmácsszolgáltatás igénybevételével elfogadja a <1>Szolgáltatási feltételeket</1> és az <2>Adatvédelmi irányelveket</2>.",
     "terms": "Felhasználási feltételek",
     "privacy": "Adatvédelmi irányelvek",
     "termsAgreeRegister": "Regisztrációval elfogadja a szolgáltatási feltételeket és az adatvédelmi irányelveket.",

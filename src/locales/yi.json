@@ -227,6 +227,8 @@
     "guestAccess": "אַרײַנקומען ווי גאַסט",
     "subtitle": "AI לעבן-צייט טערמינאָלאָגיע מעסינדזשער",
     "termsAgree": "מיט לאָגין, איך שטים צו די טערמינען פון נוצן און פּריוואַטקייט פּאָליטיק",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "טערמינען פון נוצן",
     "privacy": "פּריוואַטקייט פּאָליטיק",
     "termsAgreeRegister": "דורך רעגיסטרירן, שטימט איר צו די באדינונגען פון דינסט און דער פּריוואַטקייט פּאָליטיק.",

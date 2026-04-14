@@ -227,6 +227,8 @@
     "guestAccess": "Pristup kao gost",
     "subtitle": "AI Messenger za tumačenje u realnom vremenu",
     "termsAgree": "Prijavom se slažete sa uslovima korištenja i politikom privatnosti",
+    "termsAgreePatientJoin": "Korištenjem usluge tumačenja u {{hospitalName}}, slažete se sa <1>Uslovima korištenja usluge</1> i <2>Politikom privatnosti</2>.",
+    "termsAgreePatientJoinFallback": "Korištenjem usluge tumačenja, slažete se sa <1>Uslovima korištenja usluge</1> i <2>Politikom privatnosti</2>.",
     "terms": "Uslovi korištenja",
     "privacy": "Politika privatnosti",
     "termsAgreeRegister": "Registracijom prihvatate Uslove korištenja i Pravila privatnosti.",

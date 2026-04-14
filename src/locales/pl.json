@@ -227,6 +227,8 @@
     "guestAccess": "Wejdź jako gość",
     "subtitle": "AI Messenger do tłumaczeń w czasie rzeczywistym",
     "termsAgree": "Logując się, zgadzasz się na warunki użytkowania i politykę prywatności",
+    "termsAgreePatientJoin": "Korzystając z usług tłumaczenia ustnego w {{hospitalName}}, akceptujesz <1>Regulamin</1> oraz <2>Politykę prywatności</2>.",
+    "termsAgreePatientJoinFallback": "Korzystając z usług tłumaczenia ustnego, akceptujesz <1>Regulamin</1> oraz <2>Politykę prywatności</2>.",
     "terms": "Warunki użytkowania",
     "privacy": "Polityka prywatności",
     "termsAgreeRegister": "Rejestrując się, akceptujesz Regulamin i Politykę prywatności.",

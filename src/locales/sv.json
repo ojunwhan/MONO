@@ -227,6 +227,8 @@
     "guestAccess": "Gå in som gäst",
     "subtitle": "AI realtidsöversättningsmessenger",
     "termsAgree": "Genom att logga in godkänner du användarvillkoren och integritetspolicyn",
+    "termsAgreePatientJoin": "Genom att använda tolkningstjänsten vid {{hospitalName}} godkänner du <1>Användarvillkoren</1> och <2>Integritetspolicyn</2>.",
+    "termsAgreePatientJoinFallback": "Genom att använda tolkningstjänsten godkänner du <1>Användarvillkoren</1> och <2>Integritetspolicyn</2>.",
     "terms": "Användarvillkor",
     "privacy": "Integritetspolicy",
     "termsAgreeRegister": "Genom att registrera dig godkänner du användarvillkoren och integritetspolicyn.",

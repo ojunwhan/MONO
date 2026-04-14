@@ -227,6 +227,8 @@
     "guestAccess": "Antre kòm envite",
     "subtitle": "Mesaje entèpretasyon AI an tan reyèl",
     "termsAgree": "Lè ou konekte, ou dakò ak tèm ak kondisyon yo ak règleman sou vi prive",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Tèm ak kondisyon",
     "privacy": "Règleman sou vi prive",
     "termsAgreeRegister": "Lè w enskri, ou dakò avèk Kondisyon Sèvis ak Politik Konfidansyalite a.",

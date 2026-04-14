@@ -227,6 +227,8 @@
     "guestAccess": "Mlebu minangka tamu",
     "subtitle": "Pesan terjemahan langsung AI",
     "termsAgree": "Kanthi mlebu, sampeyan setuju karo syarat panggunaan lan kebijakan privasi",
+    "termsAgreePatientJoin": "Kanthi nggunakake layanan terjemah ing {{hospitalName}}, sampeyan setuju karo <1>Ketentuan Layanan</1> lan <2>Kebijakan Privasi</2>.",
+    "termsAgreePatientJoinFallback": "Kanthi nggunakake layanan terjemah, sampeyan setuju karo <1>Ketentuan Layanan</1> lan <2>Kebijakan Privasi</2>.",
     "terms": "Syarat panggunaan",
     "privacy": "Kebijakan privasi",
     "termsAgreeRegister": "Kanthi ndaftar, sampeyan setuju marang Syarat Layanan lan Kabijakan Privasi.",

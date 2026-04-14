@@ -227,6 +227,8 @@
     "guestAccess": "Wọle bi alejo",
     "subtitle": "AI ifọrọranṣẹ itumọ akoko gidi",
     "termsAgree": "Nipa wọle, o gba awọn ofin lilo ati eto imulo asiri wa.",
+    "termsAgreePatientJoin": "Nipa lilo iṣẹ itumọ ni {{hospitalName}}, o fọwọsi si <1>Awọn ofin iṣẹ</1> ati <2>Ilana aṣiri</2>.",
+    "termsAgreePatientJoinFallback": "Nipa lilo iṣẹ itumọ, o fọwọsi si <1>Awọn ofin iṣẹ</1> ati <2>Ilana aṣiri</2>.",
     "terms": "Awọn ofin lilo",
     "privacy": "Eto imulo asiri",
     "termsAgreeRegister": "Nipa iforukọsilẹ, o fara si awọn ofin iṣẹ ati Ilana Asiri.",

@@ -227,6 +227,8 @@
     "guestAccess": "Entrar como convidado",
     "subtitle": "Mensageiro de interpretação em tempo real por IA",
     "termsAgree": "Ao fazer login, você concorda com os Termos de Uso e a Política de Privacidade",
+    "termsAgreePatientJoin": "Ao usar o serviço de interpretação em {{hospitalName}}, concorda com os <1>Termos de Utilização</1> e a <2>Política de Privacidade</2>.",
+    "termsAgreePatientJoinFallback": "Ao usar o serviço de interpretação, concorda com os <1>Termos de Utilização</1> e a <2>Política de Privacidade</2>.",
     "terms": "Termos de Uso",
     "privacy": "Política de Privacidade",
     "termsAgreeRegister": "Ao registrar-se, você concorda com os Termos de Serviço e a Política de Privacidade.",

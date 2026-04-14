@@ -227,6 +227,8 @@
     "guestAccess": "Shiga a matsayin baƙo",
     "subtitle": "Manzon fassara na AI kai tsaye",
     "termsAgree": "Ta hanyar shiga, kuna yarda da sharuɗɗan amfani da manufofin sirri",
+    "termsAgreePatientJoin": "Ta amfani da sabis na fassara a {{hospitalName}}, kun yarda da <1>Sharuɗɗan Sabis</1> da <2>Manufar Sirri</2>.",
+    "termsAgreePatientJoinFallback": "Ta amfani da sabis na fassara, kun yarda da <1>Sharuɗɗan Sabis</1> da <2>Manufar Sirri</2>.",
     "terms": "Sharuɗɗan Amfani",
     "privacy": "Manufofin Sirri",
     "termsAgreeRegister": "Ta yin rijista, kun yarda da Sharuɗɗan Sabis da Manufar Sirri.",

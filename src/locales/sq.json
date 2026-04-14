@@ -227,6 +227,8 @@
     "guestAccess": "Hyr si mysafir",
     "subtitle": "Mesazher për përkthim të drejtpërdrejtë me AI",
     "termsAgree": "Duke hyrë, ju pranoni kushtet e përdorimit dhe politikën e privatësisë",
+    "termsAgreePatientJoin": "Duke përdorur shërbimin e përkthimit në {{hospitalName}}, ju pranoni <1>Kushtet e Shërbimit</1> dhe <2>Politikën e Privatësisë</2>.",
+    "termsAgreePatientJoinFallback": "Duke përdorur shërbimin e përkthimit, ju pranoni <1>Kushtet e Shërbimit</1> dhe <2>Politikën e Privatësisë</2>.",
     "terms": "Kushtet e përdorimit",
     "privacy": "Politika e privatësisë",
     "termsAgreeRegister": "Duke u regjistruar, pranoni Kushtet e Shërbimit dhe Politikën e privatësisë.",

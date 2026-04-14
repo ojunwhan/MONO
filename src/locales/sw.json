@@ -227,6 +227,8 @@
     "guestAccess": "Ingia kama mgeni",
     "subtitle": "Mjumbe wa tafsiri ya moja kwa moja ya AI",
     "termsAgree": "Unapokubali, unakubali Masharti ya Huduma na Sera ya Faragha",
+    "termsAgreePatientJoin": "Kwa kutumia huduma ya tafsiri katika {{hospitalName}}, unakubali <1>Masharti ya Huduma</1> na <2>Sera ya Faragha</2>.",
+    "termsAgreePatientJoinFallback": "Kwa kutumia huduma ya tafsiri, unakubali <1>Masharti ya Huduma</1> na <2>Sera ya Faragha</2>.",
     "terms": "Masharti ya Huduma",
     "privacy": "Sera ya Faragha",
     "termsAgreeRegister": "Kwa kujisajili, unakubali Masharti ya Huduma na Sera ya Faragha.",

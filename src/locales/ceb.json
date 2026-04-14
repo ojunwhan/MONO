@@ -227,6 +227,8 @@
     "guestAccess": "Mosulod isip bisita",
     "subtitle": "AI Real-time nga Pagsaysay Messenger",
     "termsAgree": "Sa pag-login, mosugot ka sa Terms of Use ug Privacy Policy",
+    "termsAgreePatientJoin": "Pinaagi sa paggamit sa serbisyo sa hubad sa {{hospitalName}}, mouyon ka sa <1>Mga Termino sa Serbisyo</1> ug <2>Patakaran sa Pagkapribado</2>.",
+    "termsAgreePatientJoinFallback": "Pinaagi sa paggamit sa serbisyo sa hubad, mouyon ka sa <1>Mga Termino sa Serbisyo</1> ug <2>Patakaran sa Pagkapribado</2>.",
     "terms": "Terms of Use",
     "privacy": "Privacy Policy",
     "termsAgreeRegister": "Pinaagi sa pagparehistro, miuyon ka sa Mga Termino sa Serbisyo ug Polisiya sa Privacy.",

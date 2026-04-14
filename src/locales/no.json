@@ -227,6 +227,8 @@
     "guestAccess": "Gå inn som gjest",
     "subtitle": "AI sanntids tolkingsmessenger",
     "termsAgree": "Ved å logge inn godtar du vilkårene for bruk og personvernreglene",
+    "termsAgreePatientJoin": "Ved å bruke tolktetjenesten ved {{hospitalName}} godtar du <1>Vilkårene for tjenesten</1> og <2>Personvernreglene</2>.",
+    "termsAgreePatientJoinFallback": "Ved å bruke tolktetjenesten godtar du <1>Vilkårene for tjenesten</1> og <2>Personvernreglene</2>.",
     "terms": "Vilkår for bruk",
     "privacy": "Personvernregler",
     "termsAgreeRegister": "Ved å registrere deg godtar du vilkår for bruk og personvernregler.",

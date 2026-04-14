@@ -227,6 +227,8 @@
     "guestAccess": "Iontráil mar aoi",
     "subtitle": "Teachtaire aistriúcháin beo AI",
     "termsAgree": "Ag logáil isteach, aontaíonn tú leis na téarmaí úsáide agus leis an bpolasaí príobháideachta",
+    "termsAgreePatientJoin": "Trí sheirbhís aistriúcháin a úsáid ag {{hospitalName}}, aontaíonn tú leis na <1>Téarmaí Seirbhíse</1> agus an <2>Polasaí Príobháideachta</2>.",
+    "termsAgreePatientJoinFallback": "Trí sheirbhís aistriúcháin a úsáid, aontaíonn tú leis na <1>Téarmaí Seirbhíse</1> agus an <2>Polasaí Príobháideachta</2>.",
     "terms": "Téarmaí úsáide",
     "privacy": "Polasaí príobháideachta",
     "termsAgreeRegister": "Trí chlárú, aontaíonn tú le Téarmaí Seirbhíse agus Polasaí Príobháideachais.",

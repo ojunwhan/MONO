@@ -227,6 +227,8 @@
     "guestAccess": "Betree as gas",
     "subtitle": "AI Regstreekse Tolk Boodskapper",
     "termsAgree": "Deur aan te meld stem jy in tot die diensvoorwaardes en privaatheidsbeleid",
+    "termsAgreePatientJoin": "Deur die tolkingdiens by {{hospitalName}} te gebruik, stem jy in tot die <1>Diensbepalings</1> en <2>Privaatheidsbeleid</2>.",
+    "termsAgreePatientJoinFallback": "Deur die tolkingdiens te gebruik, stem jy in tot die <1>Diensbepalings</1> en <2>Privaatheidsbeleid</2>.",
     "terms": "Diensvoorwaardes",
     "privacy": "Privaatheidsbeleid",
     "termsAgreeRegister": "Deur te registreer, stem jy in tot die Diensvoorwaardes en Privaatheidsbeleid.",

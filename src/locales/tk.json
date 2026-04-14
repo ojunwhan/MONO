@@ -227,6 +227,8 @@
     "guestAccess": "Myhman hökmünde gir",
     "subtitle": "AI hakyky wagtda terjime messenjeri",
     "termsAgree": "Girişde ulanyş şertlerine we şahsy maglumatlary işlemek syýasatyna razy bolýarsyňyz",
+    "termsAgreePatientJoin": "By using the interpretation service at {{hospitalName}}, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
+    "termsAgreePatientJoinFallback": "By using the interpretation service, you agree to the <1>Terms of Service</1> and <2>Privacy Policy</2>.",
     "terms": "Ulanyş şertleri",
     "privacy": "Şahsy maglumatlary işlemek syýasaty",
     "termsAgreeRegister": "Registrasiýa etmek bilen siz Hyzmat şertleri we şahsy maglumatlary işlemek syýasatyna razy bolýarsyňyz.",

@@ -227,6 +227,8 @@
     "guestAccess": "Vstoupit jako host",
     "subtitle": "AI messenger pro tlumočení v reálném čase",
     "termsAgree": "Přihlášením souhlasíte s podmínkami služby a zásadami ochrany osobních údajů",
+    "termsAgreePatientJoin": "Používáním překladatelské služby v {{hospitalName}} souhlasíte s <1>Podmínkami služby</1> a <2>Zásadami ochrany osobních údajů</2>.",
+    "termsAgreePatientJoinFallback": "Používáním překladatelské služby souhlasíte s <1>Podmínkami služby</1> a <2>Zásadami ochrany osobních údajů</2>.",
     "terms": "Podmínky služby",
     "privacy": "Zásady ochrany osobních údajů",
     "termsAgreeRegister": "Registrací souhlasíte s podmínkami služby a zásadami ochrany osobních údajů.",

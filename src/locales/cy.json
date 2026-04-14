@@ -227,6 +227,8 @@
     "guestAccess": "Mynediad fel gwestai",
     "subtitle": "Negesydd dehongli amser real AI",
     "termsAgree": "Trwy fewngofnodi, rydych yn cytuno i'r telerau defnyddio a'r polisi preifatrwydd",
+    "termsAgreePatientJoin": "Drwy ddefnyddio'r gwasanaeth cyfieithu yn {{hospitalName}}, rydych yn cytuno â'r <1>Telerau Gwasanaeth</1> a'r <2>Polisi Preifatrwydd</2>.",
+    "termsAgreePatientJoinFallback": "Drwy ddefnyddio'r gwasanaeth cyfieithu, rydych yn cytuno â'r <1>Telerau Gwasanaeth</1> a'r <2>Polisi Preifatrwydd</2>.",
     "terms": "Telerau defnyddio",
     "privacy": "Polisi preifatrwydd",
     "termsAgreeRegister": "Trwy gofrestru, rydych yn cytuno â'r Telerau Gwasanaeth a'r Polisi Preifatrwydd.",

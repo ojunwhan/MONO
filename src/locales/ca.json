@@ -227,6 +227,8 @@
     "guestAccess": "Entrar com a convidat",
     "subtitle": "Missatger d'interpretació AI en temps real",
     "termsAgree": "En iniciar sessió, acceptes els termes d'ús i la política de privacitat",
+    "termsAgreePatientJoin": "En utilitzar el servei d'interpretació a {{hospitalName}}, accepteu els <1>Termes del servei</1> i la <2>Política de privadesa</2>.",
+    "termsAgreePatientJoinFallback": "En utilitzar el servei d'interpretació, accepteu els <1>Termes del servei</1> i la <2>Política de privadesa</2>.",
     "terms": "Termes d'ús",
     "privacy": "Política de privacitat",
     "termsAgreeRegister": "En registrar-vos, accepteu les Condicions del servei i la Política de privacitat.",

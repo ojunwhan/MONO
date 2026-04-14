@@ -227,6 +227,8 @@
     "guestAccess": "Pumasok bilang Bisita",
     "subtitle": "AI Real-time na Tagasalin ng Mensahe",
     "termsAgree": "Sa pag-login, sumasang-ayon ka sa mga Tuntunin ng Paggamit at Patakaran sa Privacy",
+    "termsAgreePatientJoin": "Sa paggamit ng serbisyo ng interpretasyon sa {{hospitalName}}, sumasang-ayon ka sa <1>Mga Tuntunin ng Serbisyo</1> at <2>Patakaran sa Privacy</2>.",
+    "termsAgreePatientJoinFallback": "Sa paggamit ng serbisyo ng interpretasyon, sumasang-ayon ka sa <1>Mga Tuntunin ng Serbisyo</1> at <2>Patakaran sa Privacy</2>.",
     "terms": "Tuntunin ng Paggamit",
     "privacy": "Patakaran sa Privacy",
     "termsAgreeRegister": "Sa pamamagitan ng pagrehistro, sumasang-ayon ka sa Mga Tuntunin ng Serbisyo at Patakaran sa Privacy.",

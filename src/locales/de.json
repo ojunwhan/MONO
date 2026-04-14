@@ -227,6 +227,8 @@
     "guestAccess": "Als Gast eintreten",
     "subtitle": "AI Echtzeit-Dolmetsch-Messenger",
     "termsAgree": "Mit der Anmeldung stimmen Sie den Nutzungsbedingungen und Datenschutzrichtlinien zu",
+    "termsAgreePatientJoin": "Mit der Nutzung des Dolmetscherdienstes bei {{hospitalName}} erklären Sie sich mit den <1>Nutzungsbedingungen</1> und der <2>Datenschutzerklärung</2> einverstanden.",
+    "termsAgreePatientJoinFallback": "Mit der Nutzung des Dolmetscherdienstes erklären Sie sich mit den <1>Nutzungsbedingungen</1> und der <2>Datenschutzerklärung</2> einverstanden.",
     "terms": "Nutzungsbedingungen",
     "privacy": "Datenschutzrichtlinien",
     "termsAgreeRegister": "Mit der Registrierung stimmen Sie den Nutzungsbedingungen und der Datenschutzerklärung zu.",

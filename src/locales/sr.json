@@ -227,6 +227,8 @@
     "guestAccess": "Uđite kao gost",
     "subtitle": "AI glasnik za tumačenje u realnom vremenu",
     "termsAgree": "Slažem se sa uslovima korišćenja i politikom privatnosti prilikom prijave",
+    "termsAgreePatientJoin": "Korišćenjem usluge tumačenja u {{hospitalName}}, slažete se sa <1>Uslovima korišćenja</1> i <2>Politikom privatnosti</2>.",
+    "termsAgreePatientJoinFallback": "Korišćenjem usluge tumačenja, slažete se sa <1>Uslovima korišćenja</1> i <2>Politikom privatnosti</2>.",
     "terms": "Uslovi korišćenja",
     "privacy": "Politika privatnosti",
     "termsAgreeRegister": "Registracijom prihvatate Uslove korišćenja i Politiku privatnosti.",

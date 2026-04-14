@@ -227,6 +227,8 @@
     "guestAccess": "Injira nk'umushyitsi",
     "subtitle": "Ubutumwa bwa AI mu buryo bw'igihe nyacyo",
     "termsAgree": "Kwiyandikisha bivuze kwemera Amasezerano y'Imikoreshereze n'Amabwiriza y'Ubuzima bwite",
+    "termsAgreePatientJoin": "Ukoresha serivisi y'ubuhinduzi kuri {{hospitalName}}, wemera <1>Amabwiriza ya serivisi</1> na <2>Politiki y'ibanga</2>.",
+    "termsAgreePatientJoinFallback": "Ukoresha serivisi y'ubuhinduzi, wemera <1>Amabwiriza ya serivisi</1> na <2>Politiki y'ibanga</2>.",
     "terms": "Amasezerano y'Imikoreshereze",
     "privacy": "Amabwiriza y'Ubuzima bwite",
     "termsAgreeRegister": "Kwiyandikisha, wemera Amabwiriza y'Ikoranabuhanga n'Amabwiriza y'Ubuzima bwite.",

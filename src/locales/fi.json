@@ -227,6 +227,8 @@
     "guestAccess": "Kirjaudu vieraana",
     "subtitle": "AI reaaliaikainen tulkkausviestintä",
     "termsAgree": "Kirjautuessasi hyväksyt käyttöehdot ja tietosuojakäytännön",
+    "termsAgreePatientJoin": "Käyttämällä tulkkauspalvelua kohteessa {{hospitalName}} hyväksyt <1>Käyttöehdot</1> ja <2>Tietosuojakäytännön</2>.",
+    "termsAgreePatientJoinFallback": "Käyttämällä tulkkauspalvelua hyväksyt <1>Käyttöehdot</1> ja <2>Tietosuojakäytännön</2>.",
     "terms": "Käyttöehdot",
     "privacy": "Tietosuojakäytäntö",
     "termsAgreeRegister": "Rekisteröitymällä hyväksyt käyttöehdot ja tietosuojakäytännön.",

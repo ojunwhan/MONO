@@ -227,6 +227,8 @@
     "guestAccess": "Ganga inn sem gestur",
     "subtitle": "AI rauntíma túlkunarmessager",
     "termsAgree": "Með innskráningu samþykkir þú notkunarskilmála og persónuverndarstefnu",
+    "termsAgreePatientJoin": "Með því að nota túlkunarþjónustu hjá {{hospitalName}} samþykkir þú <1>Þjónustuskilmála</1> og <2>Friðhelgisstefnu</2>.",
+    "termsAgreePatientJoinFallback": "Með því að nota túlkunarþjónustu samþykkir þú <1>Þjónustuskilmála</1> og <2>Friðhelgisstefnu</2>.",
     "terms": "Notkunarskilmálar",
     "privacy": "Persónuverndarstefna",
     "termsAgreeRegister": "Með skráningu samþykkir þú skilmála þjónustunnar og meðferð persónuupplýsinga.",
