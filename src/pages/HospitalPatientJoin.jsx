@@ -289,6 +289,23 @@ export default function HospitalPatientJoin() {
     return () => clearTimeout(t);
   }, [returningPatient, orgCode, navigate, urlOrg]);
 
+  // 푸시 딥링크 등: ?room=PT-XXX + mono_hospital_current_pt 일치 + 저장된 환자 자격이면 자동 재입장 플로우 유도
+  useEffect(() => {
+    const roomQ = searchParams.get("room");
+    if (!orgCode || !roomQ || !String(roomQ).startsWith("PT-")) return;
+    if (returningAutoJoinDoneRef.current || joinCalledRef.current) return;
+    let storedPt = "";
+    try {
+      storedPt = localStorage.getItem("mono_hospital_current_pt") || "";
+    } catch {
+      return;
+    }
+    if (storedPt !== roomQ) return;
+    const rp = getReturningPatient(orgCode);
+    if (!rp) return;
+    setReturningPatient((prev) => prev || rp);
+  }, [orgCode, searchParams]);
+
   if (returningPatient && step !== "connecting" && step !== "error") {
     return (
       <div

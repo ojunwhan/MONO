@@ -23,10 +23,21 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil((async () => {
-    // App foreground(visible)에서는 노티를 띄우지 않아 중복 알림을 줄임.
+    // 같은 방 경로에서 visible일 때만 억제 (다른 탭/PWA가 visible이어도 다른 방이면 알림 표시)
+    const inner = data.data || {};
+    const targetRoomId = inner.roomId || data.roomId || '';
     const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const hasVisibleClient = windowClients.some((client) => client.visibilityState === 'visible');
-    if (hasVisibleClient) return;
+    const hasVisibleClientInSameRoom = targetRoomId && windowClients.some((client) => {
+      if (client.visibilityState !== 'visible') return false;
+      try {
+        const url = new URL(client.url);
+        return url.pathname === `/room/${targetRoomId}`
+          || url.pathname === `/fixed-room/${targetRoomId}`;
+      } catch {
+        return false;
+      }
+    });
+    if (hasVisibleClientInSameRoom) return;
     await self.registration.showNotification(title, options);
   })());
 });
@@ -52,11 +63,16 @@ self.addEventListener('notificationclick', (event) => {
     const normPath = (p) => (p && p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p);
 
     // Pass 1: already on target room/path — focus only (no navigate flicker)
+    const ridForMatch = data.roomId ? String(data.roomId) : '';
     for (const client of windowClients) {
       try {
         const u = new URL(client.url);
         if (u.origin !== self.location.origin) continue;
-        if (normPath(u.pathname) === normPath(targetPathname)) {
+        const pn = normPath(u.pathname);
+        const onSameRoom = ridForMatch && (
+          pn === normPath(`/room/${ridForMatch}`) || pn === normPath(`/fixed-room/${ridForMatch}`)
+        );
+        if (onSameRoom || (!ridForMatch && pn === normPath(targetPathname))) {
           await client.focus();
           return;
         }
@@ -78,7 +94,10 @@ self.addEventListener('notificationclick', (event) => {
       } catch (_) { /* try next */ }
     }
 
-    await self.clients.openWindow(targetUrl);
+    const fallbackUrl = (data.orgCode && data.roomId)
+      ? new URL(`/hospital/join/${data.orgCode}?room=${encodeURIComponent(data.roomId)}`, self.location.origin).href
+      : targetUrl;
+    await self.clients.openWindow(fallbackUrl);
   })());
 });
 

@@ -1477,6 +1477,7 @@ async function sendPushToUser(targetUserId, payload) {
     badge: '/icon-192.png',
     data: {
       roomId: payload.roomId || '',
+      orgCode: payload.orgCode || '',
       url: payload.url || (payload.roomId ? `/room/${payload.roomId}` : '/'),
       senderName: payload.senderName || '',
     },
@@ -1535,6 +1536,7 @@ function removeUserPresenceBySocket(socketId) {
 function shouldSendPushToParticipant(targetUserId, roomId) {
   const p = USER_PRESENCE.get(String(targetUserId || ""));
   if (!p) return true;
+  if (Date.now() - (p.updatedAt || 0) > 60000) return true;
   if (p.visibilityState !== "visible") return true;
   if (!roomId) return true;
   return String(p.activeRoomId || "") !== String(roomId);
@@ -3197,6 +3199,9 @@ io.on('connection', (socket) => {
           const isHospitalPush = String(meta.siteContext || "").startsWith("hospital_");
           const guestName = isHospitalPush ? "환자" : String(nativeName || localName || "Guest");
           const guestLang = String(pLang || fromLang || "auto").toUpperCase();
+          const joinPushOrg = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+            ? String(meta.orgCode).trim()
+            : "";
           maybeSendPushToUser(
             hostPid,
             {
@@ -3206,6 +3211,7 @@ io.on('connection', (socket) => {
               senderName: guestName,
               url: `/room/${roomId}`,
               tag: `mono-guest-join-${roomId}`,
+              ...(joinPushOrg ? { orgCode: joinPushOrg } : {}),
             },
             { roomId }
           );
@@ -3330,6 +3336,9 @@ io.on('connection', (socket) => {
         if (hostPid && hostPid !== participantId) {
           const guestName = String(localName || callSign || "Guest");
           const guestLang = String(pLang || fromLang || "auto").toUpperCase();
+          const joinPushOrgBc = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+            ? String(meta.orgCode).trim()
+            : "";
           maybeSendPushToUser(
             hostPid,
             {
@@ -3339,6 +3348,7 @@ io.on('connection', (socket) => {
               senderName: guestName,
               url: `/room/${roomId}`,
               tag: `mono-guest-join-${roomId}`,
+              ...(joinPushOrgBc ? { orgCode: joinPushOrgBc } : {}),
             },
             { roomId }
           );
@@ -3935,17 +3945,20 @@ io.on('connection', (socket) => {
           });
           addToRoomContext(roomId, { text: translated || finalText, lang: toLang, role: 'assistant' });
         }
-        // Always send push for background/lock-screen reliability.
-        // SW suppresses notification when app window is visible.
+        // Push via maybeSendPushToUser (presence + 60s TTL); SW suppresses only when same-room client visible.
         const otherUid = Object.keys(meta.participants).find(p => p !== participantId);
         if (otherUid) {
-          sendPushToUser(otherUid, {
+          const pushOrgCode = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+            ? String(meta.orgCode).trim()
+            : "";
+          maybeSendPushToUser(otherUid, {
             title: senderDisplayName || 'MONO',
             body: translated?.substring(0, 80) || finalText?.substring(0, 80) || '',
             roomId,
             senderName: senderDisplayName,
             url: `/room/${roomId}`,
-          }).catch(() => {});
+            ...(pushOrgCode ? { orgCode: pushOrgCode } : {}),
+          }, { roomId }).catch(() => {});
         }
         // → Sender echo (번역문은 상대에게 보내는 것과 동일하게 — 직원 화면에도 번역 표시)
         socket.emit("receive-message", {
@@ -4088,13 +4101,17 @@ io.on('connection', (socket) => {
           });
         addToRoomContext(roomId, { text: translated || cleanText, lang: toLang, role: 'assistant' });
         }
-        sendPushToUser(csMatch.targetPid, {
+        const pushOrgCodeCs = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+          ? String(meta.orgCode).trim()
+          : "";
+        maybeSendPushToUser(csMatch.targetPid, {
           title: senderCallSign || 'MONO',
           body: translated?.substring(0, 80) || cleanText?.substring(0, 80) || '',
           roomId,
           senderName: senderCallSign,
           url: `/room/${roomId}`,
-        }).catch(() => {});
+          ...(pushOrgCodeCs ? { orgCode: pushOrgCodeCs } : {}),
+        }, { roomId }).catch(() => {});
         // Echo to sender
         if (!targetP.socketId) logPerfRoundTrip();
         socket.emit("receive-message", {
@@ -4180,13 +4197,17 @@ io.on('connection', (socket) => {
             addToRoomContext(roomId, { text: translated || finalText, lang, role: 'assistant' });
           }
           if (listenerPid) {
-            sendPushToUser(listenerPid, {
+            const pushOrgCodeBc = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+              ? String(meta.orgCode).trim()
+              : "";
+            maybeSendPushToUser(listenerPid, {
               title: senderCallSign || 'MONO',
               body: translated?.substring(0, 80) || '',
               roomId,
               senderName: senderCallSign,
               url: `/room/${roomId}`,
-            }).catch(() => {});
+              ...(pushOrgCodeBc ? { orgCode: pushOrgCodeBc } : {}),
+            }, { roomId }).catch(() => {});
           }
         }
         let finalizedForTts = translated;
@@ -4642,12 +4663,16 @@ io.on('connection', (socket) => {
         });
       }
       // Push only when receiver is not actively viewing this room in foreground.
+      const pushOrgMsg = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+        ? String(meta.orgCode).trim()
+        : "";
       maybeSendPushToUser(otherPid, {
         title: senderDisplayName || 'MONO',
         body: draft?.substring(0, 80) || trimmedText?.substring(0, 80) || '',
         roomId,
         senderName: senderDisplayName,
         url: `/room/${roomId}`,
+        ...(pushOrgMsg ? { orgCode: pushOrgMsg } : {}),
       }, { roomId });
 
       let finalizedForTts = draft;
@@ -4779,12 +4804,16 @@ io.on('connection', (socket) => {
         });
         addToRoomContext(roomId, { text: draft || cleanText, lang: toLang, role: 'assistant' });
       }
+      const pushOrgCsMsg = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+        ? String(meta.orgCode).trim()
+        : "";
       maybeSendPushToUser(csMatch.targetPid, {
         title: senderCallSign || 'MONO',
         body: draft?.substring(0, 80) || cleanText?.substring(0, 80) || '',
         roomId,
         senderName: senderCallSign,
         url: `/room/${roomId}`,
+        ...(pushOrgCsMsg ? { orgCode: pushOrgCsMsg } : {}),
       }, { roomId });
       let finalizedForTts = draft;
       try {
@@ -4818,6 +4847,9 @@ io.on('connection', (socket) => {
       langGroups[lang].push(p);
     }
 
+    const pushOrgFanMsg = (meta.orgCode && String(meta.orgCode).trim() && String(meta.orgCode).trim() !== "UNKNOWN")
+      ? String(meta.orgCode).trim()
+      : "";
     for (const [lang, listeners] of Object.entries(langGroups)) {
       let draft = trimmedText;
       if (fromLang !== lang) {
@@ -4865,6 +4897,7 @@ io.on('connection', (socket) => {
             roomId,
             senderName: senderCallSign,
             url: `/room/${roomId}`,
+            ...(pushOrgFanMsg ? { orgCode: pushOrgFanMsg } : {}),
           }, { roomId });
         }
       }

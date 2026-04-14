@@ -283,7 +283,7 @@ function InterpretingVAD({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang ?? historyGuestLang ?? patientData?.language ?? "en"); return (
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang || "en"); return (
             <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
               {getFlagImg(fc)} {fc.toUpperCase()}
               <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
@@ -482,7 +482,7 @@ function InterpretingPTT({
         </div>
         {/* CENTER: language pair */}
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang ?? historyGuestLang ?? patientData?.language ?? "en"); return (
+          {partnerInfo && (() => { const fc = toLangStr(fromLang); const tc = toLangStr(partnerInfo?.lang || "en"); return (
             <span style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>
               {getFlagImg(fc)} {fc.toUpperCase()}
               <span style={{ margin: "0 4px", color: "#9ca3af" }}>{"\u2192"}</span>
@@ -575,7 +575,7 @@ export default function FixedRoomVAD() {
   const hospitalDept = state.hospitalDept || null;
   const hospitalTemplate = state.hospitalTemplate || "";
   const patientToken = state.patientToken || null;
-  const fromLang = state.fromLang || localStorage.getItem("myLang") || "ko";
+  const fromLang = state.fromLang || localStorage.getItem("mono_staff_lang") || "ko";
   const roleHint = state.roleHint || "owner";
   const isCreator = state.isCreator !== undefined ? state.isCreator : true;
   const isGuest = roleHint === "guest";
@@ -597,6 +597,16 @@ export default function FixedRoomVAD() {
   useEffect(() => {
     sessionIdRef.current = stateSessionId;
   }, [stateSessionId]);
+
+  useEffect(() => {
+    if (state.fromLang || (typeof localStorage !== "undefined" && localStorage.getItem("mono_staff_lang"))) {
+      try {
+        localStorage.setItem("mono_staff_lang", fromLang);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [fromLang, state.fromLang]);
 
   // ── 환자 이력 (직원 + patientToken 있을 때) ──
   const [patientHistory, setPatientHistory] = useState(null);
@@ -656,6 +666,29 @@ export default function FixedRoomVAD() {
   const stepRef = useRef(step);
   const lastJoinTsRef = useRef(0);
   const [socketReconnecting, setSocketReconnecting] = useState(false);
+
+  useEffect(() => {
+    const pid = participantId;
+    if (!pid || !roomId) return;
+    const emitPresence = (activeRoomId) => {
+      socket.emit("presence:update", {
+        participantId: pid,
+        activeRoomId: activeRoomId ?? roomIdRef.current ?? roomId,
+        visibilityState: document.visibilityState || "visible",
+      });
+    };
+    emitPresence(roomId);
+    const onVisibility = () => emitPresence(roomIdRef.current || roomId);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      socket.emit("presence:update", {
+        participantId: pid,
+        activeRoomId: null,
+        visibilityState: document.visibilityState || "hidden",
+      });
+    };
+  }, [roomId, participantId]);
 
   useEffect(() => {
     stepRef.current = step;
