@@ -91,13 +91,15 @@ export default function HospitalLogin() {
 
         <p className="mt-4 text-center text-[12px] text-[var(--color-text-secondary)]">
           {t("login.termsAgree")}{" "}
-          <a href="/terms" className="underline">
-            {t("login.terms")}
-          </a>
-          {" / "}
-          <a href="/privacy" className="underline">
-            {t("login.privacy")}
-          </a>
+          <span className="whitespace-nowrap">
+            <a href="/terms" className="underline">
+              {t("login.terms")}
+            </a>
+            {" / "}
+            <a href="/privacy" className="underline">
+              {t("login.privacy")}
+            </a>
+          </span>
         </p>
 
         <p className="mt-5 text-center text-[12px] text-[var(--color-text-secondary)]">
